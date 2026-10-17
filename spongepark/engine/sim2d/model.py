@@ -36,7 +36,7 @@ G = 9.81
 INDICATIVE = "indicative: 2D surface model (local inertial), not calibrated; volumes compared with SWMM"
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _fluxes(z, h, mask, n2, qx, qy, dt, dx, edge_drop):
     nr, nc = z.shape
     # x faces: qx[r, c] between (r, c-1) and (r, c); positive towards +c
@@ -113,7 +113,7 @@ def _fluxes(z, h, mask, n2, qx, qy, dt, dx, edge_drop):
             qy[r, c] = q
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _limit_and_update(h, mask, qx, qy, dt, dx):
     """Scale outgoing flows so no cell goes negative, then update depths. Returns volume out (m3)."""
     nr, nc = h.shape
@@ -159,10 +159,18 @@ def _limit_and_update(h, mask, qx, qy, dt, dx):
     return leaving
 
 
-@njit(cache=True)
-def _sources(h, mask, rain_m, infil_rate, el, cap, store, el_rate, el_area, dt, cell_area):
-    """Rain, ground infiltration, element capture and element infiltration. Returns (infil m3, el_infil m3)."""
+@njit(cache=True, nogil=True)
+def _sources(h, mask, rain_m, infil_rate, el, cap, store, el_rate, el_area, el_cells, dt, cell_area):
+    """Rain, ground infiltration, element capture and element infiltration. Returns (infil m3, el_infil m3).
+
+    Order-independent (the GPU port does the same in parallel): each element cell takes at most an
+    equal share of the element's remaining capacity at the start of the step."""
     nr, nc = h.shape
+    share = np.zeros(store.shape[0])
+    for k in range(store.shape[0]):
+        if el_cells[k] > 0:
+            share[k] = max(cap[k] - store[k], 0.0) / (el_cells[k] * cell_area)
+    taken = np.zeros(store.shape[0])
     infil = 0.0
     for r in range(nr):
         for c in range(nc):
@@ -171,15 +179,16 @@ def _sources(h, mask, rain_m, infil_rate, el, cap, store, el_rate, el_area, dt, 
             h[r, c] += rain_m
             k = el[r, c]
             if k >= 0:
-                take = min(h[r, c], max(cap[k] - store[k], 0.0) / cell_area)
+                take = min(h[r, c], share[k])
                 h[r, c] -= take
-                store[k] += take * cell_area
+                taken[k] += take * cell_area
             else:
                 f = min(h[r, c], infil_rate[r, c] * dt)
                 h[r, c] -= f
                 infil += f * cell_area
     el_inf = 0.0
     for k in range(store.shape[0]):
+        store[k] += taken[k]
         loss = min(store[k], el_rate[k] * dt * el_area[k])
         store[k] -= loss
         el_inf += loss
@@ -226,6 +235,7 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
     cap, el_rate, el_area = (elements.capacity_m3.astype(float), elements.rate_m_s.astype(float),
                              elements.area_m2.astype(float))
     cell_area = cell * cell
+    el_cells = np.array([float(((el == k) & mask).sum()) for k in range(len(elements.ids))])
     t = 0.0
     rain_tot = infil_tot = el_inf_tot = out_tot = 0.0
     frames, times = [h.astype(np.float32)], [0.0]
@@ -246,7 +256,7 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
         cum_rain_mm += rate * dt / 3600
         _fluxes(z, h, mask, n2, qx, qy, dt, cell, edge_drop)
         out_tot += _limit_and_update(h, mask, qx, qy, dt, cell)
-        inf, ein = _sources(h, mask, rain_m, f_rate, el, cap, store, el_rate, el_area, dt, cell_area)
+        inf, ein = _sources(h, mask, rain_m, f_rate, el, cap, store, el_rate, el_area, el_cells, dt, cell_area)
         rain_tot += rain_m * cell_area * mask.sum()
         infil_tot += inf
         el_inf_tot += ein

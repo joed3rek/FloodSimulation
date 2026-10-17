@@ -115,6 +115,17 @@ class ModelSpec:
         return float(sum(s.area_m2 for s in self.subcatchments))
 
 
+CALIBRATION_KEYS = {"infiltration": "calibration.infiltration_factor", "roughness": "calibration.roughness_factor",
+                    "depression_storage": "calibration.depression_storage_factor",
+                    "imperviousness": "calibration.imperviousness_factor"}
+
+
+def calibration_factors(params: ParameterSet) -> Dict[str, float]:
+    """Multipliers on site-surface parameters (1 = uncalibrated). Infiltration scales Horton/Green-Ampt
+    rates, or the curve number's potential retention S."""
+    return {k: float(params.value_or(v, 1.0)) for k, v in CALIBRATION_KEYS.items()}
+
+
 # --------------------------------------------------------------------------- structure
 def build_spec(
     site: Site,
@@ -129,10 +140,18 @@ def build_spec(
     site.validate()
     out_ids = {swmm_id(o.id) for o in site.outfalls}
 
+    cal = calibration_factors(params)
+    if any(v != 1.0 for v in cal.values()):
+        notes.append("calibration factors applied to site surfaces: "
+                     + ", ".join(f"{k} x{v:g}" for k, v in cal.items()))
+
     def cn_fields(s) -> Dict[str, object]:
         if "CURVE" not in method:
             return {}
         cn, src, _ = site.pervious_cn(s)
+        if cal["infiltration"] != 1.0:  # scale the potential retention S
+            S = (25400.0 / cn - 254.0) * cal["infiltration"]
+            cn, src = float(np.clip(25400.0 / (S + 254.0), 30.0, 99.0)), f"{src}; calibrated S x{cal['infiltration']:g}"
         notes.append(f"subcatchment {s.id}: pervious CN {cn:g} ({src}).")
         return {"curve_number": cn, "cn_source": src}
 
@@ -186,11 +205,14 @@ def build_spec(
         )
         return SubcatchSpec(
             id=swmm_id(s.id), geom=geom, area_m2=area, outlet=outlet,
-            pct_imperv=s.pct_imperv, width_m=area / L, slope_pct=s.slope_pct, soil_zone=zone,
-            n_imperv=s.n_imperv if s.n_imperv is not None else params.value("surface.n_imperv"),
-            n_perv=s.n_perv if s.n_perv is not None else params.value("surface.n_perv"),
-            dstore_imperv_mm=s.dstore_imperv_mm if s.dstore_imperv_mm is not None else params.value("surface.dstore_imperv_mm"),
-            dstore_perv_mm=s.dstore_perv_mm if s.dstore_perv_mm is not None else params.value("surface.dstore_perv_mm"),
+            pct_imperv=float(np.clip(s.pct_imperv * cal["imperviousness"], 0.0, 100.0)), width_m=area / L,
+            slope_pct=s.slope_pct, soil_zone=zone,
+            n_imperv=(s.n_imperv if s.n_imperv is not None else params.value("surface.n_imperv")) * cal["roughness"],
+            n_perv=(s.n_perv if s.n_perv is not None else params.value("surface.n_perv")) * cal["roughness"],
+            dstore_imperv_mm=(s.dstore_imperv_mm if s.dstore_imperv_mm is not None
+                              else params.value("surface.dstore_imperv_mm")) * cal["depression_storage"],
+            dstore_perv_mm=(s.dstore_perv_mm if s.dstore_perv_mm is not None
+                            else params.value("surface.dstore_perv_mm")) * cal["depression_storage"],
             pct_zero=s.pct_zero_imperv if s.pct_zero_imperv is not None else params.value("surface.pct_zero_imperv"),
             canopy=canopy_cover(geom, site.trees, cap_default), kind=kind,
             **cn_fields(s),
@@ -413,7 +435,13 @@ def render_inp(
             else:
                 inp.add("INFILTRATION", s.id, s.curve_number, 0, soil.dry_time_days, comment=s.cn_source)
         else:
-            inp.add("INFILTRATION", s.id, *soil.swmm_params(method))
+            vals = soil.swmm_params(method)
+            f = calibration_factors(params)["infiltration"] if s.kind in ("site", "external") else 1.0
+            if "HORTON" in method:
+                vals[0], vals[1] = vals[0] * f, vals[1] * f
+            else:
+                vals[1] = vals[1] * f
+            inp.add("INFILTRATION", s.id, *vals)
         x, y = s.geom.centroid.x, s.geom.centroid.y
         poly = s.geom if s.geom.geom_type == "Polygon" else max(getattr(s.geom, "geoms", [s.geom]), key=lambda g: g.area)
         for px, py in list(poly.exterior.coords)[:-1]:

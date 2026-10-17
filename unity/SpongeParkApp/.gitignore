@@ -1,0 +1,15 @@
+Library/
+Temp/
+Logs/
+obj/
+Build/
+Builds/
+UserSettings/
+MemoryCaptures/
+*.csproj
+*.sln
+*.slnx
+.vs/
+.vsconfig
+Assets/StreamingAssets/bundle/
+Assets/StreamingAssets/bundle.meta

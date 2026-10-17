@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ project.project_name }} - sponge park report</title>
+<style>
+  :root { --ink:#14201f; --muted:#5b6866; --line:#d9dfdd; --bg:#ffffff; --panel:#f4f6f5; --accent:#2a78d6; --warn:#a15c00; }
+  body { font: 14px/1.5 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); margin: 0; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 40px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+  h3 { font-size: 16px; margin: 24px 0 6px; } p { margin: 6px 0; } .muted { color: var(--muted); }
+  .label { display: inline-block; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; font-size: 12px; }
+  .warn { color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 12px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); font-weight: 600; } td.n, th.n { text-align: right; }
+  img { max-width: 100%; border: 1px solid var(--line); border-radius: 4px; margin: 6px 0; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+  .tile b { font-size: 22px; display: block; }
+  ul { margin: 6px 0 6px 20px; padding: 0; } code { font-size: 12px; }
+  @media print { h2 { break-before: page; } .tile, table, img { break-inside: avoid; } main { padding: 0; } }
+</style>
+</head>
+<body><main>
+<h1>{{ project.project_name }}</h1>
+<p class="muted">{{ project.city }} - sponge park design report - generated {{ generated }} by spongepark {{ project.engine_version }}</p>
+<p><span class="label">{{ calibration }}</span> <span class="label">2D water maps: indicative</span>
+   <span class="label">All volumes and flows: EPA SWMM 5.2 (unmodified)</span></p>
+
+<h2>1. Headline results</h2>
+{% if headline %}
+{% for h in headline %}
+<h3>Option {{ h.id }} - intervention area {{ h.area_pct }} % of the site</h3>
+<p>Largest storm fully retained on site: <b>{{ (h.design_storm ~ "-year storm") if h.design_storm else "none of the storms analysed" }}</b>.</p>
+<table><tr><th>Storm</th><th class="n">Rain kept on site now (%)</th><th class="n">With the design (%)</th><th class="n">Peak outflow reduced by (%)</th><th class="n">Water kept on site (litres)</th></tr>
+{% for r in h.rows %}<tr><td>{{ r.rp }}-year</td><td class="n">{{ r.kept_now }}</td><td class="n">{{ r.kept }}</td><td class="n">{{ r.peak }}</td><td class="n">{{ r.litres }}</td></tr>{% endfor %}
+</table>
+{% endfor %}
+{% else %}<p class="muted">No design option has been run yet; the report shows the existing site.</p>{% endif %}
+{% if unconfirmed %}<p class="warn">{{ unconfirmed|length }} parameters are still defaults that the designer has not confirmed (section 8). Treat results as provisional until they are confirmed.</p>{% endif %}
+
+<h2>2. Site and data</h2>
+<p>Infiltration method: <b>{{ infiltration_method }}</b>. Design storms: <b>{{ hyetograph }}</b> distribution over {{ storm_hr }} hours.
+Peak flows are sensitive to how the rainfall is distributed in time; volumes much less so.</p>
+{% if rain %}<h3>Rainfall</h3>
+<table><tr>{% for k in rain[0].keys() %}<th>{{ k }}</th>{% endfor %}</tr>
+{% for r in rain %}<tr>{% for v in r.values() %}<td>{{ v|f(1) }}</td>{% endfor %}</tr>{% endfor %}</table>{% endif %}
+<h3>Soils</h3>
+<table><tr><th>Zone</th><th>Soil group</th><th class="n">Ksat / min rate (mm/h)</th><th>Source</th><th>Note</th></tr>
+{% for s in soils %}<tr><td>{{ s.id }}</td><td>{{ s.hsg or "-" }}</td><td class="n">{{ (s.ksat_mm_hr if s.ksat_mm_hr is not none else s.min_rate_mm_hr)|f(2) }}</td><td>{{ s.source }}</td><td>{{ s.note }}</td></tr>{% endfor %}</table>
+{% if qc %}<h3>Survey and terrain quality</h3>
+<p>Ground model from the survey: {{ qc.source.dem_cell_m }} m cells. {% if qc.spot_cross_validation %}Spot levels against the surface
+(hold-one-out): RMSE {{ qc.spot_cross_validation.rmse_m|f(3) }} m, largest {{ qc.spot_cross_validation.max_abs_m|f(2) }} m over {{ qc.spot_cross_validation.n }} spots.{% endif %}</p>
+{% if qc.issues %}<ul>{% for i in qc.issues %}<li>{{ i }}</li>{% endfor %}</ul>{% endif %}
+{% if qc_img %}<img src="{{ qc_img }}" alt="survey quality check">{% endif %}{% endif %}
+
+<h2>3. Existing condition</h2>
+{% if flow_img %}<img src="{{ flow_img }}" alt="drainage areas and flow paths of the existing site">{% endif %}
+<table><tr><th>Storm</th><th class="n">Rain (m³)</th><th class="n">Leaving the site (m³)</th><th class="n">Infiltrated (m³)</th><th class="n">Kept on site (%)</th><th class="n">Continuity error (%)</th></tr>
+{% for b in baseline.balance %}<tr><td>{{ b.rp }}-year</td><td class="n">{{ b.rainfall_total_m3 }}</td><td class="n">{{ b.outflow_total_m3 }}</td><td class="n">{{ b.infiltration_surfaces_m3 }}</td><td class="n">{{ b.retained_pct }}</td><td class="n">{{ b.closure_error_pct }}</td></tr>{% endfor %}</table>
+{% for s in baseline.sim2d %}<h3>{{ s.rp }}-year storm on the existing ground (2D, indicative)</h3>
+<p>Area with water deeper than 5 cm at some time: {{ s.flooded }} m²; deepest {{ s.max_depth }} m. Volume leaving the site differs from SWMM by {{ s.vs_swmm }} % of rainfall.</p>
+{% if s.img %}<img src="{{ s.img }}" alt="maximum water depth">{% endif %}{% endfor %}
+
+{% for o in options %}
+<h2>4.{{ loop.index }} Option {{ o.id }}</h2>
+{% if o.layout_img %}<img src="{{ o.layout_img }}" alt="layout of option {{ o.id }}">{% endif %}
+{% if o.layout %}<p>Sized for the {{ o.layout.design_storm.return_period_yr }}-year storm ({{ o.layout.design_storm.source }}).
+Area budget {{ o.layout.area_budget_m2|f(0) }} m²; used {{ o.layout.generated_area_m2|f(0) }} m² by generated elements{% if o.layout.kept_designer_elements %} plus designer elements {{ o.layout.kept_designer_elements|join(", ") }}{% endif %}.</p>
+{% if o.layout.skipped %}<p class="warn">Not placed:</p><ul>{% for s in o.layout.skipped %}<li>{{ s }}</li>{% endfor %}</ul>{% endif %}{% endif %}
+<h3>Component schedule</h3>
+<table><tr><th>Element</th><th>Type</th><th class="n">Area (m²)</th><th class="n">Depth (m)</th><th class="n">Storage (m³)</th><th class="n">Infiltration (mm/h)</th><th class="n">Drawdown design / SWMM (h)</th><th class="n">Draining here (m²)</th><th>Sends water to</th></tr>
+{% for e in o.schedule %}<tr><td>{{ e.id }}</td><td>{{ e.type }}</td><td class="n">{{ e.area }}</td><td class="n">{{ e.depth }}</td><td class="n">{{ e.storage }}</td><td class="n">{{ e.infiltration }}</td><td class="n">{{ e.drawdown_design }} / {{ e.drawdown_swmm }}</td><td class="n">{{ e.contributing }}</td><td>{{ e.to }}</td></tr>{% endfor %}</table>
+{% if o.earthworks %}<h3>Earthworks</h3>
+<p>Cut {{ o.earthworks.cut }} m³, fill {{ o.earthworks.fill }} m³, net export {{ o.earthworks.net }} m³.
+{% if o.earthworks.by_element %}By element: {% for k, v in o.earthworks.by_element.items() %}{{ k }} {{ v }} m³{% if not loop.last %}, {% endif %}{% endfor %}.{% endif %}</p>{% endif %}
+<h3>Water balance (SWMM)</h3>
+<table><tr><th>Storm</th><th class="n">Rain</th><th class="n">Canopy</th><th class="n">Infiltrated (ground)</th><th class="n">Infiltrated (NbS)</th><th class="n">Stored at end</th><th class="n">Controlled outflow</th><th class="n">Overflow</th><th class="n">Runoff leaving</th><th class="n">Kept (%)</th><th class="n">Continuity (%)</th></tr>
+{% for b in o.balance %}<tr><td>{{ b.rp }}-year</td><td class="n">{{ b.rainfall_total_m3 }}</td><td class="n">{{ b.interception_m3 }}</td><td class="n">{{ b.infiltration_surfaces_m3 }}</td><td class="n">{{ b.infiltration_nbs_m3 }}</td><td class="n">{{ b.storage_change_nodes_m3 }}</td><td class="n">{{ b.outflow_controlled_m3 }}</td><td class="n">{{ b.outflow_overflow_m3 }}</td><td class="n">{{ b.outflow_runoff_m3 }}</td><td class="n">{{ b.retained_pct }}</td><td class="n">{{ b.closure_error_pct }}</td></tr>{% endfor %}</table>
+<p class="muted">Volumes in m³. Flags: {% set ns = namespace(n=0) %}{% for b in o.balance %}{% for f in b.flags %}{% set ns.n = ns.n + 1 %}{{ b.rp }}-yr {{ f }}; {% endfor %}{% endfor %}{% if ns.n == 0 %}none (every run within the 1 % continuity limit).{% endif %}</p>
+{% if o.comparison %}<h3>Against the existing site</h3>
+<table><tr><th>Storm</th><th class="n">Outflow now (m³)</th><th class="n">With the design (m³)</th><th class="n">Peak now (m³/s)</th><th class="n">With the design (m³/s)</th><th class="n">Peak later by (h)</th><th>Fully retained</th></tr>
+{% for r in o.comparison.rows %}<tr><td>{{ r.return_period_yr }}-year</td><td class="n">{{ r.baseline_outflow_m3|f(1) }}</td><td class="n">{{ r.option_outflow_m3|f(1) }}</td><td class="n">{{ r.baseline_peak_cms|f(3) }}</td><td class="n">{{ r.option_peak_cms|f(3) }}</td><td class="n">{{ r.lag_hr|f(2) }}</td><td>{{ r.fully_retained|f }}</td></tr>{% endfor %}</table>{% endif %}
+{% for k, img in o.charts.items() %}{% if img %}<img src="{{ img }}" alt="{{ k }}">{% endif %}{% endfor %}
+{% for s in o.sim2d %}<h3>{{ s.rp }}-year storm with the design (2D, indicative)</h3>
+<p>Area with water deeper than 5 cm at some time: {{ s.flooded }} m² (outside the NbS); deepest {{ s.max_depth }} m. 2D continuity {{ s.continuity }} %; volume leaving differs from SWMM by {{ s.vs_swmm }} % of rainfall.</p>
+{% if s.img %}<img src="{{ s.img }}" alt="maximum water depth with the design">{% endif %}{% endfor %}
+{% if o.findings %}<h3>Design guideline findings</h3><table><tr><th>Element</th><th>Severity</th><th>Finding</th><th>Source</th></tr>
+{% for f in o.findings %}<tr><td>{{ f.element_id }}</td><td>{{ f.severity }}</td><td>{{ f.message }}</td><td>{{ f.citation }}</td></tr>{% endfor %}</table>{% endif %}
+{% endfor %}
+
+{% if optimise or curve %}<h2>5. Optimisation and performance curve</h2>
+{% for mode, r in optimise.items() %}<h3>{{ "Best retention within the budget" if mode == "forward" else "Least area that retains the " ~ r.target_return_period_yr ~ "-year storm" }}</h3>
+<p>{{ r.evaluations_swmm }} layouts were generated, graded and run in SWMM; {{ r.pareto_size }} form the Pareto set. {{ r.note }}
+{% if r.surrogate_final %}Surrogate hold-out accuracy (R²): {% for k, v in r.surrogate_final.scores.items() %}{{ k }} {{ v.r2|f(2) }}{% if not loop.last %}, {% endif %}{% endfor %} - {{ "used" if r.surrogate_final.usable else "not used (below " ~ r.surrogate_final.min_r2 ~ ")" }}.{% endif %}</p>
+{% if pareto_imgs[mode] %}<img src="{{ pareto_imgs[mode] }}" alt="Pareto set">{% endif %}
+<table><tr><th>Option</th><th class="n">Area (%)</th><th class="n">Cut (m³)</th><th>Largest storm fully retained</th></tr>
+{% for o in r.options %}<tr><td>{{ o.option_id }}</td><td class="n">{{ o.area_pct|f(1) }}</td><td class="n">{{ o.cut_m3|f(0) }}</td><td>{{ (o.design_retention_storm_yr ~ "-year") if o.design_retention_storm_yr else "none" }}</td></tr>{% endfor %}</table>{% endfor %}
+{% if curve_img %}<h3>Performance curve</h3><img src="{{ curve_img }}" alt="performance curve">{% endif %}{% endif %}
+
+<h2>6. Calibration</h2>
+{% if calib %}<p>Event {{ calib.rainfall_event }} ({{ calib.event_depth_mm|f(1) }} mm) against {{ calib.observed }} ({{ calib.target }}):
+NSE {{ calib.nse_uncalibrated|f(2) }} before, {{ calib.nse_calibrated|f(2) }} after; volume error {{ calib.volume_error_pct|f(1) }} %.
+Factors: {% for k, v in calib.factors.items() %}{{ k }} x{{ v|f(2) }}{% if not loop.last %}, {% endif %}{% endfor %}. {{ calib.note }}.</p>
+{% if calib_img %}<img src="{{ calib_img }}" alt="calibration">{% endif %}
+{% else %}<p>No observed flood data has been used. The model is <b>uncalibrated</b>: use it to compare options, not to predict exact water levels.
+Rainfall records with observed ponding depths, flows or timestamped flood photos would allow calibration.</p>{% endif %}
+
+<h2>7. Assumptions and limitations</h2>
+<ul>{% for l in limitations %}<li>{{ l }}</li>{% endfor %}
+{% for o in options %}{% if o.layout %}{% for a in o.layout.assumptions %}<li>{{ o.id }}: {{ a }}</li>{% endfor %}{% endif %}{% endfor %}</ul>
+
+<h2>8. Parameters and their sources</h2>
+<p>Every value the engine used. "default" and "literature" values are assumptions until confirmed by the designer ({{ unconfirmed|length }} unconfirmed).</p>
+<table><tr><th>Parameter</th><th>Value</th><th>Unit</th><th>Source</th><th>Confirmed</th><th>Note</th></tr>
+{% for p in params %}<tr><td><code>{{ p.key }}</code></td><td>{{ p.value }}</td><td>{{ p.unit }}</td><td>{{ p.source }}</td><td>{{ "yes" if p.confirmed else "no" }}</td><td>{{ p.note }}</td></tr>{% endfor %}</table>
+
+<h2>9. SWMM input files</h2>
+<p>For independent review by engineers: every model run is a standard EPA SWMM 5 input file, included next to this report.</p>
+<ul>{% for f in inps %}<li><code>{{ f }}</code></li>{% endfor %}</ul>
+</main></body></html>

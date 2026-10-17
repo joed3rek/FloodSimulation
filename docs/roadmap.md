@@ -9,8 +9,8 @@
 | 4 | Suitability scoring, placement, sizing, grading, contours, subcatchment rebuild | done (cut-only grading) |
 | 5 | pymoo NSGA-II, surrogate ML, active learning, inverse mode | done |
 | 6 | rhino3dm export/round trip, Grasshopper components, 2D rain-on-grid | done (GH geometry components to check in Rhino) |
-| 7 | Unity app | |
-| 8 | Reports, calibration, documentation | |
+| 7 | Unity app | done (Windows build run; GPU verified against the engine) |
+| 8 | Reports, calibration, documentation | done |
 
 ## Technical notes
 

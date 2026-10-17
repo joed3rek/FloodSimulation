@@ -1,0 +1,214 @@
+// GPU port of the engine's 2D local inertial model. Line-by-line transcription of
+// spongepark/engine/sim2d/gpu_reference.py (tested against the engine's numba model):
+// FluxX, FluxY -> CellScale -> ScaleX, ScaleY -> Update -> ElementShare -> Sources -> ElementUpdate.
+// Elevations are relative to the lowest ground point (float32 precision). Indicative results.
+#pragma kernel FluxX
+#pragma kernel FluxY
+#pragma kernel CellScale
+#pragma kernel ScaleX
+#pragma kernel ScaleY
+#pragma kernel Update
+#pragma kernel ElementShare
+#pragma kernel Sources
+#pragma kernel ElementUpdate
+#pragma kernel MaxDepth
+
+int NR, NC, NEl, InfilKind;            // InfilKind: 0 constant, 1 curve number, 2 Horton
+float Dt, Dx, Drop, CellArea, RainM, RainRate, CumRain, TimeS;
+static const float G = 9.81;
+
+StructuredBuffer<float> Z;      // NR*NC
+StructuredBuffer<int> Mask;     // 0/1
+StructuredBuffer<float> N2;     // Manning n squared
+RWStructuredBuffer<float> H;    // depth
+RWStructuredBuffer<float> QX;   // NR*(NC+1)
+RWStructuredBuffer<float> QY;   // (NR+1)*NC
+RWStructuredBuffer<float> Scale;
+RWStructuredBuffer<float> CellOut;
+RWStructuredBuffer<float> CellInf;
+RWStructuredBuffer<float> HMax;
+RWStructuredBuffer<float> Take;
+StructuredBuffer<int> El;       // element index per cell, -1 none
+StructuredBuffer<float> InfBase, InfS, InfF0, InfFmin, InfK;   // mm/hr, mm, mm/hr, mm/hr, 1/hr
+RWStructuredBuffer<float> Share, Store, ElInf;
+StructuredBuffer<float> Cap, ElRate, ElArea, ElCells;
+StructuredBuffer<int> ElStart, ElIdx;   // CSR list of each element's cells
+RWStructuredBuffer<float> GroupMax;
+
+bool In(int r, int c) { return r >= 0 && c >= 0 && r < NR && c < NC && Mask[r * NC + c] != 0; }
+
+float FaceFlux(float q, bool inA, bool inB, float zA, float hA, float zB, float hB, float nA, float nB)
+{
+    // A = left/top side, B = right/bottom side; positive q flows A -> B
+    if (!inA && !inB) return 0;
+    float za = inA ? zA : zB - Drop;
+    float ha = inA ? hA : 0;
+    float zb = inB ? zB : zA - Drop;
+    float hb = inB ? hB : 0;
+    float ea = za + ha, eb = zb + hb;
+    float hf = max(ea, eb) - max(za, zb);
+    if (hf <= 1e-4) return 0;
+    float nn = inA ? nA : nB;
+    q = (q - G * hf * Dt * (eb - ea) / Dx) / (1.0 + G * Dt * nn * abs(q) / pow(hf, 7.0 / 3.0));
+    if (!inA && q > 0) q = 0;
+    if (!inB && q < 0) q = 0;
+    return q;
+}
+
+[numthreads(8, 8, 1)]
+void FluxX(uint3 id : SV_DispatchThreadID)
+{
+    int c = id.x, r = id.y;           // face between (r, c-1) and (r, c), c in [0, NC]
+    if (c > NC || r >= NR) return;
+    int L = c - 1, R = c;
+    bool inL = In(r, L), inR = In(r, R);
+    float zL = inL ? Z[r * NC + L] : 0, hL = inL ? H[r * NC + L] : 0, nL = inL ? N2[r * NC + L] : 0;
+    float zR = inR ? Z[r * NC + R] : 0, hR = inR ? H[r * NC + R] : 0, nR = inR ? N2[r * NC + R] : 0;
+    int f = r * (NC + 1) + c;
+    QX[f] = FaceFlux(QX[f], inL, inR, zL, hL, zR, hR, nL, nR);
+}
+
+[numthreads(8, 8, 1)]
+void FluxY(uint3 id : SV_DispatchThreadID)
+{
+    int c = id.x, r = id.y;           // face between (r-1, c) and (r, c), r in [0, NR]
+    if (c >= NC || r > NR) return;
+    int T = r - 1, B = r;
+    bool inT = In(T, c), inB = In(B, c);
+    float zT = inT ? Z[T * NC + c] : 0, hT = inT ? H[T * NC + c] : 0, nT = inT ? N2[T * NC + c] : 0;
+    float zB = inB ? Z[B * NC + c] : 0, hB = inB ? H[B * NC + c] : 0, nB = inB ? N2[B * NC + c] : 0;
+    int f = r * NC + c;
+    QY[f] = FaceFlux(QY[f], inT, inB, zT, hT, zB, hB, nT, nB);
+}
+
+[numthreads(8, 8, 1)]
+void CellScale(uint3 id : SV_DispatchThreadID)
+{
+    int c = id.x, r = id.y;
+    if (c >= NC || r >= NR) return;
+    int k = r * NC + c;
+    float s = 1;
+    if (Mask[k] != 0)
+    {
+        float o = max(QX[r * (NC + 1) + c + 1], 0) + max(-QX[r * (NC + 1) + c], 0)
+                + max(QY[(r + 1) * NC + c], 0) + max(-QY[r * NC + c], 0);
+        float vout = o * Dt / Dx;
+        if (vout > H[k] && vout > 0) s = H[k] / vout;
+    }
+    Scale[k] = s;
+}
+
+[numthreads(8, 8, 1)]
+void ScaleX(uint3 id : SV_DispatchThreadID)
+{
+    int c = id.x, r = id.y;
+    if (c > NC || r >= NR) return;
+    int f = r * (NC + 1) + c;
+    float q = QX[f];
+    if (q > 0 && In(r, c - 1)) QX[f] = q * Scale[r * NC + c - 1];
+    else if (q < 0 && In(r, c)) QX[f] = q * Scale[r * NC + c];
+}
+
+[numthreads(8, 8, 1)]
+void ScaleY(uint3 id : SV_DispatchThreadID)
+{
+    int c = id.x, r = id.y;
+    if (c >= NC || r > NR) return;
+    int f = r * NC + c;
+    float q = QY[f];
+    if (q > 0 && In(r - 1, c)) QY[f] = q * Scale[(r - 1) * NC + c];
+    else if (q < 0 && In(r, c)) QY[f] = q * Scale[r * NC + c];
+}
+
+[numthreads(8, 8, 1)]
+void Update(uint3 id : SV_DispatchThreadID)
+{
+    int c = id.x, r = id.y;
+    if (c >= NC || r >= NR) return;
+    int k = r * NC + c;
+    if (Mask[k] == 0) return;
+    float qw = QX[r * (NC + 1) + c], qe = QX[r * (NC + 1) + c + 1];
+    float qn = QY[r * NC + c], qs = QY[(r + 1) * NC + c];
+    H[k] = max(H[k] + (qw - qe + qn - qs) * Dt / Dx, 0);
+    float leave = 0;
+    if (!In(r, c - 1)) leave += max(-qw, 0);
+    if (!In(r, c + 1)) leave += max(qe, 0);
+    if (!In(r - 1, c)) leave += max(-qn, 0);
+    if (!In(r + 1, c)) leave += max(qs, 0);
+    CellOut[k] += leave * Dt * Dx;
+}
+
+[numthreads(64, 1, 1)]
+void ElementShare(uint3 id : SV_DispatchThreadID)
+{
+    int e = id.x;
+    if (e >= NEl) return;
+    Share[e] = ElCells[e] > 0 ? max(Cap[e] - Store[e], 0) / (ElCells[e] * CellArea) : 0;
+}
+
+float InfiltrationMmHr(int k)
+{
+    if (InfilKind == 1)
+    {
+        float S = InfS[k];
+        float f = S > 0 ? RainRate * (S / (CumRain + S)) * (S / (CumRain + S)) : 0;
+        return max(InfBase[k], f);
+    }
+    if (InfilKind == 2) return InfFmin[k] + (InfF0[k] - InfFmin[k]) * exp(-InfK[k] * TimeS / 3600.0);
+    return InfBase[k];
+}
+
+[numthreads(8, 8, 1)]
+void Sources(uint3 id : SV_DispatchThreadID)
+{
+    int c = id.x, r = id.y;
+    if (c >= NC || r >= NR) return;
+    int k = r * NC + c;
+    Take[k] = 0;
+    if (Mask[k] == 0) return;
+    float h = H[k] + RainM;
+    int e = El[k];
+    if (e >= 0)
+    {
+        float t = min(h, Share[e]);
+        h -= t;
+        Take[k] = t * CellArea;
+    }
+    else
+    {
+        float f = min(h, InfiltrationMmHr(k) / 3600000.0 * Dt);
+        h -= f;
+        CellInf[k] += f * CellArea;
+    }
+    H[k] = h;
+    HMax[k] = max(HMax[k], h);
+}
+
+[numthreads(64, 1, 1)]
+void ElementUpdate(uint3 id : SV_DispatchThreadID)
+{
+    int e = id.x;
+    if (e >= NEl) return;
+    float taken = 0;
+    for (int i = ElStart[e]; i < ElStart[e + 1]; i++) taken += Take[ElIdx[i]];
+    float s = Store[e] + taken;
+    float loss = min(s, ElRate[e] * Dt * ElArea[e]);
+    Store[e] = s - loss;
+    ElInf[e] += loss;
+}
+
+groupshared float gmax[256];
+
+[numthreads(256, 1, 1)]
+void MaxDepth(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex, uint3 gid : SV_GroupID)
+{
+    int k = id.x;
+    gmax[gi] = (k < NR * NC && Mask[k] != 0) ? H[k] : 0;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint s = 128; s > 0; s >>= 1)
+    {
+        if (gi < s) gmax[gi] = max(gmax[gi], gmax[gi + s]);
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (gi == 0) GroupMax[gid.x] = gmax[0];
+}

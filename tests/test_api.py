@@ -53,6 +53,12 @@ def test_pipeline_through_the_api(client, project_path):
     assert st["status"] == "done", st.get("error")
     fr = client.get(f"/projects/{pid}/options/auto/sim2d/5/frames", params={"count": 3}).json()
     assert fr["label"] == "indicative" and len(fr["times_s"]) == 3
+    inp = client.get(f"/projects/{pid}/options/auto/sim2d/5/inputs").json()
+    assert inp["elements"]["ids"] and inp["infiltration"]["kind"] == "horton"
+    ret = client.get(f"/projects/{pid}/options/auto/retained/5").json()
+    assert ret["retained_l"][-1] > 0 and ret["retained_l"][-1] <= ret["rain_l"][-1]
+    b = client.post(f"/projects/{pid}/viewer-bundle?wait=true", json={"out_dir": str(project_path.parent / "bundle")}).json()
+    assert b["status"] == "done" and "frames_auto_rp5.json" in b["result"]["files"]
     ts = client.get(f"/projects/{pid}/options/auto/timeseries/5").json()
     assert ts["columns"][0] == "time_hr" and ts["data"]
     q = client.put(f"/projects/{pid}/parameters/layout.max_area_pct", json={"value": 12, "unit": "%"}).json()

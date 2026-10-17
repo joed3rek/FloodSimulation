@@ -212,6 +212,45 @@ def sim2d_run(path: Path, option: str, rp: int, cell: Optional[float] = None) ->
         p.save()
 
 
+@app.command("report")
+def report(path: Path, out: Path, options: Optional[List[str]] = typer.Option(None, "--option"), pdf: bool = True) -> None:
+    """Full HTML (and PDF) report: results, schedules, earthworks, water balance, parameters, SWMM files."""
+    from spongepark.engine.report.html import build_report
+
+    with _open(path) as p:
+        r = build_report(p, options or None, out, pdf)
+        p.save()
+    typer.echo(f"report: {r['html']}")
+    if r.get("pdf"):
+        typer.echo(f"pdf: {r['pdf']}")
+    typer.echo(f"{len(r['swmm_files'])} SWMM input files copied; {r['unconfirmed_parameters']} parameters still unconfirmed")
+
+
+@app.command("calibrate")
+def calibrate_cmd(path: Path, option: str, rainfall: Path, observed: Path,
+                  target: str = typer.Option("outflow_total_cms", help="Model series: outflow_total_cms or depth_<id>_m."),
+                  evaluations: int = 80, apply: bool = True) -> None:
+    """Fit infiltration, roughness, depression storage and imperviousness factors to an observed event."""
+    from spongepark.engine.swmm.calibrate import calibrate
+
+    with _open(path) as p:
+        r = calibrate(p, option, rainfall, observed, target, evaluations, apply)
+        typer.echo(f"NSE {r['nse_uncalibrated']:.2f} -> {r['nse_calibrated']:.2f}; factors "
+                   + ", ".join(f"{k} x{v:.2f}" for k, v in r["factors"].items()))
+        typer.echo(r["note"])
+        p.save()
+
+
+@app.command("viewer-bundle")
+def viewer_bundle(path: Path, out: Path, options: Optional[List[str]] = typer.Option(None, "--option")) -> None:
+    """Write the JSON bundle the Unity WebGL viewer reads (terrain, options, retained curves, 2D frames)."""
+    from spongepark.engine.io.viewer import write_bundle
+
+    with _open(path) as p:
+        m = write_bundle(p, out, options or None)
+    typer.echo(f"written {len(m['files'])} files to {out} (options: {', '.join(m['options'])})")
+
+
 @app.command()
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
     """Start the local engine API for the Unity app and Grasshopper components."""

@@ -31,6 +31,7 @@ dependencies = [
     "numba>=0.58",          # 2D rain-on-grid model (Phase 6)
     "fastapi>=0.110",       # local engine API (Phase 7)
     "uvicorn>=0.27",
+    "imageio-ffmpeg>=0.5",  # bundled ffmpeg for the app's video export
 ]
 
 [project.optional-dependencies]
@@ -47,6 +48,7 @@ include = ["spongepark*"]
 "spongepark.engine.nbs" = ["data/*.json"]
 "spongepark.engine.hydrology" = ["data/*.json"]
 "spongepark.engine.io" = ["data/*.json"]
+"spongepark.engine.report" = ["templates/*.j2"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

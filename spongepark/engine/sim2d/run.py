@@ -10,6 +10,7 @@ JSON and a PNG. Everything is labelled indicative.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import numpy as np
@@ -65,7 +66,7 @@ def _infiltration(site: Site, method: str, X, Y, mask, imperv):
         def fn(t, i, P):
             return np.where(imperv, 0.0, np.maximum(base, i * (S / (P + S)) ** 2))
 
-        return f, fn, "curve number (SCS, Ia = 0, as SWMM), floor at the zone's saturated rate"
+        return f, fn, "curve number (SCS, Ia = 0, as SWMM), floor at the zone's saturated rate",             {"kind": "curve_number", "base_mm_hr": f, "S_mm": np.where(imperv, 0.0, S)}
     if "HORTON" in method:
         f0, fmin, k = np.zeros(mask.shape), np.zeros(mask.shape), np.zeros(mask.shape)
         for zone in site.soils:
@@ -75,12 +76,30 @@ def _infiltration(site: Site, method: str, X, Y, mask, imperv):
         def fn(t, i, P):
             return np.where(imperv, 0.0, fmin + (f0 - fmin) * np.exp(-k * t / 3600))
 
-        return f, fn, "Horton decay from the storm start"
-    return f, None, "constant saturated rate (Green-Ampt Ksat)"
+        return f, fn, "Horton decay from the storm start",             {"kind": "horton", "f0_mm_hr": np.where(imperv, 0.0, f0), "fmin_mm_hr": np.where(imperv, 0.0, fmin), "k_1_hr": k}
+    return f, None, "constant saturated rate (Green-Ampt Ksat)", {"kind": "constant", "base_mm_hr": f}
 
 
-def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = None,
-          frame_every_s: Optional[float] = None) -> Dict[str, Any]:
+@dataclass
+class Inputs2D:
+    """Everything the 2D model needs; also served to the Unity GPU port so both run the same case."""
+
+    dem: DEM
+    mask: np.ndarray
+    n: np.ndarray
+    f: np.ndarray
+    infil_fn: Any
+    infil_note: str
+    infil_params: Dict[str, Any]
+    elements: Optional[Elements2D]
+    rain_mm_hr: np.ndarray
+    rain_dt_s: float
+    duration_s: float
+    alpha: float
+    dt_max: float
+
+
+def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = None) -> Inputs2D:
     P = project.parameters
     site = Site.load(project, option_id)
     dem_rel = f"options/{option_id}/terrain/graded.tif"
@@ -103,7 +122,7 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
     imperv = contains_xy(unary_union(imperv_polys), X, Y) if imperv_polys else np.zeros(mask.shape, bool)
     n = np.where(imperv, float(P.value("surface.n_imperv")), float(P.value("surface.n_perv")))
     method = str(P.value("swmm.infiltration_method")).upper()
-    f, infil_fn, infil_note = _infiltration(site, method, X, Y, mask, imperv)
+    f, infil_fn, infil_note, infil_params = _infiltration(site, method, X, Y, mask, imperv)
 
     # NbS elements as sinks (resolved values written by the SWMM run of the option)
     els = None
@@ -112,7 +131,7 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
         elements = read_elements(project.read_geojson(rel))
         lab = -np.ones(mask.shape, np.int64)
         caps, rates, areas, ids = [], [], [], []
-        for i, e in enumerate(elements):
+        for e in elements:
             m = contains_xy(e.footprint(), X, Y) & mask
             if not m.any():  # smaller than a cell: take the nearest one
                 c = e.footprint().centroid
@@ -128,11 +147,22 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
         els = Elements2D(lab, ids, np.array(caps), np.array(rates), np.array(areas))
 
     storm = load_hyetographs(project)[rp]
-    duration_s = storm.duration_hr * 3600 + float(P.value("sim2d.extra_time_hr")) * 3600
-    res = simulate(z, mask, cell, storm.intensity_mm_hr, storm.dt_min * 60, duration_s, n, f, els,
+    return Inputs2D(g, mask, n, f, infil_fn, infil_note, infil_params, els, storm.intensity_mm_hr.astype(float),
+                    storm.dt_min * 60, storm.duration_hr * 3600 + float(P.value("sim2d.extra_time_hr")) * 3600,
+                    float(P.value("sim2d.courant")), float(P.value("sim2d.max_time_step_s")))
+
+
+def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = None,
+          frame_every_s: Optional[float] = None) -> Dict[str, Any]:
+    P = project.parameters
+    inp = prepare2d(project, option_id, rp, cell_m)
+    g, mask, els, cell = inp.dem, inp.mask, inp.elements, inp.dem.cell_size
+    dem = g
+    infil_note = inp.infil_note
+    duration_s = inp.duration_s
+    res = simulate(g.z, mask, cell, inp.rain_mm_hr, inp.rain_dt_s, duration_s, inp.n, inp.f, els,
                    frame_every_s=float(frame_every_s or P.value("sim2d.frame_interval_s")),
-                   alpha=float(P.value("sim2d.courant")), dt_max=float(P.value("sim2d.max_time_step_s")),
-                   infil_fn=infil_fn)
+                   alpha=inp.alpha, dt_max=inp.dt_max, infil_fn=inp.infil_fn)
 
     # SWMM comparison
     swmm = None

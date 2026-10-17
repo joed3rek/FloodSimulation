@@ -227,6 +227,16 @@ _DEFAULTS: List[Tuple[str, object, str, Source, str]] = [
     ("sim2d.flood_depth_threshold_m", 0.05, "m", D, "Depth counted as flooded in the 2D summary."),
     ("sim2d.volume_tolerance_pct", 5.0, "%", D,
      "Accepted difference between 2D and SWMM volume leaving the site, as a share of rainfall."),
+    # --- calibration (Phase 8) -------------------------------------------------------------------
+    ("calibration.infiltration_factor", 1.0, "-", D,
+     "Multiplier on soil infiltration (Horton/Green-Ampt rates, or the curve number's retention S). Set by calibration."),
+    ("calibration.roughness_factor", 1.0, "-", D, "Multiplier on Manning's n of site surfaces. Set by calibration."),
+    ("calibration.depression_storage_factor", 1.0, "-", D, "Multiplier on depression storage. Set by calibration."),
+    ("calibration.imperviousness_factor", 1.0, "-", D, "Multiplier on % impervious. Set by calibration."),
+    ("calibration.bounds", {"infiltration": [0.3, 3.0], "roughness": [0.5, 2.0], "depression_storage": [0.3, 3.0],
+                            "imperviousness": [0.7, 1.3]}, "-", D, "Search range of each calibration factor."),
+    ("calibration.min_nse", 0.5, "-", D,
+     "Nash-Sutcliffe efficiency the calibrated model must reach to be labelled calibrated."),
     # --- design guidelines -----------------------------------------------------------------------
     ("guidelines.enforce_errors", True, "-", D,
      "Refuse to run an option when an element breaches an 'error' guideline rule (warnings are reported only)."),

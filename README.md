@@ -14,8 +14,7 @@ interception, which SWMM does not model; it is computed separately and reported 
 |---|---|---|
 | 0 | Project file, parameters, CLI skeleton, synthetic terrains | done |
 | 1 | Rainfall, hyetographs, manual NbS layout, SWMM build/run, water balance, metrics, charts | done |
-| 2-6 | Survey import and terrain, baseline flow analysis, layout generation and grading, optimisation with a surrogate, Rhino round trip, Grasshopper, 2D model, engine API | done |
-| 7-8 | Unity app, reports and calibration | planned ([docs/roadmap.md](docs/roadmap.md)) |
+| 2-8 | Survey import and terrain, baseline flow analysis, layout generation and grading, optimisation with a surrogate, Rhino round trip, Grasshopper, 2D model, engine API, Unity app, reports and calibration | done ([docs/roadmap.md](docs/roadmap.md)) |
 
 ## Install
 
@@ -34,23 +33,31 @@ spongepark example examples/output          # synthetic 1 ha park, end to end
 pytest                                      # all tests
 ```
 
-Working on your own site:
+Working on your own site, from the survey drawing:
 
 ```
-spongepark project new park.sponge --name "Pilot park"
+spongepark project new park.sponge --name "Pilot park" --crs LOCAL
+spongepark terrain standardise survey.dxf                      # optional: SP-* layer names
+spongepark terrain inspect survey.dxf                          # suggested layer map: check, set "confirmed": true
+spongepark terrain import park.sponge survey.dxf --map survey.layer_map.json
+spongepark terrain delineate park.sponge                       # subcatchments and outfalls from the ground
+spongepark site import park.sponge soils soil_zones.geojson    # infiltration per zone (never assumed)
 spongepark rainfall import park.sponge return_periods.csv
-spongepark site import park.sponge boundary boundary.geojson
-spongepark site import park.sponge subcatchments subcatchments.geojson
-spongepark site import park.sponge soils soil_zones.geojson
-spongepark site import park.sponge outfalls outfalls.geojson
-spongepark option import park.sponge manual layout.geojson
 spongepark params list park.sponge --unconfirmed
-spongepark run park.sponge baseline
-spongepark run park.sponge manual
-spongepark compare park.sponge manual
-spongepark charts park.sponge manual
-spongepark perf-curve park.sponge manual --levels 5,10,15,20,25
+spongepark run park.sponge baseline                            # existing site, every return period
+spongepark layout generate park.sponge auto                    # place, size and grade NbS
+spongepark run park.sponge auto && spongepark compare park.sponge auto
+spongepark optimise run park.sponge --mode forward             # Pareto options, SWMM-verified
+spongepark optimise curve park.sponge                          # largest storm retained vs budget
+spongepark sim2d run park.sponge auto 25                       # 2D surface flooding (indicative)
+spongepark rhino export park.sponge auto auto.3dm              # edit in Rhino, then:
+spongepark rhino import park.sponge auto auto_edited.3dm       # detects edits, regrades, reruns
+spongepark report park.sponge report/                          # HTML + PDF report, SWMM files
+spongepark serve                                               # engine API for Unity and Grasshopper
 ```
+
+A hand-drawn layout can still be imported with `spongepark option import park.sponge manual layout.geojson`.
+The Unity app is in `unity/SpongeParkApp` ([docs/unity.md](docs/unity.md)).
 
 ## NbS components
 
@@ -71,6 +78,8 @@ edge engineering (4.11) and in-line SWD check dam (4.12).
 - [docs/optimisation.md](docs/optimisation.md): NSGA-II optimisation, surrogate, performance curve
 - [docs/rhino.md](docs/rhino.md): .3dm export, round trip and Grasshopper components
 - [docs/sim2d.md](docs/sim2d.md): 2D rain-on-grid model (indicative)
+- [docs/unity.md](docs/unity.md): the Unity app, GPU water and video
+- [docs/report.md](docs/report.md): the report and calibration
 - [docs/water_balance.md](docs/water_balance.md): water balance terms and metrics
 - [docs/references.md](docs/references.md): reference register (guideline chapters, TR-55, lake-cascade appendix)
 - [docs/limitations.md](docs/limitations.md): known limitations

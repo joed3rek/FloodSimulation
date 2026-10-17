@@ -10,7 +10,6 @@ The API never computes anything itself: every route calls the same engine functi
 
 from __future__ import annotations
 
-import base64
 import logging
 import threading
 import traceback
@@ -19,7 +18,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-import numpy as np
 from fastapi import Body, FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
@@ -67,10 +65,6 @@ def _jsonable(x: Any) -> Any:
     from spongepark.engine.swmm.runner import to_jsonable
 
     return to_jsonable(x)
-
-
-def _b64(a: np.ndarray, dtype: str = "<f4") -> str:
-    return base64.b64encode(np.ascontiguousarray(a, dtype=dtype).tobytes()).decode()
 
 
 # ------------------------------------------------------------------ projects
@@ -289,32 +283,52 @@ def sim2d(pid: str, oid: str, rp: int, cell_m: Optional[float] = None, wait: boo
 @app.get("/projects/{pid}/terrain")
 def terrain(pid: str, option: Optional[str] = None, max_cells: int = 250_000) -> Dict[str, Any]:
     """Height grid as base64 little-endian float32, row 0 = north. NaN = no data."""
-    from spongepark.engine.terrain.raster import read_geotiff
+    from spongepark.engine.io.viewer import terrain_payload
 
-    p = _project(pid)
-    rel = f"options/{option}/terrain/graded.tif" if option else "terrain/existing.tif"
-    if not p.exists(rel):
-        raise HTTPException(404, f"{rel} not found")
-    d = read_geotiff(p.path(rel))
-    z = np.where(d.z == d.nodata, np.nan, d.z)
-    step = max(1, int(np.ceil(np.sqrt(z.size / max_cells))))
-    z = z[::step, ::step]
-    return {"rows": z.shape[0], "cols": z.shape[1], "cell_m": d.cell_size * step, "origin": list(d.origin),
-            "z_min": float(np.nanmin(z)), "z_max": float(np.nanmax(z)), "z": _b64(z)}
+    try:
+        return terrain_payload(_project(pid), option, max_cells)
+    except Exception as ex:
+        raise HTTPException(404, str(ex))
 
 
 @app.get("/projects/{pid}/options/{oid}/sim2d/{rp}/frames")
 def sim2d_frames(pid: str, oid: str, rp: int, start: int = 0, count: int = 1000) -> Dict[str, Any]:
     """Depth frames (indicative) as base64 float16, frame-major, row 0 = north."""
+    from spongepark.engine.io.viewer import frames_payload
+
     p = _project(pid)
-    rel = f"options/{oid}/sim2d/rp{rp}.npz"
-    if not p.exists(rel):
+    if not p.exists(f"options/{oid}/sim2d/rp{rp}.npz"):
         raise HTTPException(404, "run the 2D simulation first")
-    d = np.load(p.path(rel))
-    frames = d["depth_m"][start:start + count]
-    return {"label": "indicative", "times_s": d["times_s"][start:start + count].tolist(), "rows": frames.shape[1],
-            "cols": frames.shape[2], "cell_m": float(d["cell_m"]), "origin": d["origin"].tolist(),
-            "frames": base64.b64encode(np.ascontiguousarray(frames, "<f2").tobytes()).decode()}
+    return frames_payload(p, oid, rp, start, count)
+
+
+@app.get("/projects/{pid}/options/{oid}/sim2d/{rp}/inputs")
+def sim2d_inputs(pid: str, oid: str, rp: int, cell_m: Optional[float] = None) -> Dict[str, Any]:
+    """Inputs of the 2D model (for the GPU port and its verification against the engine)."""
+    from spongepark.engine.io.viewer import sim2d_inputs_payload
+
+    return sim2d_inputs_payload(_project(pid), oid, rp, cell_m)
+
+
+@app.get("/projects/{pid}/options/{oid}/sim2d/{rp}/summary")
+def sim2d_summary(pid: str, oid: str, rp: int) -> Dict[str, Any]:
+    return _project(pid).read_json(f"options/{oid}/sim2d/rp{rp}_summary.json")
+
+
+@app.get("/projects/{pid}/options/{oid}/retained/{rp}")
+def retained(pid: str, oid: str, rp: int, every: int = 5) -> Dict[str, Any]:
+    """Running litres retained on site through the storm (SWMM time series)."""
+    from spongepark.engine.io.viewer import retained_payload
+
+    return retained_payload(_project(pid), oid, rp, every)
+
+
+@app.post("/projects/{pid}/viewer-bundle")
+def viewer_bundle(pid: str, out_dir: str = Body(..., embed=True), options: Optional[List[str]] = Body(None, embed=True),
+                  wait: bool = False) -> Dict[str, Any]:
+    from spongepark.engine.io.viewer import write_bundle
+
+    return _job(pid, "viewer bundle", lambda p: write_bundle(p, Path(out_dir), options), wait)
 
 
 # ------------------------------------------------------------------ exports and round trip
@@ -347,6 +361,17 @@ def import_rhino(pid: str, oid: str, path: str = Body(..., embed=True), rerun: b
     from spongepark.rhino.roundtrip import import_3dm
 
     return _job(pid, f"import 3dm {oid}", lambda p: import_3dm(p, oid, Path(path), rerun), wait)
+
+
+@app.post("/video/encode")
+def video_encode(folder: str = Body(..., embed=True), fps: int = Body(30, embed=True)) -> Dict[str, Any]:
+    """Encode the Unity app's PNG frames to MP4 (bundled ffmpeg), for machines without ffmpeg."""
+    from spongepark.engine.report.video import encode
+
+    try:
+        return {"video": str(encode(Path(folder), fps))}
+    except Exception as ex:
+        raise HTTPException(400, str(ex))
 
 
 @app.get("/jobs/{jid}")
