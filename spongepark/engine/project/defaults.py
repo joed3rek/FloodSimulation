@@ -218,6 +218,15 @@ _DEFAULTS: List[Tuple[str, object, str, Source, str]] = [
     ("optimise.performance_curve_budgets_pct", [5, 10, 15, 20, 25], "%", D, "Budgets of the performance curve."),
     ("ml.min_r2", 0.8, "-", D, "Hold-out R2 every surrogate target must reach before the surrogate is used."),
     ("ml.test_fraction", 0.25, "fraction", D, "Share of SWMM-evaluated layouts held out to test the surrogate."),
+    # --- 2D surface model (Phase 6) ---------------------------------------------------------------
+    ("sim2d.cell_m", 1.0, "m", D, "2D model cell size (the DEM is block-averaged up to it)."),
+    ("sim2d.courant", 0.7, "-", L, "Time step factor alpha in dt = alpha dx / sqrt(g h) (Bates et al. 2010)."),
+    ("sim2d.max_time_step_s", 10.0, "s", D, "Longest 2D time step (dry periods)."),
+    ("sim2d.frame_interval_s", 300.0, "s", D, "Interval of stored depth frames."),
+    ("sim2d.extra_time_hr", 2.0, "hr", D, "Simulated time after the storm ends."),
+    ("sim2d.flood_depth_threshold_m", 0.05, "m", D, "Depth counted as flooded in the 2D summary."),
+    ("sim2d.volume_tolerance_pct", 5.0, "%", D,
+     "Accepted difference between 2D and SWMM volume leaving the site, as a share of rainfall."),
     # --- design guidelines -----------------------------------------------------------------------
     ("guidelines.enforce_errors", True, "-", D,
      "Refuse to run an option when an element breaches an 'error' guideline rule (warnings are reported only)."),

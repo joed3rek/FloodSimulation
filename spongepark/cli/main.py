@@ -29,11 +29,14 @@ site_app = typer.Typer(help="Site layers.", no_args_is_help=True)
 option_app = typer.Typer(help="NbS layout options.", no_args_is_help=True)
 terrain_app = typer.Typer(help="Terrain (synthetic test terrains in Phase 0).", no_args_is_help=True)
 layout_app = typer.Typer(help="Generated NbS layouts (Phase 4).", no_args_is_help=True)
+rhino_app = typer.Typer(help="Rhino .3dm export and round trip (Phase 6).", no_args_is_help=True)
+sim2d_app = typer.Typer(help="2D rain-on-grid surface model, indicative (Phase 6).", no_args_is_help=True)
 optimise_app = typer.Typer(help="Optimisation with NSGA-II and a surrogate, SWMM-verified (Phase 5).",
                            no_args_is_help=True)
 nbs_app = typer.Typer(help="Component catalogue and design guidelines.", no_args_is_help=True)
 for sub, name in [(project_app, "project"), (params_app, "params"), (rain_app, "rainfall"), (site_app, "site"),
                   (option_app, "option"), (terrain_app, "terrain"), (layout_app, "layout"), (optimise_app, "optimise"),
+                  (rhino_app, "rhino"), (sim2d_app, "sim2d"),
                   (nbs_app, "nbs")]:
     app.add_typer(sub, name=name)
 
@@ -147,6 +150,74 @@ def layout_generate(path: Path, option: str = typer.Argument("auto"),
         typer.echo(f"area {r['generated_area_m2']:.0f} of {r['area_budget_m2']:.0f} m2 budget; cut {r['cut_total_m3']:.0f} m3")
         p.save()
     typer.echo(f"next: spongepark option run {path} {option}")
+
+
+@layout_app.command("regrade")
+def layout_regrade(path: Path, option: str, run: bool = True) -> None:
+    """Regrade an option from its current elements (after edits), rebuild subcatchments, rerun SWMM."""
+    from spongepark.engine.layout.apply import regrade
+    from spongepark.engine.pipeline import compare, run_option
+
+    with _open(path) as p:
+        r = regrade(p, option)
+        for w in r["warnings"]:
+            typer.echo(f"  ! {w}")
+        typer.echo(f"regraded {len(r['elements'])} elements, cut {r['cut_total_m3']:.0f} m3")
+        if run:
+            run_option(p, option)
+            compare(p, option)
+        p.save()
+
+
+# ------------------------------------------------------------------ rhino and 2D
+@rhino_app.command("export")
+def rhino_export(path: Path, option: str, out: Path) -> None:
+    """Write terrain, contours, NbS (with all fields and SWMM results), analysis and context to .3dm."""
+    from spongepark.rhino.roundtrip import export_3dm
+
+    with _open(path) as p:
+        r = export_3dm(p, option, out)
+    typer.echo(f"written {r['path']}: {r['elements']} NbS elements, layers {', '.join(r['layers'])}")
+
+
+@rhino_app.command("import")
+def rhino_import(path: Path, option: str, drawing: Path, rerun: bool = True) -> None:
+    """Apply a designer's .3dm edits: detect moved/resized/deleted/new elements, lock them, rerun."""
+    from spongepark.rhino.roundtrip import import_3dm
+
+    with _open(path) as p:
+        r = import_3dm(p, option, drawing, rerun)
+        for k, v in r["changes"].items():
+            if v and k != "unchanged":
+                typer.echo(f"  {k}: {', '.join(v)}")
+        typer.echo("rerun: grading, subcatchments and SWMM" if r["rerun"] else "no changes")
+        p.save()
+
+
+@sim2d_app.command("run")
+def sim2d_run(path: Path, option: str, rp: int, cell: Optional[float] = None) -> None:
+    """2D surface simulation of an option for one return period (indicative), compared with SWMM."""
+    from spongepark.engine.sim2d.run import run2d
+
+    with _open(path) as p:
+        s = run2d(p, option, rp, cell)
+        b = s["balance"]
+        typer.echo(f"{s['label']}")
+        typer.echo(f"rain {b['rainfall_m3']:.1f} m3: leaves {b['outflow_m3']:.1f}, infiltrates "
+                   f"{b['infiltration_ground_m3'] + b['infiltration_elements_m3']:.1f}, continuity "
+                   f"{b['continuity_error_pct']:.3f} %; flooded >= {s['flood_depth_threshold_m']} m: "
+                   f"{s['flooded_area_m2']:.0f} m2, max depth {s['max_depth_m']:.2f} m")
+        if s["swmm_comparison"]:
+            typer.echo(f"leaving the site vs SWMM: {s['swmm_comparison']['difference_pct_of_rainfall']:+.1f} % of rainfall")
+        p.save()
+
+
+@app.command()
+def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
+    """Start the local engine API for the Unity app and Grasshopper components."""
+    from spongepark.api.server import serve as _serve
+
+    _serve(host, port)
 
 
 # ------------------------------------------------------------------ optimise

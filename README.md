@@ -14,8 +14,8 @@ interception, which SWMM does not model; it is computed separately and reported 
 |---|---|---|
 | 0 | Project file, parameters, CLI skeleton, synthetic terrains | done |
 | 1 | Rainfall, hyetographs, manual NbS layout, SWMM build/run, water balance, metrics, charts | done |
-| 2-5 | Survey import and terrain, baseline flow analysis, layout generation and grading, optimisation with a surrogate | done |
-| 6-8 | Rhino + 2D, Unity, reports | planned ([docs/roadmap.md](docs/roadmap.md)) |
+| 2-6 | Survey import and terrain, baseline flow analysis, layout generation and grading, optimisation with a surrogate, Rhino round trip, Grasshopper, 2D model, engine API | done |
+| 7-8 | Unity app, reports and calibration | planned ([docs/roadmap.md](docs/roadmap.md)) |
 
 ## Install
 
@@ -69,6 +69,8 @@ edge engineering (4.11) and in-line SWD check dam (4.12).
 - [docs/terrain.md](docs/terrain.md): survey import, layer standard, DEM quality checks, flow and subcatchments
 - [docs/layout.md](docs/layout.md): layout generation, sizing, grading and subcatchment rebuild
 - [docs/optimisation.md](docs/optimisation.md): NSGA-II optimisation, surrogate, performance curve
+- [docs/rhino.md](docs/rhino.md): .3dm export, round trip and Grasshopper components
+- [docs/sim2d.md](docs/sim2d.md): 2D rain-on-grid model (indicative)
 - [docs/water_balance.md](docs/water_balance.md): water balance terms and metrics
 - [docs/references.md](docs/references.md): reference register (guideline chapters, TR-55, lake-cascade appendix)
 - [docs/limitations.md](docs/limitations.md): known limitations
