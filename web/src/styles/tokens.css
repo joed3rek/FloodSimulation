@@ -16,6 +16,7 @@
   --color-border: 222 216 207;       /* raw timber  #DED8CF */
   --color-destructive: 168 84 72;    /* burnt sienna #A85448 */
   --color-card: 254 254 250;         /* #FEFEFA */
+  --color-night: 27 28 22;           /* wet loam at dusk: the landing hero #1B1C16 */
   /* water, for data only (storm viewer, charts) */
   --color-water: 74 124 150;         /* river stone blue */
   --color-water-deep: 38 78 104;

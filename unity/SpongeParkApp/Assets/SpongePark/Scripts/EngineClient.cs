@@ -83,6 +83,8 @@ namespace SpongePark
                 req.timeout = 5;
                 yield return req.SendWebRequest();
                 if (req.result == UnityWebRequest.Result.Success) { done(true); yield break; }
+                LastError = $"{baseUrl}/health: {req.error}";
+                Debug.LogWarning("engine health check failed: " + LastError);
             }
             done(false);
         }

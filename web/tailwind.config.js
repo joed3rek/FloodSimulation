@@ -17,6 +17,7 @@ export default {
         border: c("border"),
         destructive: c("destructive"),
         water: { DEFAULT: c("water"), deep: c("water-deep") },
+        night: c("night"),
       },
       fontFamily: {
         display: ['"Fraunces Variable"', "Georgia", "serif"],
@@ -46,6 +47,11 @@ export default {
         "blob-4": "var(--blob-4)",
       },
       transitionTimingFunction: { natural: "var(--ease-natural)" },
+      keyframes: {
+        "drift-a": { "0%, 100%": { transform: "translateY(0) rotate(0)" }, "50%": { transform: "translateY(-22px) rotate(2deg)" } },
+        "drift-b": { "0%, 100%": { transform: "translateY(0) rotate(0)" }, "50%": { transform: "translateY(20px) rotate(-2deg)" } },
+      },
+      animation: { "drift-a": "drift-a 12s ease-in-out infinite", "drift-b": "drift-b 14s ease-in-out infinite" },
     },
   },
   plugins: [],

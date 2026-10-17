@@ -11,6 +11,7 @@ namespace SpongePark
         public bool Touring;
         public float TourDegreesPerSecond = 8;
         public CameraRig Follow;   // side-by-side: the second camera mirrors the first
+        public static System.Func<bool> BlockInput;   // true while the pointer is over the interface
 
         public void Frame(Bounds b)
         {
@@ -29,7 +30,7 @@ namespace SpongePark
                 Yaw += TourDegreesPerSecond * Time.deltaTime;
                 Pitch = 30 + 10 * Mathf.Sin(Time.time * 0.15f);
             }
-            else if (GUIUtility.hotControl == 0)   // not while dragging a UI control
+            else if (BlockInput == null || !BlockInput())
             {
                 if (Input.GetMouseButton(1))
                 {

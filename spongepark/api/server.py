@@ -465,6 +465,77 @@ def project_jobs(pid: str) -> List[Dict[str, Any]]:
     return [{k: v for k, v in j.items() if k != "result"} for j in _jobs.values() if j["project"] == pid]
 
 
+# ------------------------------------------------------------------ survey intake (opening screen)
+from fastapi import Request  # noqa: E402
+from fastapi.responses import Response  # noqa: E402
+
+
+@app.post("/intake/upload")
+async def intake_upload(request: Request, filename: str = Query(...)) -> Dict[str, Any]:
+    """A drawing sent as the raw request body; stored in the workspace, then read."""
+    from spongepark.engine.io import intake
+    from spongepark.engine.io.cad import CadError
+
+    try:
+        path = intake.save_upload(filename, await request.body())
+        return intake.start(path)
+    except CadError as ex:
+        raise HTTPException(400, str(ex))
+
+
+@app.post("/intake/start")
+def intake_start(path: str = Body(..., embed=True)) -> Dict[str, Any]:
+    from spongepark.engine.io import intake
+    from spongepark.engine.io.cad import CadError
+
+    try:
+        return intake.start(Path(path))
+    except CadError as ex:
+        raise HTTPException(400, str(ex))
+
+
+@app.get("/intake/preview")
+def intake_preview(path: str, layer: Optional[str] = None) -> Response:
+    """The drawing with one layer highlighted (PNG)."""
+    from spongepark.engine.io import intake
+
+    return Response(intake.preview(Path(path), layer), media_type="image/png",
+                    headers={"Cache-Control": "max-age=3600"})
+
+
+class IntakeFinish(BaseModel):
+    survey: str
+    links: Dict[str, str]
+    project_path: Optional[str] = None
+    park_area_m2: Optional[float] = None
+    contours_in_surface: bool = True
+    units_scale_to_m: float = 1.0
+
+
+@app.post("/intake/finish")
+def intake_finish(req: IntakeFinish, wait: bool = False) -> Dict[str, Any]:
+    """Clean the drawing, create the project and build the ground model (a job)."""
+    from spongepark.engine.io import intake
+
+    jid = uuid.uuid4().hex[:12]
+    _jobs[jid] = {"id": jid, "project": None, "name": "survey intake", "status": "running"}
+
+    def work():
+        try:
+            _jobs[jid].update(status="done", result=_jsonable(intake.finish(
+                Path(req.survey), req.links, Path(req.project_path) if req.project_path else None,
+                req.park_area_m2, req.contours_in_surface, req.units_scale_to_m)))
+        except Exception as ex:
+            log.exception("intake failed")
+            _jobs[jid].update(status="error", error=str(ex))
+
+    fut = _pool.submit(work)
+    if wait:
+        fut.result()
+        return _jobs[jid]
+    return {"job": jid, "status": "running"}
+
+
 @app.get("/jobs/{jid}")
 def job(jid: str) -> Dict[str, Any]:
     if jid not in _jobs:

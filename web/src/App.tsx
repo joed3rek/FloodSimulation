@@ -5,7 +5,8 @@ import { useProject } from "./lib/project";
 import { go, useRoute } from "./lib/route";
 import { Blob } from "./components/ui/Bits";
 import { cx } from "./components/ui/cx";
-import { Home } from "./pages/Home";
+import { Landing } from "./pages/Landing";
+import { Intake } from "./pages/Intake";
 import { Overview } from "./pages/Overview";
 import { Survey } from "./pages/Survey";
 import { Parameters } from "./pages/Parameters";
@@ -29,7 +30,10 @@ export function App() {
   const route = useRoute();
   const [menu, setMenu] = useState(false);
 
-  const page = !pid ? <Home /> : ({
+  // no project open: the landing page is the whole screen (its own dark navigation)
+  if (!pid && route.page !== "intake") return <Landing />;
+
+  const page = route.page === "intake" ? <Intake /> : !pid ? <Landing /> : ({
     overview: <Overview />, survey: <Survey />, parameters: <Parameters />, existing: <Existing />,
     options: <Options arg={route.arg} />, storm: <Storm arg={route.arg} />, deliverables: <Deliverables />,
   } as Record<string, JSX.Element>)[route.page] ?? <Overview />;

@@ -9,11 +9,32 @@ spongepark serve          # then open http://127.0.0.1:8765
 The engine serves the built app (`web/dist`) and its API from the same address. The app never
 computes anything: every number comes from the engine (SWMM; the 2D model is labelled indicative).
 
+## Opening screen and survey intake
+
+With no project open the app shows a dark landing page whose one action is **Import a survey**:
+drop the DXF on it (or click to choose it, or pick a file on this computer). The drawing is stored in
+`~/SpongePark/<name>/` and read:
+
+1. Every layer is matched to the SP-* layer standard (`spongepark/engine/io/data/layer_standard.json`)
+   and shown with a plain title ("Ground spot levels", "Footpaths" ...).
+2. What the engine is not sure of becomes a **question**, first on the page: layers whose meaning is
+   unclear (e.g. BE-LEVEL), layers it does not recognise, layer 0, and name-fragment guesses. Each
+   question shows the drawing with that layer highlighted, so you see what is on it before answering.
+   (On Nethravathi this showed that "BOUNDERY" is the north arrow, not a boundary.)
+3. Everything else is listed as linked; hover to see it in the drawing, change any link.
+4. **Clean and build** writes `<name>_SP.dxf` next to the drawing (layers renamed and merged to the
+   standard, exact duplicates removed; your file is untouched), creates `<name>.sponge` and builds the
+   ground model with its quality check. Layers answered "not needed" are kept in the drawing as
+   `SP-X-<name>` and left out of the model.
+
+`http://127.0.0.1:8765/?survey=D:\path\survey.dxf` starts the intake for a file on this computer.
+
 ## Pages, in working order
 
 | Page | For |
 |---|---|
-| Home | Open a `.sponge` project (browse the computer, or recent ones) or create one |
+| Landing | Import a survey (above), or reopen a recent park |
+| Intake | Questions about unclear layers, every link, clean and build |
 | Overview | Project status and the six steps, with the next one highlighted |
 | Survey | Read a DXF/DWG, assign each layer a role in a table (suggestions pre-filled, unclear layers flagged), import, quality check |
 | Targets & parameters | Area budget, sizing storm, drawdown limit, least-area target; soil zones; every parameter with its source, editable, confirmable |

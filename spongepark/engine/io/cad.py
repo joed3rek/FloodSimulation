@@ -134,6 +134,7 @@ def _role(name: str) -> Optional[str]:
         s = {x["name"].upper(): x for x in layer_standard()["layers"]}.get(name.upper())
         if s is not None:
             return "ask" if s["role"] == "check" else s["role"]
+        return None  # SP-X-*: kept but left out on purpose
     n = name.lower()
     if any(a in n for a in ASK):
         return "ask"

@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace SpongePark
 {
-    public class SpongeParkApp : MonoBehaviour
+    public partial class SpongeParkApp : MonoBehaviour
     {
         const int LayerLeft = 8, LayerRight = 9;
 
@@ -36,7 +36,6 @@ namespace SpongePark
         string calibration = "uncalibrated: suitable for scenario comparison, not absolute prediction";
         bool sideBySide = true, showProposed = true, playing, live;
         float simT, speed = 600;   // simulated seconds per real second
-        Vector2 scroll;
         string verify = "";
 
         public static void Boot()
@@ -54,6 +53,12 @@ namespace SpongePark
             var light = new GameObject("sun").AddComponent<Light>();
             light.type = LightType.Directional;
             light.transform.rotation = Quaternion.Euler(50, -30, 0);
+            // paper behind everything (the sidebar area is outside the scene cameras' viewports)
+            var bg = new GameObject("background").AddComponent<Camera>();
+            bg.cullingMask = 0;
+            bg.depth = -10;
+            bg.clearFlags = CameraClearFlags.SolidColor;
+            bg.backgroundColor = new Color(0.992f, 0.988f, 0.973f);
             camLeft = MakeCamera("camera left", LayerLeft, out rigLeft);
             camRight = MakeCamera("camera right", LayerRight, out rigRight);
             rigRight.Follow = rigLeft;
@@ -63,8 +68,11 @@ namespace SpongePark
             right = SiteView.Create("proposed", transform, LayerRight);
             ApplyViewports();
 #if UNITY_WEBGL && !UNITY_EDITOR
+            bundle = true;
+            BuildUi();
             StartCoroutine(OpenBundle());
 #else
+            BuildUi();
             if (Arg("-spProject") != null) StartCoroutine(Autorun());
             else StartCoroutine(CheckEngine());
 #endif
@@ -87,6 +95,7 @@ namespace SpongePark
             if (Arg("-spPython") != null) launcher.PythonExe = Arg("-spPython");
             if (Arg("-spEngineDir") != null) launcher.WorkingDir = Arg("-spEngineDir");
             yield return CheckEngine();
+            Debug.Log($"autorun: engine at {api.baseUrl} {(engineUp ? "reachable" : "not reachable")}");
             if (!engineUp)
             {
                 launcher.Launch();
@@ -125,7 +134,7 @@ namespace SpongePark
             var cam = go.AddComponent<Camera>();
             cam.cullingMask = 1 << layer;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.93f, 0.95f, 0.94f);
+            cam.backgroundColor = new Color(0.992f, 0.988f, 0.973f);   // rice paper, as the web app
             cam.farClipPlane = 5000;
             rig = go.AddComponent<CameraRig>();
             return cam;
@@ -133,8 +142,8 @@ namespace SpongePark
 
         void ApplyViewports()
         {
-            camLeft.rect = sideBySide ? new Rect(0.28f, 0, 0.36f, 1) : new Rect(0.28f, 0, 0.72f, 1);
-            camRight.rect = new Rect(0.64f, 0, 0.36f, 1);
+            camLeft.rect = sideBySide ? new Rect(0.3f, 0, 0.35f, 1) : new Rect(0.3f, 0, 0.7f, 1);
+            camRight.rect = new Rect(0.65f, 0, 0.35f, 1);
             camRight.enabled = sideBySide;
             if (!sideBySide)
                 camLeft.cullingMask = 1 << (showProposed ? LayerRight : LayerLeft);
@@ -331,170 +340,6 @@ namespace SpongePark
             }
             left.ShowAt(simT, live, live ? dtSim : 0);
             right.ShowAt(simT, live, live ? dtSim : 0);
-        }
-
-        // ------------------------------------------------------------ UI
-        void OnGUI()
-        {
-            GUILayout.BeginArea(new Rect(8, 8, Screen.width * 0.28f - 16, Screen.height - 16), GUI.skin.box);
-            scroll = GUILayout.BeginScrollView(scroll);
-            GUILayout.Label("<b>Sponge Park</b>", new GUIStyle(GUI.skin.label) { richText = true, fontSize = 18 });
-            GUILayout.Label(status, GUI.skin.textArea);
-            GUI.enabled = !busy;
-
-            if (!bundle)
-            {
-                Section("1. Engine");
-                GUILayout.Label(engineUp ? "connected" : "not running " + launcher.Message);
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Start engine")) { launcher.Launch(); StartCoroutine(Later(4, CheckEngine())); }
-                if (GUILayout.Button("Check")) StartCoroutine(CheckEngine());
-                if (GUILayout.Button("Results bundle")) StartCoroutine(OpenBundle());
-                GUILayout.EndHorizontal();
-
-                Section("2. Project");
-                projectPath = Field("Project file (.sponge)", projectPath);
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Open")) StartCoroutine(Run(OpenProject(false), "opening"));
-                if (GUILayout.Button("Create")) StartCoroutine(Run(OpenProject(true), "creating"));
-                GUILayout.EndHorizontal();
-                if (info != null)
-                    GUILayout.Label($"{info["name"]}: terrain {(bool)info["has_terrain"]}, existing site analysed {(bool)info["has_baseline"]}, " +
-                                    $"{info["unconfirmed_parameters"]} defaults to confirm");
-
-                Section("3. Survey");
-                drawingPath = Field("Survey drawing (.dxf / .dwg)", drawingPath);
-                if (GUILayout.Button("Read layers")) StartCoroutine(Run(InspectSurvey(), "reading layers"));
-                if (!string.IsNullOrEmpty(layerMapJson))
-                {
-                    layerMapJson = GUILayout.TextArea(layerMapJson, GUILayout.Height(140));
-                    if (GUILayout.Button("Import survey")) StartCoroutine(Run(ImportSurvey(), "importing"));
-                }
-
-                Section("4. Targets");
-                budgetPct = Slider("Area budget (% of site)", budgetPct, 2, 30);
-                designRp = IntField("Size elements for storm (yr)", designRp);
-                maxDrawdownHr = Slider("Maximum drawdown (h)", maxDrawdownHr, 12, 96);
-                targetRp = IntField("Inverse mode: retain storm (yr)", targetRp);
-                if (GUILayout.Button("Save targets")) StartCoroutine(Run(SetTargets(), "saving targets"));
-
-                Section("5. Analyse and design");
-                if (GUILayout.Button("Analyse existing site")) StartCoroutine(Run(Baseline(), "analysing"));
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Generate layout")) StartCoroutine(Run(Generate(false), "generating"));
-                if (GUILayout.Button("Optimise")) StartCoroutine(Run(Generate(true), "optimising"));
-                if (GUILayout.Button("Least area")) StartCoroutine(Run(Generate(true, "inverse"), "optimising"));
-                GUILayout.EndHorizontal();
-            }
-
-            Section("6. Compare");
-            if (options.Count > 0)
-            {
-                var newIdx = GUILayout.SelectionGrid(optionIdx, options.ToArray(), 3);
-                if (newIdx != optionIdx) { optionIdx = newIdx; StartCoroutine(LoadComparison()); }
-            }
-            if (returnPeriods.Count > 0)
-                rpIdx = GUILayout.SelectionGrid(rpIdx, returnPeriods.Select(r => r + "-yr").ToArray(), 4);
-            GUILayout.Label(calibration);
-            if (comparison != null)
-            {
-                GUILayout.Label($"Largest storm fully retained: {(comparison["design_retention_storm_yr"]?.Type == JTokenType.Null ? "none" : comparison["design_retention_storm_yr"] + "-yr")}");
-                foreach (var row in comparison["rows"])
-                    GUILayout.Label($"{row["return_period_yr"]}-yr: retained {(float)row["option_retained_pct"]:0}% (now {(float)row["baseline_retained_pct"]:0}%), " +
-                                    $"peak {(row["peak_reduction_pct"].Type == JTokenType.Null ? 0 : (float)row["peak_reduction_pct"]):0}% lower");
-            }
-
-            Section("7. Simulate (2D, indicative)");
-            if (!bundle && GUILayout.Button("Run 2D simulation (existing + proposed)")) StartCoroutine(Run(Simulate(), "simulating"));
-            if (GUILayout.Button("Load storm")) StartCoroutine(Run(LoadViews(), "loading"));
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(playing ? "Pause" : "Play")) playing = !playing;
-            if (GUILayout.Button("Restart")) { simT = 0; if (live) StartCoroutine(StartLive()); }
-            GUILayout.EndHorizontal();
-            speed = Slider("Speed (sim s per s)", speed, 30, 3600);
-            if (!bundle)
-            {
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button(live ? "Live GPU: on" : "Live GPU: off")) { if (live) live = false; else StartCoroutine(StartLive()); }
-                if (GUILayout.Button("Verify GPU vs engine")) StartCoroutine(Run(VerifyGpu(), "verifying"));
-                GUILayout.EndHorizontal();
-                if (!string.IsNullOrEmpty(verify)) GUILayout.Label(verify, GUI.skin.textArea);
-            }
-            GUILayout.Label($"Time {simT / 3600f:0.00} h");
-            float litres = right.LitresAt(simT / 3600f), before = left.LitresAt(simT / 3600f);
-            GUILayout.Label($"<size=16><b>{litres:N0} litres</b> kept in the park</size>\n(existing site: {before:N0} L) - SWMM",
-                            new GUIStyle(GUI.skin.label) { richText = true });
-
-            Section("8. View");
-            var sbs = GUILayout.Toggle(sideBySide, "Side by side (existing | proposed)");
-            var prop = sideBySide || GUILayout.Toggle(showProposed, "Show proposed (else existing)");
-            if (sbs != sideBySide || (!sideBySide && prop != showProposed)) { sideBySide = sbs; showProposed = prop; ApplyViewports(); }
-            exaggeration = Slider("Vertical exaggeration (applies on Load storm)", exaggeration, 1, 20);
-            rigLeft.Touring = GUILayout.Toggle(rigLeft.Touring, "Camera tour");
-
-            Section("9. Export");
-            exportDir = Field("Folder", exportDir);
-            if (!bundle && GUILayout.Button("Drawings, Rhino file and report"))
-                StartCoroutine(Run(api.RunJob("POST", api.P($"/options/{CurrentOption}/export"), new { out_dir = exportDir }, r => status = r?.ToString() ?? status), "exporting"));
-            if (!bundle && GUILayout.Button("Results bundle for the web viewer"))
-                StartCoroutine(Run(api.RunJob("POST", api.P("/viewer-bundle"), new { out_dir = Path.Combine(exportDir, "bundle") }, r => status = "bundle written"), "bundling"));
-            if (!video.Recording && GUILayout.Button("Record video of the storm"))
-            {
-                simT = 0; playing = true; rigLeft.Touring = true;
-                video.Begin(Path.Combine(exportDir, "video"));
-            }
-            if (!string.IsNullOrEmpty(video.Result)) GUILayout.Label(video.Result);
-            GUI.enabled = true;
-            GUILayout.EndScrollView();
-            GUILayout.EndArea();
-
-            // labels on the views
-            var style = new GUIStyle(GUI.skin.label) { fontSize = 14, normal = { textColor = Color.black } };
-            if (sideBySide)
-            {
-                GUI.Label(new Rect(Screen.width * 0.29f, 10, 400, 24), "Existing", style);
-                GUI.Label(new Rect(Screen.width * 0.65f, 10, 400, 24), "Proposed: " + (CurrentOption ?? "-"), style);
-            }
-            GUI.Label(new Rect(Screen.width * 0.29f, Screen.height - 28, 900, 24),
-                      "Water animation: 2D model, indicative. Volumes and litres: SWMM, " + calibration, style);
-            // headline overlay: time, rain and litres kept, readable in videos
-            var big = new GUIStyle(GUI.skin.label) { fontSize = 20, richText = true, normal = { textColor = new Color(0.08f, 0.13f, 0.12f) } };
-            float th = simT / 3600f;
-            string rainNow = left.RainAt(th) > 0 ? $"rain {left.RainAt(th):0} mm/h" : "no rain";
-            GUI.Label(new Rect(Screen.width * 0.29f, 34, 700, 30), $"{CurrentRp}-yr storm   {th:0.0} h   {rainNow}", big);
-            if (sideBySide)
-            {
-                GUI.Label(new Rect(Screen.width * 0.29f, Screen.height - 70, 420, 36), $"<b>{left.LitresAt(th):N0} L</b> kept on site", big);
-                GUI.Label(new Rect(Screen.width * 0.65f, Screen.height - 70, 420, 36), $"<b>{right.LitresAt(th):N0} L</b> kept on site", big);
-            }
-            else
-            {
-                var v = showProposed ? right : left;
-                GUI.Label(new Rect(Screen.width * 0.29f, Screen.height - 70, 600, 36), $"<b>{v.LitresAt(th):N0} L</b> kept on site", big);
-            }
-        }
-
-        static void Section(string title) => GUILayout.Label($"<b>{title}</b>", new GUIStyle(GUI.skin.label) { richText = true, fontSize = 13 });
-
-        static string Field(string label, string value)
-        {
-            GUILayout.Label(label);
-            return GUILayout.TextField(value ?? "");
-        }
-
-        static float Slider(string label, float v, float lo, float hi)
-        {
-            GUILayout.Label($"{label}: {v:0.#}");
-            return GUILayout.HorizontalSlider(v, lo, hi);
-        }
-
-        static int IntField(string label, int v)
-        {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(label);
-            int.TryParse(GUILayout.TextField(v.ToString(), GUILayout.Width(50)), out var r);
-            GUILayout.EndHorizontal();
-            return r == 0 ? v : r;
         }
 
         IEnumerator Later(float s, IEnumerator then)
