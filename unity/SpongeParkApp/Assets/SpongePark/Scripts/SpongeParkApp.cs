@@ -79,6 +79,7 @@ namespace SpongePark
                 ShowLanding();
                 StartCoroutine(CheckEngine());
                 if (Arg("-spShot") != null) StartCoroutine(Shot());
+                if (System.Environment.GetCommandLineArgs().Contains("-spNewProject")) StartCoroutine(Later(3, NewProjectNow()));
                 // "Open with" / double-click: the .sponge file arrives as an argument
                 var sponge = System.Environment.GetCommandLineArgs().Skip(1).FirstOrDefault(a => a.EndsWith(".sponge", System.StringComparison.OrdinalIgnoreCase));
                 if (sponge != null) StartCoroutine(OpenWhenReady(sponge));
@@ -125,6 +126,13 @@ namespace SpongePark
         }
 
         bool autorunQuit;
+
+        // test switch: press New project as soon as the engine answers
+        IEnumerator NewProjectNow()
+        {
+            for (int i = 0; i < 20 && !engineUp; i++) { yield return CheckEngine(); yield return new WaitForSecondsRealtime(0.5f); }
+            PickFile("Choose the site survey (DXF)", "Site survey", "dxf,dwg", p => StartCoroutine(StartIntake(p)));
+        }
 
         IEnumerator OpenWhenReady(string sponge)
         {

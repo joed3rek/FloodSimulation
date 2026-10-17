@@ -97,10 +97,10 @@ namespace SpongePark
 
             // two ways in: start a new project from a survey, or open a .sponge project
             var choices = Row("choice-row");
-            choices.Add(ChoiceCard("+", "New project", "Start from a survey drawing (DXF)",
-                () => OpenBrowser("Choose the survey drawing", ".dxf,.dwg", p => StartCoroutine(StartIntake(p))), true));
+            choices.Add(ChoiceCard("+", "New project", "Choose the site survey (DXF)",
+                () => PickFile("Choose the site survey (DXF)", "Site survey", "dxf,dwg", p => StartCoroutine(StartIntake(p))), true));
             choices.Add(ChoiceCard("◆", "Open a project", "A .sponge file you saved before",
-                () => OpenBrowser("Choose a project", ".sponge", p => StartCoroutine(OpenExisting(p))), false));
+                () => PickFile("Open a Sponge Park project", "Sponge Park project", "sponge", p => StartCoroutine(OpenExisting(p))), false));
             hero.Add(choices);
 
             hero.Add(Text("OR PASTE A PATH (.DXF OR .SPONGE)", "hero-small"));
@@ -241,6 +241,26 @@ namespace SpongePark
         }
 
         // ------------------------------------------------------------ file browser (the engine lists folders)
+        /// The Windows file-open dialog; the in-app browser where the system dialog is not available.
+        void PickFile(string title, string label, string extensions, System.Action<string> pick)
+        {
+            if (!engineUp) { landingStatus.text = "Start the engine first (button at the top)."; return; }
+            if (!api.Current)
+            {
+                landingStatus.text = "The running engine is older than this app. In its window press Ctrl+C, run spongepark serve again, then try again.";
+                return;
+            }
+            if (!NativeFileDialog.Supported)
+            {
+                OpenBrowser(title, string.Join(",", extensions.Split(',').Select(e => "." + e)), pick);
+                return;
+            }
+            var path = NativeFileDialog.Open(title, label, extensions, PlayerPrefs.GetString("spongepark.lastdir", ""));
+            if (string.IsNullOrEmpty(path)) return;   // cancelled
+            PlayerPrefs.SetString("spongepark.lastdir", System.IO.Path.GetDirectoryName(path));
+            pick(path);
+        }
+
         string browserExt = ".dxf,.dwg";
         System.Action<string> browserPick;
 

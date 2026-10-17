@@ -17,9 +17,9 @@ It is a thin front end: every computation is done by the Python engine through t
    (`BuildApp.MacOS` and `BuildApp.WebGL` need those build modules installed).
 3. The app builds itself in any scene; no scene setup is needed.
 
-The app opens on the same landing page as the web app: **New project** (choose the survey DXF in
-the in-app file browser, answer the layer questions with the highlighted-layer pictures, Clean and
-build) or **Open a project** (a `.sponge` file). A `.sponge` passed on the command line (Windows
+The app opens on the same landing page as the web app: **New project** (the Windows file dialog
+asks for the site survey DXF; on other systems an in-app browser does, answer the layer questions with the highlighted-layer pictures, Clean and
+build) or **Open a project** (the file dialog, filtered to `.sponge` files). A `.sponge` passed on the command line (Windows
 "Open with") opens directly. After that, the left panel walks through the steps:
 
 | Step | Does |
