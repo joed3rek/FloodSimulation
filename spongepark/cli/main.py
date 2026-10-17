@@ -28,9 +28,10 @@ rain_app = typer.Typer(help="Rainfall tables and design storms.", no_args_is_hel
 site_app = typer.Typer(help="Site layers.", no_args_is_help=True)
 option_app = typer.Typer(help="NbS layout options.", no_args_is_help=True)
 terrain_app = typer.Typer(help="Terrain (synthetic test terrains in Phase 0).", no_args_is_help=True)
+layout_app = typer.Typer(help="Generated NbS layouts (Phase 4).", no_args_is_help=True)
 nbs_app = typer.Typer(help="Component catalogue and design guidelines.", no_args_is_help=True)
 for sub, name in [(project_app, "project"), (params_app, "params"), (rain_app, "rainfall"), (site_app, "site"),
-                  (option_app, "option"), (terrain_app, "terrain"), (nbs_app, "nbs")]:
+                  (option_app, "option"), (terrain_app, "terrain"), (layout_app, "layout"), (nbs_app, "nbs")]:
     app.add_typer(sub, name=name)
 
 SITE_LAYERS = {
@@ -126,6 +127,25 @@ def params_confirm(path: Path, keys: List[str] = typer.Argument(None), all_: boo
     typer.echo(f"confirmed {len(targets)} parameter(s)")
 
 
+# ------------------------------------------------------------------ layout
+@layout_app.command("generate")
+def layout_generate(path: Path, option: str = typer.Argument("auto"),
+                    types: Optional[List[str]] = typer.Option(None, "--type", help="Element type (repeatable).")) -> None:
+    """Place, size and grade NbS elements from the terrain, and rebuild the option's subcatchments."""
+    from spongepark.engine.layout.generate import generate
+
+    with _open(path) as p:
+        r = generate(p, option, types or None)
+        d = r["design_storm"]
+        typer.echo(f"sized for the {d['return_period_yr']}-yr storm: {d['runoff_depth_mm']:.1f} mm runoff ({d['source']})")
+        for e in r["elements"]:
+            typer.echo(f"  {e['id']:6s} {e['type']:15s} {e['area_m2']:6.0f} m2  drains {e['drains_here_after_grading_m2']:6.0f} m2  "
+                       f"holds ~{e['holds_m3_estimate']:5.1f} of {e['target_m3']:5.1f} m3 ({e['limited_by']})  -> {e['outflow_to']}")
+        typer.echo(f"area {r['generated_area_m2']:.0f} of {r['area_budget_m2']:.0f} m2 budget; cut {r['cut_total_m3']:.0f} m3")
+        p.save()
+    typer.echo(f"next: spongepark option run {path} {option}")
+
+
 # ------------------------------------------------------------------ terrain
 @terrain_app.command("synthetic")
 def terrain_synthetic(path: Path, kind: str = typer.Option("planar", help="planar | v_valley | bowl"),
@@ -137,6 +157,119 @@ def terrain_synthetic(path: Path, kind: str = typer.Option("planar", help="plana
         dem.crs = p.manifest.crs
         write_geotiff(dem, p.path("terrain/existing.tif"))
         p.history.log("terrain_synthetic", kind=kind, size=size, cell=cell)
+        p.save()
+
+
+@terrain_app.command("inspect")
+def terrain_inspect(drawing: Path, out: Optional[Path] = None) -> None:
+    """List a survey drawing's layers and write a suggested layer map to confirm."""
+    import json
+
+    from spongepark.engine.io import cad
+
+    inv = cad.inventory(cad.read(drawing))
+    typer.echo(f"{drawing.name}: {inv['dxf_version']}, header units {inv['insunits']}, extents {inv['extents_xy']}")
+    for li in inv["layers"]:
+        lv = f" levels {li['level_range'][0]:g}..{li['level_range'][1]:g} ({li['numeric_texts']})" if li["level_range"] else ""
+        typer.echo(f"  {li['name'][:34]:34s} {str(li['suggested_role'] or '-'):15s} {li['entities']}{lv}")
+    m = cad.suggest_layer_map(inv)
+    out = out or drawing.with_suffix(".layer_map.json")
+    out.write_text(json.dumps(m, indent=2), encoding="utf-8")
+    typer.echo(f"suggested layer map: {out}  (check it, then set \"confirmed\": true)")
+    if m["needs_decision"]:
+        typer.echo(f"  decide what these layers mean: {', '.join(m['needs_decision'])}")
+
+
+@terrain_app.command("preview")
+def terrain_preview(drawing: Path, layer_map: Path = typer.Option(..., "--map"), out: Optional[Path] = None) -> None:
+    """Draw what each layer-map role picks up, to compare with the drawing."""
+    import json
+
+    from spongepark.engine.io import cad
+
+    out = out or layer_map.with_suffix(".png")
+    cad.preview(cad.read(drawing), json.loads(layer_map.read_text(encoding="utf-8")), out, drawing.name)
+    typer.echo(f"preview: {out}")
+
+
+@terrain_app.command("standardise")
+def terrain_standardise(drawing: Path, renames: Optional[Path] = typer.Option(None, help="Checked renames CSV."),
+                        out: Optional[Path] = None, keep_duplicates: bool = False) -> None:
+    """Rename a drawing's layers to the SP-* standard.
+
+    Without --renames: write a suggested renames CSV to check. With it: write <name>_SP.dxf
+    (original untouched) and a layer map for it."""
+    import json
+
+    from spongepark.engine.io import cad
+
+    if renames is None:
+        rs = cad.suggest_renames(cad.inventory(cad.read(drawing)))
+        csv_path = drawing.with_suffix(".layer_renames.csv")
+        cad.write_renames(rs, csv_path)
+        for r in rs:
+            typer.echo(f"  {r.old[:30]:30s} -> {r.new:24s} {r.confidence:8s} {r.entities:6d}")
+        typer.echo(f"suggested renames: {csv_path}  (check 'partial' and 'none' rows, then run again with --renames)")
+        return
+    out = out or drawing.with_name(drawing.stem + "_SP.dxf")
+    rep = cad.standardise(drawing, cad.read_renames(renames), out, dedupe=not keep_duplicates)
+    m = cad.suggest_layer_map(cad.inventory(cad.read(out)))
+    map_path = out.with_suffix(".layer_map.json")
+    map_path.write_text(json.dumps(m, indent=2), encoding="utf-8")
+    typer.echo(f"written {out}: {sum(x['entities'] for x in rep['moved'])} entities moved, "
+               f"{rep['duplicates_removed_total']} exact duplicates removed, {len(rep['layers_removed'])} old layers removed")
+    typer.echo(f"layer map: {map_path}  (still to confirm)")
+    if m["needs_decision"]:
+        typer.echo(f"  decide: {', '.join(m['needs_decision'])}")
+
+
+@terrain_app.command("export-unity")
+def terrain_export_unity(path: Path, out: Path, exaggeration: float = typer.Option(5.0, help="Vertical exaggeration."),
+                         name: Optional[str] = None,
+                         option: Optional[str] = typer.Option(None, help="Export this option's graded ground.")) -> None:
+    """Textured OBJ of the terrain and its drainage, to drag into a Unity project's Assets."""
+    from spongepark.engine.io.unity import export_obj
+
+    with _open(path) as p:
+        info = export_obj(p, out, name or (option or "terrain"), exaggeration, option_id=option)
+    typer.echo(f"written {out}: {info['vertices']} vertices, {info['size_m'][0]:.0f} x {info['size_m'][1]:.0f} m, "
+               f"relief {info['relief_m']:.2f} m shown x{exaggeration:g}")
+
+
+@terrain_app.command("import")
+def terrain_import(path: Path, drawing: Path, layer_map: Path = typer.Option(..., "--map"),
+                   park_area_m2: Optional[float] = None) -> None:
+    """Build the existing-ground DEM, boundary and context from a survey drawing."""
+    import json
+
+    from spongepark.engine.terrain.survey import import_survey
+
+    with _open(path) as p:
+        q = import_survey(p, drawing, json.loads(layer_map.read_text(encoding="utf-8")), park_area_m2)
+        cv = q.get("spot_cross_validation") or {}
+        typer.echo(f"DEM {q['source']['dem_shape']} cells at {q['source']['dem_cell_m']} m; levels "
+                   f"{q['elevation_range_m'][0]:.2f}-{q['elevation_range_m'][1]:.2f} m")
+        if cv:
+            typer.echo(f"spot levels vs surface: RMSE {cv['rmse_m']:.3f} m, max {cv['max_abs_m']:.2f} m (n {cv['n']})")
+        for i in q["issues"]:
+            typer.echo(f"  ! {i}")
+        p.save()
+        typer.echo("written: " + ", ".join(q["outputs"]))
+
+
+@terrain_app.command("delineate")
+def terrain_delineate(path: Path) -> None:
+    """Subcatchments, outfalls and natural depressions from the existing-ground DEM."""
+    from spongepark.engine.hydrology.delineate import delineate
+
+    with _open(path) as p:
+        r = delineate(p)
+        typer.echo(f"modelled area {r['domain_area_m2']:,.0f} m2 ({len(r['subcatchments'])} subcatchments), "
+                   f"natural depressions {r['depression_total_m3']:.1f} m3")
+        for s in r["subcatchments"]:
+            typer.echo(f"  {s['subcatchment']:6s} -> {s['outfall']:7s} {s['area_m2']:8.0f} m2  slope {s['slope_pct_median']:.1f} %  "
+                       f"flow length {s['flow_length_m']:.0f} m  impervious {s['pct_imperv']:.0f} %  "
+                       f"depressions {s['depression_m3']:.1f} m3")
         p.save()
 
 
@@ -220,6 +353,35 @@ def site_tr55(path: Path, duration_hr: float = 24.0) -> None:
                 f"({100 * (w['outflow_total_m3'] + w['flooding_m3']) / w['rainfall_total_m3']:.0f} %)"
                 for rp, w in swmm.items()))
         typer.echo("TR-55 uses Ia = 0.2S and treats impervious areas as connected; see docs/references.md.")
+
+
+@app.command("screen")
+def screen(parks_json: Path, rainfall_csv: Path, out: Optional[Path] = None) -> None:
+    """Volume screen: proposed NbS storage against TR-55 catchment runoff, per park and storm."""
+    import json
+    from dataclasses import asdict
+
+    import pandas as pd
+
+    from spongepark.engine.hydrology.screening import screen_park
+
+    d = json.loads(parks_json.read_text(encoding="utf-8"))
+    r = pd.read_csv(rainfall_csv)
+    r = r[r["duration_hr"] == 24]
+    depths = {int(a): float(b) for a, b in zip(r["return_period_yr"], r["depth_mm"])}
+    results = [screen_park(p, depths, d.get("park_cn", 74)) for p in d["parks"]]
+    for s in results:
+        fill = f"{s.fill_depth_mm:.1f} mm" if s.fill_depth_mm else "-"
+        typer.echo()
+        typer.echo(f"{s.name}: catchment {s.catchment_area_m2:,.0f} m2 ({s.catchment_area_m2 / s.park_area_m2:.0f}x park), "
+                   f"CN {s.cn_weighted:.1f}, storage {s.storage_m3:.1f} m3 on {s.footprint_m2:.0f} m2; fills at {fill}")
+        for k, q in s.runoff_m3.items():
+            typer.echo(f"  {k:>10}: runoff {q:>10,.0f} m3   storage holds {s.capture_pct[k]:6.2f} %")
+        for c in s.checks:
+            typer.echo(f"  ! {c}")
+    if out:
+        out.write_text(json.dumps([asdict(s) for s in results], indent=2), encoding="utf-8")
+        typer.echo(f"written: {out}")
 
 
 # ------------------------------------------------------------------ options

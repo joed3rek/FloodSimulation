@@ -161,10 +161,14 @@ class Site:
     trees: List[Tree] = field(default_factory=list)
 
     @classmethod
-    def load(cls, project: Project) -> "Site":
+    def load(cls, project: Project, option_id: Optional[str] = None) -> "Site":
+        """The site; an option with its own ``options/<id>/site/subcatchments.geojson`` (rebuilt on
+        its graded ground) uses those subcatchments."""
         b = project.read_geojson(BOUNDARY)["features"]
         boundary = unary_union([shape(f["geometry"]) for f in b]) if b else None
-        subs = [Subcatchment.model_validate(p) for p in _features(project.read_geojson(SUBCATCHMENTS))]
+        rel = f"options/{option_id}/{SUBCATCHMENTS}" if option_id else SUBCATCHMENTS
+        subs = [Subcatchment.model_validate(p) for p in _features(project.read_geojson(
+            rel if project.exists(rel) else SUBCATCHMENTS))]
         ext = [Subcatchment.model_validate({**p, "external": True}) for p in _features(project.read_geojson(EXTERNAL))]
         soils = [SoilZone.model_validate(p) for p in _features(project.read_geojson(SOILS))]
         outs = [Outfall.model_validate(p) for p in _features(project.read_geojson(OUTFALLS))]

@@ -9,3 +9,6 @@ examples/output/
 *.rpt
 *.out
 !tests/fixtures/*.inp
+
+# client data (HSR pilot surveys, DWGs, park tables)
+/data/

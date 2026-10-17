@@ -14,7 +14,8 @@ interception, which SWMM does not model; it is computed separately and reported 
 |---|---|---|
 | 0 | Project file, parameters, CLI skeleton, synthetic terrains | done |
 | 1 | Rainfall, hyetographs, manual NbS layout, SWMM build/run, water balance, metrics, charts | done |
-| 2-8 | Import/terrain, baseline analysis, placement/grading, optimisation/ML, Rhino + 2D, Unity, reports | planned ([docs/roadmap.md](docs/roadmap.md)) |
+| 2-4 | Survey import and terrain, baseline flow analysis, layout generation, grading and subcatchment rebuild | done |
+| 5-8 | Optimisation/ML, Rhino + 2D, Unity, reports | planned ([docs/roadmap.md](docs/roadmap.md)) |
 
 ## Install
 
@@ -65,6 +66,8 @@ edge engineering (4.11) and in-line SWD check dam (4.12).
 - [docs/rainfall.md](docs/rainfall.md): return-period tables and design storms
 - [docs/nbs_components.md](docs/nbs_components.md): components, SWMM representation and guideline checks
 - [docs/swmm.md](docs/swmm.md): how the SWMM model is built and verified
+- [docs/terrain.md](docs/terrain.md): survey import, layer standard, DEM quality checks, flow and subcatchments
+- [docs/layout.md](docs/layout.md): layout generation, sizing, grading and subcatchment rebuild
 - [docs/water_balance.md](docs/water_balance.md): water balance terms and metrics
 - [docs/references.md](docs/references.md): reference register (guideline chapters, TR-55, lake-cascade appendix)
 - [docs/limitations.md](docs/limitations.md): known limitations

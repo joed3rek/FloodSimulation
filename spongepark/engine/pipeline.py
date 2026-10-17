@@ -77,7 +77,7 @@ def load_hyetographs(project: Project) -> Dict[int, Hyetograph]:
 # --------------------------------------------------------------------------- option
 def prepare_option(project: Project, option_id: str, site: Optional[Site] = None) -> tuple:
     """Resolve elements against parameters and soils, run guideline checks, write them back."""
-    site = site or Site.load(project)
+    site = site or Site.load(project, option_id)
     if option_id == BASELINE:
         return [], []
     rel = f"options/{option_id}/components.geojson"
@@ -137,7 +137,7 @@ def run_option(
 ) -> Dict[str, Any]:
     """Build and run SWMM for every return period; store time series and summaries."""
     p = project.parameters
-    site = site or Site.load(project)
+    site = site or Site.load(project, option_id)
     storms = load_hyetographs(project)
     rps = return_periods or sorted(storms)
     elements, findings = prepare_option(project, option_id, site)

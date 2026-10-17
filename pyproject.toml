@@ -22,10 +22,19 @@ dependencies = [
     "rasterio>=1.3",
     "matplotlib>=3.7",
     "jinja2>=3.1",
+    "ezdxf>=1.1",           # DXF survey drawings (DWG via ODA File Converter)
+    "scipy>=1.10",
+    "pyshp>=2.3",           # shapefiles (catchment boundaries)
+    "pymoo>=0.6.1",         # NSGA-II optimisation (Phase 5)
+    "scikit-learn>=1.3",    # surrogate models (Phase 5)
+    "rhino3dm>=8.4",        # .3dm export and round trip (Phase 6)
+    "numba>=0.58",          # 2D rain-on-grid model (Phase 6)
+    "fastapi>=0.110",       # local engine API (Phase 7)
+    "uvicorn>=0.27",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "httpx>=0.27"]
 
 [project.scripts]
 spongepark = "spongepark.cli.main:app"
@@ -37,6 +46,7 @@ include = ["spongepark*"]
 "spongepark.engine.rainfall" = ["data/*.csv"]
 "spongepark.engine.nbs" = ["data/*.json"]
 "spongepark.engine.hydrology" = ["data/*.json"]
+"spongepark.engine.io" = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

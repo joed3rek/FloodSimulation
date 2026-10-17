@@ -101,12 +101,22 @@ class ParameterSet(BaseModel):
         return [p for p in self.items.values() if p.is_unconfirmed_default]
 
     def merge_defaults(self, defaults: "ParameterSet") -> List[str]:
-        """Add any default not yet present (used when the engine gains parameters). Returns added keys."""
+        """Bring the set up to the engine's defaults. Returns added keys.
+
+        Adds new defaults, refreshes the value of defaults that are still unconfirmed (they are not
+        user decisions) and drops unconfirmed defaults the engine no longer has. Values set or
+        confirmed by the user are never touched."""
         added = []
         for k, p in defaults.items.items():
             if k not in self.items:
                 self.items[k] = p.model_copy(deep=True)
                 added.append(k)
+            elif self.items[k].is_unconfirmed_default and self.items[k].value != p.value:
+                log.info("default %s updated: %r -> %r", k, self.items[k].value, p.value)
+                self.items[k] = p.model_copy(deep=True)
+        for k in [k for k, p in self.items.items() if k not in defaults.items and p.is_unconfirmed_default]:
+            log.info("obsolete default %s removed", k)
+            del self.items[k]
         return added
 
     def to_json_dict(self) -> Dict[str, Any]:
