@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spongepark"
+version = "0.1.0"
+description = "Sponge park stormwater design and flood simulation engine (EPA SWMM 5 via PySWMM)"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Habitat Collective" }]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "pyarrow>=12",
+    "pydantic>=2.5",
+    "typer>=0.9",
+    "pyswmm>=2.2",          # bundles unmodified EPA SWMM 5.2 via swmm-toolkit
+    "swmm-toolkit>=0.17",
+    "shapely>=2.0",
+    "pyproj>=3.5",
+    "rasterio>=1.3",
+    "matplotlib>=3.7",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+spongepark = "spongepark.cli.main:app"
+
+[tool.setuptools.packages.find]
+include = ["spongepark*"]
+
+[tool.setuptools.package-data]
+"spongepark.engine.rainfall" = ["data/*.csv"]
+"spongepark.engine.nbs" = ["data/*.json"]
+"spongepark.engine.hydrology" = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

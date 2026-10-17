@@ -1,0 +1,15 @@
+# Huff (1967) 50 % probability (median) cumulative rainfall distributions, as fractions of storm depth.
+# APPROXIMATE values digitised from published curves (Illinois State Water Survey). Flagged as
+# literature/approximate: replace with locally derived curves (e.g. from KSNDMC gauge records) where possible.
+time_fraction,q1,q2,q3,q4
+0.0,0.00,0.00,0.00,0.00
+0.1,0.16,0.03,0.03,0.02
+0.2,0.37,0.08,0.06,0.05
+0.3,0.52,0.15,0.10,0.08
+0.4,0.62,0.37,0.14,0.12
+0.5,0.70,0.62,0.21,0.16
+0.6,0.77,0.79,0.38,0.22
+0.7,0.83,0.88,0.64,0.30
+0.8,0.89,0.94,0.83,0.46
+0.9,0.95,0.98,0.95,0.79
+1.0,1.00,1.00,1.00,1.00

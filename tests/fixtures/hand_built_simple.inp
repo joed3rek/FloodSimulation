@@ -1,0 +1,91 @@
+[TITLE]
+;Hand-built reference model (written by hand, independently of the spongepark builder).
+;1000 m2 paved park -> 50 m2 rain garden -> 100 m2 vertical-sided detention pond
+;(orifice 50 mm + 2 m spillway at 0.5 m) -> free outfall. Storm: 60 mm/h for 1 h.
+
+[OPTIONS]
+FLOW_UNITS           CMS
+INFILTRATION         HORTON
+FLOW_ROUTING         DYNWAVE
+LINK_OFFSETS         DEPTH
+ALLOW_PONDING        NO
+START_DATE           01/01/2000
+START_TIME           00:00:00
+REPORT_START_DATE    01/01/2000
+REPORT_START_TIME    00:00:00
+END_DATE             01/01/2000
+END_TIME             07:00:00
+WET_STEP             00:01:00
+DRY_STEP             00:05:00
+ROUTING_STEP         5
+REPORT_STEP          00:05:00
+MIN_SURFAREA         0
+
+[EVAPORATION]
+CONSTANT  0
+DRY_ONLY  NO
+
+[RAINGAGES]
+GAGE1  INTENSITY  0:05  1.0  TIMESERIES  STORM
+
+[SUBCATCHMENTS]
+;name      gage   outlet   area_ha  imperv  width  slope  curb
+PARK       GAGE1  RGARDEN  0.1      100     50     1      0
+RGARDEN    GAGE1  POND     0.005    0       7.0711 0.5    0
+POND_RAIN  GAGE1  POND     0.01     100     10     0.5    0
+
+[SUBAREAS]
+PARK       0.013  0.15   1.5  5  25   OUTLET
+RGARDEN    0.013  0.15   0    0  100  OUTLET
+POND_RAIN  0.011  0.011  0    0  100  OUTLET
+
+[INFILTRATION]
+PARK       50  10  4  7  0
+RGARDEN    50  10  4  7  0
+POND_RAIN  50  10  4  7  0
+
+[LID_CONTROLS]
+RAINGARDEN  RG
+RAINGARDEN  SURFACE  200  0.1   0.1  0    0
+RAINGARDEN  SOIL     600  0.45  0.2  0.1  100  10  50
+RAINGARDEN  STORAGE  0    0.4   10   0
+
+[LID_USAGE]
+RGARDEN  RAINGARDEN  1  50  0  0  0  0
+
+[OUTFALLS]
+OUTA  99  FREE  NO
+OUTB  99  FREE  NO
+
+[STORAGE]
+;name  invert  ymax  y0  shape       A1 A2 A0   ysur fevap psi ksat imd
+POND   100     0.8   0   FUNCTIONAL  0  0  100  0    1     0   10   0
+
+[ORIFICES]
+ORI  POND  OUTA  SIDE  0  0.65  NO  0
+
+[WEIRS]
+SPILL  POND  OUTB  TRANSVERSE  0.5  1.7  NO  0  0  YES
+
+[XSECTIONS]
+ORI    CIRCULAR   0.05  0  0  0
+SPILL  RECT_OPEN  1.3   2  0  0
+
+[TIMESERIES]
+STORM  0:00  60
+STORM  0:05  60
+STORM  0:10  60
+STORM  0:15  60
+STORM  0:20  60
+STORM  0:25  60
+STORM  0:30  60
+STORM  0:35  60
+STORM  0:40  60
+STORM  0:45  60
+STORM  0:50  60
+STORM  0:55  60
+STORM  1:00  0
+
+[REPORT]
+NODES ALL
+LINKS ALL

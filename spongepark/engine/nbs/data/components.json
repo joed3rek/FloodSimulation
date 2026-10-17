@@ -1,0 +1,48 @@
+{
+  "_about": "NbS component catalogue. One entry per component type / guideline chapter. 'swmm' names the SWMM representation used by the .inp builder. Add new chapters here (with their rules in guidelines.json).",
+  "components": {
+    "rain_garden": {
+      "label": "Rain garden", "chapter": null, "functions": ["infiltration", "detention"], "scales": ["street", "park"],
+      "swmm": "lid_bioretention", "geometry": ["Polygon"],
+      "description": "Shallow planted depression with engineered media; receives runoff from nearby paths, roofs and courts."
+    },
+    "bioswale": {
+      "label": "Bioswale", "chapter": null, "functions": ["conveyance", "infiltration"], "scales": ["street", "park"],
+      "swmm": "lid_swale", "geometry": ["Polygon", "LineString"],
+      "description": "Vegetated channel along concentrated flow lines that conveys and infiltrates."
+    },
+    "detention_pond": {
+      "label": "Detention pond", "chapter": null, "functions": ["detention", "infiltration"], "scales": ["park"],
+      "swmm": "storage", "geometry": ["Polygon"],
+      "description": "Dry basin at low points; stores storm water and releases it slowly through a controlled outlet."
+    },
+    "retention_pond": {
+      "label": "Retention pond", "chapter": null, "functions": ["retention", "detention"], "scales": ["park", "lake"],
+      "swmm": "storage", "geometry": ["Polygon"],
+      "description": "Permanent pool with live storage above it and an overflow weir."
+    },
+    "recharge_well": {
+      "label": "Recharge well", "chapter": null, "functions": ["infiltration"], "scales": ["street", "park"],
+      "swmm": "storage", "geometry": ["Point", "Polygon"],
+      "description": "Shaft that passes pre-treated overflow to permeable strata below poor surface soils."
+    },
+    "constructed_wetland": {
+      "label": "Constructed wetland", "chapter": "4.10", "functions": ["retention", "detention", "infiltration", "treatment"],
+      "scales": ["park", "lake"], "swmm": "storage", "geometry": ["Polygon"],
+      "description": "Multi-cell surface-flow wetland (forebay ~20 %, deepwater inlet ~10 %, shallow vegetated zone ~70 %) with adjustable outlet weir.",
+      "modelling_note": "Hydrology: one storage node whose stage-area curve combines the zones; permanent pool = shallow zone depth; seepage only if unlined. Pollutant removal is not modelled by SWMM in this version."
+    },
+    "edge_engineering": {
+      "label": "Edge engineering", "chapter": "4.11", "functions": ["conveyance", "infiltration", "habitat"],
+      "scales": ["street", "park"], "swmm": "lid_swale", "geometry": ["Polygon", "LineString"],
+      "description": "Soft, vegetated land-water edge (coir logs, live fascines, gabions) along drains and lake edges, with curb-cut inflow.",
+      "modelling_note": "Hydrology: vegetated swale LID along the edge (conveyance + infiltration). Bank stabilisation and habitat benefits are reported qualitatively only."
+    },
+    "inline_check_dam": {
+      "label": "In-line SWD treatment (check dam)", "chapter": "4.12", "functions": ["detention", "treatment"],
+      "scales": ["street", "park", "lake"], "swmm": "storage", "geometry": ["Polygon"],
+      "description": "Low gabion check dam (0.3-0.6 m) or baffle inside a storm water drain, creating a pool upstream with overflow notch; usually paired with separators, NSBBs or floating wetlands.",
+      "modelling_note": "Hydrology: small storage pool behind the dam with a notch weir. Separators, NSBBs and floating wetlands treat water quality and are not credited with volume reduction."
+    }
+  }
+}

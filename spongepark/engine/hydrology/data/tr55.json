@@ -1,0 +1,71 @@
+{
+  "source": {
+    "id": "TR-55",
+    "title": "Urban Hydrology for Small Watersheds, Technical Release 55, Second Edition",
+    "publisher": "USDA Soil Conservation Service (now NRCS)",
+    "date": "June 1986 (Appendix A updated January 1999)",
+    "url": "https://www.hydrocad.net/pdf/TR-55%20Manual.pdf"
+  },
+  "context_note": "TR-55 values were derived for US soils and US (SCS type I, IA, II, III) storms. They are used here for curve numbers, hydrologic soil groups and time-of-concentration hand checks. They are flagged 'literature' and must be confirmed for Bengaluru soils.",
+  "hsg": {
+    "_source": "TR-55 Appendix A, p. A-1 (Musgrave 1955 transmission rates, converted from in/hr)",
+    "A": {"min_rate_mm_hr": 7.62, "max_rate_mm_hr": null, "description": "Deep, well to excessively drained sand or gravel. Low runoff potential."},
+    "B": {"min_rate_mm_hr": 3.81, "max_rate_mm_hr": 7.62, "description": "Moderately deep to deep, moderately well to well drained, moderately fine to moderately coarse textures."},
+    "C": {"min_rate_mm_hr": 1.27, "max_rate_mm_hr": 3.81, "description": "A layer that impedes downward movement of water, or moderately fine to fine texture."},
+    "D": {"min_rate_mm_hr": 0.0, "max_rate_mm_hr": 1.27, "description": "Clays with high swelling potential, permanent high water table, claypan, or shallow soil over nearly impervious material. High runoff potential."}
+  },
+  "disturbed_soil_texture_hsg": {
+    "_source": "TR-55 Appendix A, p. A-1 (Brakensiek and Rawls 1983); applies when the profile is disturbed and not significantly compacted",
+    "sand": "A", "loamy sand": "A", "sandy loam": "A",
+    "silt loam": "B", "loam": "B",
+    "sandy clay loam": "C",
+    "clay loam": "D", "silty clay loam": "D", "sandy clay": "D", "silty clay": "D", "clay": "D"
+  },
+  "curve_numbers": {
+    "_note": "Average antecedent runoff condition, Ia = 0.2S. 'pervious' covers can be used for the pervious part of a SWMM subcatchment. 'composite' covers already include an assumed impervious share and are for hand checks only.",
+    "open_space_poor": {"label": "Open space (lawns, parks), poor condition, grass cover < 50 %", "A": 68, "B": 79, "C": 86, "D": 89, "kind": "pervious", "table": "2-2a", "page": "2-5"},
+    "open_space_fair": {"label": "Open space (lawns, parks), fair condition, grass cover 50-75 %", "A": 49, "B": 69, "C": 79, "D": 84, "kind": "pervious", "table": "2-2a", "page": "2-5"},
+    "open_space_good": {"label": "Open space (lawns, parks), good condition, grass cover > 75 %", "A": 39, "B": 61, "C": 74, "D": 80, "kind": "pervious", "table": "2-2a", "page": "2-5"},
+    "newly_graded": {"label": "Newly graded area, pervious, no vegetation", "A": 77, "B": 86, "C": 91, "D": 94, "kind": "pervious", "table": "2-2a", "page": "2-5"},
+    "fallow_bare_soil": {"label": "Fallow, bare soil", "A": 77, "B": 86, "C": 91, "D": 94, "kind": "pervious", "table": "2-2b", "page": "2-6"},
+    "meadow": {"label": "Meadow, continuous grass, protected from grazing, mowed", "A": 30, "B": 58, "C": 71, "D": 78, "kind": "pervious", "table": "2-2c", "page": "2-7"},
+    "brush_poor": {"label": "Brush-weed-grass mixture, poor (< 50 % ground cover)", "A": 48, "B": 67, "C": 77, "D": 83, "kind": "pervious", "table": "2-2c", "page": "2-7"},
+    "brush_fair": {"label": "Brush-weed-grass mixture, fair (50-75 % ground cover)", "A": 35, "B": 56, "C": 70, "D": 77, "kind": "pervious", "table": "2-2c", "page": "2-7"},
+    "brush_good": {"label": "Brush-weed-grass mixture, good (> 75 % ground cover)", "A": 30, "B": 48, "C": 65, "D": 73, "kind": "pervious", "table": "2-2c", "page": "2-7", "note": "Group A value is < 30; TR-55 says use 30."},
+    "woods_grass_poor": {"label": "Woods-grass combination (orchard, tree farm), poor", "A": 57, "B": 73, "C": 82, "D": 86, "kind": "pervious", "table": "2-2c", "page": "2-7"},
+    "woods_grass_fair": {"label": "Woods-grass combination (orchard, tree farm), fair", "A": 43, "B": 65, "C": 76, "D": 82, "kind": "pervious", "table": "2-2c", "page": "2-7"},
+    "woods_grass_good": {"label": "Woods-grass combination (orchard, tree farm), good", "A": 32, "B": 58, "C": 72, "D": 79, "kind": "pervious", "table": "2-2c", "page": "2-7"},
+    "woods_poor": {"label": "Woods, poor (litter and brush destroyed)", "A": 45, "B": 66, "C": 77, "D": 83, "kind": "pervious", "table": "2-2c", "page": "2-7"},
+    "woods_fair": {"label": "Woods, fair (grazed, some litter)", "A": 36, "B": 60, "C": 73, "D": 79, "kind": "pervious", "table": "2-2c", "page": "2-7"},
+    "woods_good": {"label": "Woods, good (protected, litter and brush cover soil)", "A": 30, "B": 55, "C": 70, "D": 77, "kind": "pervious", "table": "2-2c", "page": "2-7", "note": "Group A value is < 30; TR-55 says use 30."},
+    "impervious": {"label": "Paved parking, roofs, driveways; paved streets with curbs and storm drains", "A": 98, "B": 98, "C": 98, "D": 98, "kind": "impervious", "table": "2-2a", "page": "2-5"},
+    "street_open_ditch": {"label": "Paved street with open ditches (including right-of-way)", "A": 83, "B": 89, "C": 92, "D": 93, "kind": "composite", "table": "2-2a", "page": "2-5"},
+    "street_gravel": {"label": "Gravel street (including right-of-way)", "A": 76, "B": 85, "C": 89, "D": 91, "kind": "composite", "table": "2-2a", "page": "2-5"},
+    "street_dirt": {"label": "Dirt street (including right-of-way)", "A": 72, "B": 82, "C": 87, "D": 89, "kind": "composite", "table": "2-2a", "page": "2-5"},
+    "commercial": {"label": "Commercial and business district (85 % impervious)", "A": 89, "B": 92, "C": 94, "D": 95, "kind": "composite", "pct_imperv": 85, "table": "2-2a", "page": "2-5"},
+    "industrial": {"label": "Industrial district (72 % impervious)", "A": 81, "B": 88, "C": 91, "D": 93, "kind": "composite", "pct_imperv": 72, "table": "2-2a", "page": "2-5"},
+    "residential_town_houses": {"label": "Residential, 1/8 acre (~500 m2) lots or less, town houses (65 % impervious)", "A": 77, "B": 85, "C": 90, "D": 92, "kind": "composite", "pct_imperv": 65, "table": "2-2a", "page": "2-5"},
+    "residential_quarter_acre": {"label": "Residential, 1/4 acre (~1000 m2) lots (38 % impervious)", "A": 61, "B": 75, "C": 83, "D": 87, "kind": "composite", "pct_imperv": 38, "table": "2-2a", "page": "2-5"},
+    "residential_half_acre": {"label": "Residential, 1/2 acre (~2000 m2) lots (25 % impervious)", "A": 54, "B": 70, "C": 80, "D": 85, "kind": "composite", "pct_imperv": 25, "table": "2-2a", "page": "2-5"}
+  },
+  "sheet_flow_n": {
+    "_source": "TR-55 Table 3-1, p. 3-3 (Engman 1986). For sheet flow depths of about 0.03 m only.",
+    "smooth": {"label": "Smooth surfaces (concrete, asphalt, gravel, bare soil)", "n": 0.011},
+    "fallow": {"label": "Fallow (no residue)", "n": 0.05},
+    "cultivated_low_residue": {"label": "Cultivated soil, residue cover <= 20 %", "n": 0.06},
+    "cultivated_high_residue": {"label": "Cultivated soil, residue cover > 20 %", "n": 0.17},
+    "short_grass": {"label": "Short grass prairie", "n": 0.15},
+    "dense_grass": {"label": "Dense grasses", "n": 0.24},
+    "bermudagrass": {"label": "Bermudagrass", "n": 0.41},
+    "range": {"label": "Range (natural)", "n": 0.13},
+    "woods_light": {"label": "Woods, light underbrush", "n": 0.40},
+    "woods_dense": {"label": "Woods, dense underbrush", "n": 0.80}
+  },
+  "limits": {
+    "_source": "TR-55 pp. 2-11, 3-4, 4-2",
+    "min_weighted_cn": 40,
+    "low_runoff_depth_mm": 12.7,
+    "max_sheet_flow_length_m": 91.44,
+    "min_tc_hr": 0.1
+  }
+}
