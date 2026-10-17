@@ -53,8 +53,10 @@ spongepark sim2d run park.sponge auto 25                       # 2D surface floo
 spongepark rhino export park.sponge auto auto.3dm              # edit in Rhino, then:
 spongepark rhino import park.sponge auto auto_edited.3dm       # detects edits, regrades, reruns
 spongepark report park.sponge report/                          # HTML + PDF report, SWMM files
-spongepark serve                                               # engine API for Unity and Grasshopper
+spongepark serve                                               # web app at http://127.0.0.1:8765, API for Unity and Grasshopper
 ```
+
+Most of this is easier in the web app: `spongepark serve`, then open http://127.0.0.1:8765 ([docs/web.md](docs/web.md)).
 
 A hand-drawn layout can still be imported with `spongepark option import park.sponge manual layout.geojson`.
 The Unity app is in `unity/SpongeParkApp` ([docs/unity.md](docs/unity.md)).
@@ -78,6 +80,7 @@ edge engineering (4.11) and in-line SWD check dam (4.12).
 - [docs/optimisation.md](docs/optimisation.md): NSGA-II optimisation, surrogate, performance curve
 - [docs/rhino.md](docs/rhino.md): .3dm export, round trip and Grasshopper components
 - [docs/sim2d.md](docs/sim2d.md): 2D rain-on-grid model (indicative)
+- [docs/web.md](docs/web.md): the web app and its design system
 - [docs/unity.md](docs/unity.md): the Unity app, GPU water and video
 - [docs/report.md](docs/report.md): the report and calibration
 - [docs/water_balance.md](docs/water_balance.md): water balance terms and metrics

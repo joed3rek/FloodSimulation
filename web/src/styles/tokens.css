@@ -1,0 +1,37 @@
+/* Design tokens: Organic / Natural. The single source for colour, shape, depth and motion.
+   Colours are RGB channels so Tailwind opacity modifiers (bg-primary/10) work. */
+:root {
+  /* palette: forest floor, clay, unbleached paper */
+  --color-background: 253 252 248;   /* rice paper  #FDFCF8 */
+  --color-foreground: 44 44 36;      /* deep loam   #2C2C24 */
+  --color-primary: 93 112 82;        /* moss        #5D7052 */
+  --color-primary-foreground: 243 244 241; /* pale mist #F3F4F1 */
+  --color-secondary: 193 140 93;     /* terracotta  #C18C5D */
+  --color-secondary-foreground: 255 255 255;
+  --color-clay-ink: 140 88 44;       /* terracotta deepened for text (4.9:1 on paper) */
+  --color-accent: 230 220 205;       /* sand        #E6DCCD */
+  --color-accent-foreground: 74 74 64; /* bark      #4A4A40 */
+  --color-muted: 240 235 229;        /* stone       #F0EBE5 */
+  --color-muted-foreground: 120 120 108; /* dried grass #78786C */
+  --color-border: 222 216 207;       /* raw timber  #DED8CF */
+  --color-destructive: 168 84 72;    /* burnt sienna #A85448 */
+  --color-card: 254 254 250;         /* #FEFEFA */
+  /* water, for data only (storm viewer, charts) */
+  --color-water: 74 124 150;         /* river stone blue */
+  --color-water-deep: 38 78 104;
+
+  /* depth: tinted, diffused, never black */
+  --shadow-soft: 0 4px 20px -2px rgba(93, 112, 82, 0.15);
+  --shadow-soft-hover: 0 6px 24px -4px rgba(93, 112, 82, 0.25);
+  --shadow-float: 0 10px 40px -10px rgba(193, 140, 93, 0.2);
+  --shadow-lift: 0 20px 40px -10px rgba(93, 112, 82, 0.15);
+
+  /* organic shapes */
+  --blob-1: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  --blob-2: 30% 70% 70% 30% / 30% 30% 70% 70%;
+  --blob-3: 40% 60% 60% 40% / 60% 40% 60% 40%;
+  --blob-4: 70% 30% 50% 50% / 30% 50% 50% 70%;
+
+  /* motion: unhurried, eased */
+  --ease-natural: cubic-bezier(0.22, 0.8, 0.3, 1);
+}

@@ -113,3 +113,20 @@ def test_grasshopper_components_against_a_live_server(project_path, tmp_path):
     finally:
         server.should_exit = True
         th.join(timeout=10)
+
+
+def test_web_support_routes(client, project_path, tmp_path):
+    pid = client.post("/projects/open", json={"path": str(project_path)}).json()["project"]
+    info = client.get(f"/projects/{pid}").json()
+    assert info["path"] and info["return_periods"] and info["has_soils"] and info["has_rainfall"]
+    r = client.get(f"/projects/{pid}/file", params={"path": "terrain/flow/report.json"})
+    assert r.status_code == 200 and "subcatchments" in r.json()
+    assert client.get(f"/projects/{pid}/file", params={"path": "../../etc/passwd"}).status_code in (403, 404)
+    assert client.get(f"/projects/{pid}/file", params={"path": "manifest.toml"}).status_code == 403
+    listing = client.get("/fs/list", params={"dir": str(project_path.parent), "ext": ".sponge"}).json()
+    assert any(i["name"] == project_path.name for i in listing["items"])
+    rep = client.post(f"/projects/{pid}/report?wait=true", json={"out_dir": str(tmp_path / "rep"), "pdf": False}).json()
+    assert rep["status"] == "done", rep.get("error")
+    html = client.get("/fs/file", params={"path": rep["result"]["html"]})
+    assert html.status_code == 200 and "Headline results" in html.text
+    client.post(f"/projects/{pid}/close")

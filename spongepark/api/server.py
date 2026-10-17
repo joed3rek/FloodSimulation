@@ -29,6 +29,16 @@ log = logging.getLogger(__name__)
 app = FastAPI(title="spongepark engine", version=__version__,
               description="Local API to the sponge park engine. SWMM is the source of truth; 2D outputs are indicative.")
 
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
+# the web app's dev server (vite) runs on another local port
+app.add_middleware(CORSMiddleware, allow_origin_regex=r"http://(127\.0\.0\.1|localhost)(:\d+)?",
+                   allow_methods=["*"], allow_headers=["*"])
+WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
+SERVED = {".png": "image/png", ".json": "application/json", ".geojson": "application/geo+json", ".html": "text/html",
+          ".pdf": "application/pdf", ".dxf": "application/dxf", ".csv": "text/csv", ".inp": "text/plain",
+          ".3dm": "application/octet-stream", ".tif": "image/tiff"}
+
 _projects: Dict[str, Project] = {}
 _locks: Dict[str, threading.Lock] = {}
 _jobs: Dict[str, Dict[str, Any]] = {}
@@ -94,7 +104,11 @@ def info(pid: str) -> Dict[str, Any]:
     p = _project(pid)
     return {"name": p.manifest.project_name, "crs": p.manifest.crs, "calibration": p.manifest.calibration_status,
             "options": p.option_ids(), "unconfirmed_parameters": len(p.parameters.unconfirmed()),
-            "has_terrain": p.exists("terrain/existing.tif"), "has_baseline": p.exists("options/baseline/results/summary.json")}
+            "has_terrain": p.exists("terrain/existing.tif"), "has_baseline": p.exists("options/baseline/results/summary.json"),
+            "path": str(p.package_path or p.root),
+            "return_periods": p.parameters.value("project.return_periods"),
+            "has_soils": bool(p.read_geojson("site/soil_zones.geojson")["features"]),
+            "has_rainfall": p.exists("rainfall/return_periods.csv")}
 
 
 @app.post("/projects/{pid}/save")
@@ -355,6 +369,15 @@ def export(pid: str, oid: str, out_dir: str = Body(..., embed=True),
     return _job(pid, f"export {oid}", fn, wait)
 
 
+@app.post("/projects/{pid}/report")
+def report(pid: str, out_dir: str = Body(..., embed=True), options: Optional[List[str]] = Body(None, embed=True),
+           pdf: bool = Body(True, embed=True), wait: bool = False) -> Dict[str, Any]:
+    """Full HTML (and PDF) report for the chosen options, with the SWMM files."""
+    from spongepark.engine.report.html import build_report
+
+    return _job(pid, "report", lambda p: build_report(p, options, Path(out_dir), pdf), wait)
+
+
 @app.post("/projects/{pid}/options/{oid}/import-3dm")
 def import_rhino(pid: str, oid: str, path: str = Body(..., embed=True), rerun: bool = True,
                  wait: bool = False) -> Dict[str, Any]:
@@ -374,6 +397,74 @@ def video_encode(folder: str = Body(..., embed=True), fps: int = Body(30, embed=
         raise HTTPException(400, str(ex))
 
 
+@app.get("/projects/{pid}/file")
+def project_file(pid: str, path: str):
+    """A file inside the project (images, JSON, reports), for the web app. Paths cannot leave the project."""
+    from fastapi.responses import FileResponse
+
+    p = _project(pid)
+    target = (p.root / path).resolve()
+    if not str(target).startswith(str(p.root.resolve())) or target.suffix.lower() not in SERVED:
+        raise HTTPException(403, "not allowed")
+    if not target.exists():
+        raise HTTPException(404, f"{path} not found")
+    return FileResponse(target, media_type=SERVED[target.suffix.lower()])
+
+
+@app.get("/fs/list")
+def fs_list(dir: Optional[str] = None, ext: str = ".sponge,.dxf,.dwg,.csv,.json,.3dm") -> Dict[str, Any]:
+    """Folders and matching files, for the web app's file picker (local server only)."""
+    d = Path(dir).expanduser() if dir else Path.cwd()
+    if not d.exists() or not d.is_dir():
+        raise HTTPException(404, f"{d} is not a folder")
+    exts = {e.strip().lower() for e in ext.split(",") if e.strip()}
+    items = []
+    try:
+        for c in sorted(d.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+            if c.name.startswith("."):
+                continue
+            if c.is_dir() and c.suffix.lower() != ".sponge":
+                items.append({"name": c.name, "path": str(c), "kind": "folder"})
+            elif c.suffix.lower() in exts:
+                items.append({"name": c.name, "path": str(c), "kind": "file", "size": c.stat().st_size if c.is_file() else None})
+    except PermissionError:
+        raise HTTPException(403, f"cannot read {d}")
+    return {"dir": str(d.resolve()), "parent": str(d.resolve().parent), "items": items}
+
+
+@app.get("/fs/file")
+def fs_file(path: str):
+    """A report, drawing or image written outside the project (exports), for the web app (local server only)."""
+    from fastapi.responses import FileResponse
+
+    f = Path(path).expanduser().resolve()
+    if f.suffix.lower() not in SERVED or not f.is_file():
+        raise HTTPException(404, f"{path} not found or not an allowed file type")
+    return FileResponse(f, media_type=SERVED[f.suffix.lower()], filename=None if f.suffix.lower() in (".html", ".png", ".pdf") else f.name)
+
+
+class CalibrateRequest(BaseModel):
+    option: str = "baseline"
+    rainfall: str
+    observed: str
+    target: str = "outflow_total_cms"
+    evaluations: int = 80
+    apply: bool = True
+
+
+@app.post("/projects/{pid}/calibrate")
+def calibrate(pid: str, req: CalibrateRequest, wait: bool = False) -> Dict[str, Any]:
+    from spongepark.engine.swmm.calibrate import calibrate as cal
+
+    return _job(pid, "calibrate", lambda p: cal(p, req.option, Path(req.rainfall), Path(req.observed), req.target,
+                                                 req.evaluations, req.apply), wait)
+
+
+@app.get("/projects/{pid}/jobs")
+def project_jobs(pid: str) -> List[Dict[str, Any]]:
+    return [{k: v for k, v in j.items() if k != "result"} for j in _jobs.values() if j["project"] == pid]
+
+
 @app.get("/jobs/{jid}")
 def job(jid: str) -> Dict[str, Any]:
     if jid not in _jobs:
@@ -381,9 +472,22 @@ def job(jid: str) -> Dict[str, Any]:
     return _jobs[jid]
 
 
+def _mount_web() -> None:
+    """Serve the built web app at / (after every API route, so the API keeps priority)."""
+    if WEB_DIST.exists() and not any(getattr(r, "name", "") == "web" for r in app.routes):
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")
+
+
+_mount_web()
+
+
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
     import uvicorn
 
     if host not in ("127.0.0.1", "localhost"):
         log.warning("serving on %s: the API has no authentication; keep it on a trusted network", host)
+    if WEB_DIST.exists():
+        log.info("web app: http://%s:%d/", host, port)
     uvicorn.run(app, host=host, port=port, log_level="info")
