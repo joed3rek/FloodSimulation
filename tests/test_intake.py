@@ -50,6 +50,7 @@ def test_finish_cleans_the_drawing_and_builds_the_ground(drawing, tmp_path):
     assert "SP-X-BE-LEVEL" not in sum(out["layer_map"]["roles"].values(), [])  # left out stays out
     with Project.open(out["project"]) as p:
         assert p.exists("terrain/existing.tif") and p.exists("site/boundary.geojson")
+        assert p.exists(f"survey/{drawing.name}") and p.exists(f"survey/{drawing.stem}_SP.dxf")  # one file carries all
     assert out["qc"]["spot_cross_validation"]["rmse_m"] < 0.05
 
 

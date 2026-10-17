@@ -11,8 +11,9 @@ computes anything: every number comes from the engine (SWMM; the 2D model is lab
 
 ## Opening screen and survey intake
 
-With no project open the app shows a dark landing page whose one action is **Import a survey**:
-drop the DXF on it (or click to choose it, or pick a file on this computer). The drawing is stored in
+With no project open the app shows a dark landing page with two ways in: **New project** (drop
+the survey DXF on it, or click to choose it) and **Open a project** (a `.sponge` file; recent
+projects are listed below). The path box accepts either a `.dxf` or a `.sponge`. The drawing is stored in
 `~/SpongePark/<name>/` and read:
 
 1. Every layer is matched to the SP-* layer standard (`spongepark/engine/io/data/layer_standard.json`)
@@ -23,8 +24,9 @@ drop the DXF on it (or click to choose it, or pick a file on this computer). The
    (On Nethravathi this showed that "BOUNDERY" is the north arrow, not a boundary.)
 3. Everything else is listed as linked; hover to see it in the drawing, change any link.
 4. **Clean and build** writes `<name>_SP.dxf` next to the drawing (layers renamed and merged to the
-   standard, exact duplicates removed; your file is untouched), creates `<name>.sponge` and builds the
-   ground model with its quality check. Layers answered "not needed" are kept in the drawing as
+   standard, exact duplicates removed; your file is untouched), creates `<name>.sponge` with both
+   drawings inside it (`survey/`), and builds the ground model with its quality check. The `.sponge`
+   file alone carries the whole project: drawings, parameters, ground model, options and results. Layers answered "not needed" are kept in the drawing as
    `SP-X-<name>` and left out of the model.
 
 `http://127.0.0.1:8765/?survey=D:\path\survey.dxf` starts the intake for a file on this computer.

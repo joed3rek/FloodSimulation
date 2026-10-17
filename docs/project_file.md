@@ -44,3 +44,9 @@ must come from you.
 All geometry is in metres in a projected CRS (default UTM 43N) or local survey metres (`LOCAL`).
 GeoJSON in longitude/latitude is rejected unless you pass `--source-crs EPSG:4326`, in which case
 it is reprojected.
+
+## Drawings inside the project
+
+Projects created through the survey intake keep the surveyor's drawing and its cleaned copy (layers
+on the SP-* standard) in `survey/`, so a single `.sponge` file carries everything: drawings,
+parameters, ground model, options and results.

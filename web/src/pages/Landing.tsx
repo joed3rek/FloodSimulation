@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import { useReveal, useScrollY } from "../lib/motion";
 import { recentProjects, useProject } from "../lib/project";
 import { go } from "../lib/route";
-import { PathField } from "../components/FilePicker";
+import { FilePicker, PathField } from "../components/FilePicker";
 import { cx } from "../components/ui/cx";
 import { saveIntake } from "./Intake";
 
@@ -56,8 +56,9 @@ export function Landing() {
   const [err, setErr] = useState<string | null>(null);
   const [path, setPath] = useState("");
   const [showPath, setShowPath] = useState(false);
+  const [openPicker, setOpenPicker] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const recent = recentProjects();
+  const recent = recentProjects().filter((r) => r.toLowerCase().endsWith(".sponge"));
   useReveal([recent.length]);
 
   const startWith = async (fn: () => Promise<unknown>, label: string) => {
@@ -74,7 +75,12 @@ export function Landing() {
     return data;
   }, `Reading ${file.name}`);
 
-  const fromPath = () => startWith(() => api.post("/intake/start", { path }), "Reading the drawing");
+  const fromPath = async () => {
+    if (path.trim().toLowerCase().endsWith(".sponge")) {
+      setBusy("Opening");
+      try { await open(path.trim()); go("overview"); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
+    } else startWith(() => api.post("/intake/start", { path }), "Reading the drawing");
+  };
 
   // ?survey=<path on this computer> starts the intake directly (links from other tools)
   useEffect(() => {
@@ -109,7 +115,7 @@ export function Landing() {
           </div>
           <button onClick={() => fileRef.current?.click()}
             className="rounded-full bg-primary-foreground px-6 py-3 text-sm font-bold text-night transition-all duration-300 hover:scale-105 active:scale-95">
-            Import a survey
+            New project
           </button>
         </div>
       </nav>
@@ -135,31 +141,44 @@ export function Landing() {
             and builds the ground the water will move over.
           </p>
 
-          {/* the one action: drop a survey */}
+          {/* two ways in: a new project from a survey, or an existing .sponge project */}
           <div data-reveal style={{ transitionDelay: "400ms" }}>
-            <div
-              role="button" tabIndex={0} aria-label="Import a survey drawing (DXF)"
-              onClick={() => !busy && fileRef.current?.click()}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
-              onDragEnter={(e) => { e.preventDefault(); setDrag(true); }}
-              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
-              onDragLeave={() => setDrag(false)}
-              onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) upload(f); }}
-              className={cx("group relative mx-auto max-w-xl cursor-pointer rounded-[2.5rem] rounded-tl-[4.5rem] border border-dashed p-10 backdrop-blur-sm transition-all duration-500",
-                drag ? "scale-[1.02] border-accent bg-white/15" : "border-white/25 bg-white/5 hover:border-white/45 hover:bg-white/10")}>
-              <div aria-hidden className="absolute inset-0 -z-10 rounded-[inherit] bg-secondary/20 opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-60" />
-              {busy ? (
-                <p className="flex items-center justify-center gap-3 text-lg"><Loader2 className="animate-spin" /> {busy}…</p>
-              ) : (
-                <>
-                  <span className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform duration-500 group-hover:scale-110">
-                    <FileUp size={28} />
-                  </span>
-                  <p className="font-display text-2xl font-semibold">Import a survey</p>
-                  <p className="mt-1 text-sm text-primary-foreground/60">Drop the DXF here, or click to choose it</p>
-                </>
-              )}
+            <div className="mx-auto grid max-w-3xl gap-5 sm:grid-cols-2">
+              <div
+                role="button" tabIndex={0} aria-label="New project: import a survey drawing (DXF)"
+                onClick={() => !busy && fileRef.current?.click()}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
+                onDragEnter={(e) => { e.preventDefault(); setDrag(true); }}
+                onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+                onDragLeave={() => setDrag(false)}
+                onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) f.name.toLowerCase().endsWith(".sponge") ? setErr("That is a project: use Open a project.") : upload(f); }}
+                className={cx("group relative cursor-pointer rounded-[2.5rem] rounded-tl-[4.5rem] border border-dashed p-8 backdrop-blur-sm transition-all duration-500",
+                  drag ? "scale-[1.02] border-accent bg-white/15" : "border-white/25 bg-white/5 hover:border-white/45 hover:bg-white/10")}>
+                <div aria-hidden className="absolute inset-0 -z-10 rounded-[inherit] bg-primary/30 opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-60" />
+                {busy ? (
+                  <p className="flex items-center justify-center gap-3 py-8 text-lg"><Loader2 className="animate-spin" /> {busy}…</p>
+                ) : (
+                  <>
+                    <span className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform duration-500 group-hover:scale-110">
+                      <FileUp size={28} />
+                    </span>
+                    <p className="font-display text-2xl font-semibold">New project</p>
+                    <p className="mt-1 text-sm text-primary-foreground/60">Drop the survey DXF here, or click to choose it</p>
+                  </>
+                )}
+              </div>
+              <button onClick={() => setOpenPicker(true)} aria-label="Open a project (.sponge)"
+                className="group relative rounded-[2.5rem] rounded-tr-[4.5rem] border border-white/25 bg-white/5 p-8 backdrop-blur-sm transition-all duration-500 hover:border-white/45 hover:bg-white/10">
+                <div aria-hidden className="absolute inset-0 -z-10 rounded-[inherit] bg-secondary/25 opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-60" />
+                <span className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary text-white transition-transform duration-500 group-hover:scale-110">
+                  <FolderOpen size={26} />
+                </span>
+                <p className="font-display text-2xl font-semibold">Open a project</p>
+                <p className="mt-1 text-sm text-primary-foreground/60">A .sponge file you saved before</p>
+              </button>
             </div>
+            {openPicker && <FilePicker title="Open a project" ext=".sponge" onClose={() => setOpenPicker(false)}
+              onPick={async (p) => { setOpenPicker(false); setBusy("Opening"); try { await open(p); go("overview"); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); } }} />}
             <input ref={fileRef} type="file" accept=".dxf,.dwg" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
             {err && <p role="alert" className="mx-auto mt-5 max-w-xl rounded-2xl bg-destructive/25 px-4 py-3 text-sm">{err}</p>}
             {engineUp === false && <p className="mx-auto mt-5 max-w-xl text-sm text-accent">The engine is not running: start it with <code>spongepark serve</code> and reload.</p>}
@@ -170,8 +189,8 @@ export function Landing() {
               </button>
               {showPath && (
                 <div className="w-full max-w-xl rounded-[2rem] bg-white/90 p-3 text-foreground">
-                  <PathField value={path} onChange={setPath} ext=".dxf,.dwg" title="Choose the survey drawing" placeholder="D:\…\survey.dxf" />
-                  <button onClick={fromPath} disabled={!path || !!busy} className="mt-3 h-11 w-full rounded-full bg-primary font-bold text-primary-foreground disabled:opacity-50">Read this drawing</button>
+                  <PathField value={path} onChange={setPath} ext=".dxf,.dwg,.sponge" title="Choose a survey (.dxf) or a project (.sponge)" placeholder="D:\…\survey.dxf or park.sponge" />
+                  <button onClick={fromPath} disabled={!path || !!busy} className="mt-3 h-11 w-full rounded-full bg-primary font-bold text-primary-foreground disabled:opacity-50">{path.toLowerCase().endsWith(".sponge") ? "Open this project" : "Read this drawing"}</button>
                 </div>
               )}
             </div>
@@ -242,7 +261,7 @@ export function Landing() {
       {recent.length > 0 && (
         <section id="parks" className="relative py-24">
           <div className="mx-auto max-w-5xl px-6">
-            <h2 data-reveal className="mb-10 font-display text-3xl md:text-4xl">Pick up where you left off</h2>
+            <h2 data-reveal className="mb-10 font-display text-3xl md:text-4xl">Recent projects</h2>
             <ul className="grid gap-4 md:grid-cols-2">
               {recent.map((r, i) => (
                 <li key={r} data-reveal style={{ transitionDelay: `${i * 80}ms` }}>

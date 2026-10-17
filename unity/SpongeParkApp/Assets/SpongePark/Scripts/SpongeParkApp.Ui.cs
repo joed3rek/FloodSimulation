@@ -40,6 +40,7 @@ namespace SpongePark
             root.Add(Blob(new Color(0.76f, 0.55f, 0.36f, 0.14f), 1100, 420, 560));
 
             var app = new VisualElement { pickingMode = PickingMode.Ignore };
+            mainApp = app;
             app.AddToClassList("app");
             root.Add(app);
             var sidebar = new VisualElement();
@@ -48,6 +49,7 @@ namespace SpongePark
             BuildSidebar(sidebar);
 
             var overlay = new VisualElement { pickingMode = PickingMode.Ignore };
+            mainOverlay = overlay;
             overlay.AddToClassList("overlay");
             root.Add(overlay);
             BuildOverlays(overlay);
@@ -230,6 +232,7 @@ namespace SpongePark
         void LateUpdate()
         {
             if (doc == null) return;
+            AnimateLanding();
             statusLabel.text = status;
             statusLabel.EnableInClassList("status--error", status.StartsWith("Error"));
             if (busy != lastBusy)

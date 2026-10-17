@@ -26,6 +26,15 @@ namespace SpongePark
             Finish(req, done);
         }
 
+        /// Raw bytes (e.g. a PNG preview); null on failure.
+        public IEnumerator GetBytes(string path, Action<byte[]> done)
+        {
+            using var req = UnityWebRequest.Get(baseUrl + path);
+            req.timeout = 120;
+            yield return req.SendWebRequest();
+            done(req.result == UnityWebRequest.Result.Success ? req.downloadHandler.data : null);
+        }
+
         public IEnumerator Send(string method, string path, object body, Action<JToken> done, int timeoutS = 3600)
         {
             var json = body == null ? "{}" : JsonConvert.SerializeObject(body);

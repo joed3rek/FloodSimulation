@@ -6,7 +6,8 @@
 2. ``preview(path, layer)`` draws the whole drawing faintly with one layer highlighted, so each
    question shows exactly what is on that layer.
 3. ``finish(...)`` writes a cleaned copy of the drawing (layers renamed and merged to the standard,
-   exact duplicates removed, original untouched), creates the project and builds the ground model.
+   exact duplicates removed, original untouched), creates the ``.sponge`` project with both drawings
+   inside it (``survey/``), and builds the ground model.
 """
 
 from __future__ import annotations
@@ -199,6 +200,12 @@ def finish(survey: Path, links: Dict[str, str], project_path: Optional[Path] = N
              needs_decision=[], note="Confirmed in the survey intake: every layer linked by the designer.")
     project_path = Path(project_path) if project_path else survey.with_name(survey.stem.replace(" ", "_") + ".sponge")
     with Project.create(project_path, survey.stem, crs="LOCAL", overwrite=project_path.exists()) as p:
+        # the .sponge file carries its drawings: the surveyor's original and the cleaned copy
+        import shutil
+
+        p.path("survey").mkdir(exist_ok=True)
+        shutil.copy2(survey, p.path(f"survey/{survey.name}"))
+        shutil.copy2(cleaned, p.path(f"survey/{cleaned.name}"))
         q = import_survey(p, cleaned, m, park_area_m2)
         p.history.log("survey_intake", survey=str(survey), cleaned=str(cleaned), links=links,
                       duplicates_removed=report["duplicates_removed_total"])

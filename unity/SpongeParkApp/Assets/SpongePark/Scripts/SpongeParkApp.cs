@@ -74,7 +74,15 @@ namespace SpongePark
 #else
             BuildUi();
             if (Arg("-spProject") != null) StartCoroutine(Autorun());
-            else StartCoroutine(CheckEngine());
+            else
+            {
+                ShowLanding();
+                StartCoroutine(CheckEngine());
+                if (Arg("-spShot") != null) StartCoroutine(Shot());
+                // "Open with" / double-click: the .sponge file arrives as an argument
+                var sponge = System.Environment.GetCommandLineArgs().Skip(1).FirstOrDefault(a => a.EndsWith(".sponge", System.StringComparison.OrdinalIgnoreCase));
+                if (sponge != null) StartCoroutine(OpenWhenReady(sponge));
+            }
 #endif
         }
 
@@ -117,6 +125,24 @@ namespace SpongePark
         }
 
         bool autorunQuit;
+
+        IEnumerator OpenWhenReady(string sponge)
+        {
+            for (int i = 0; i < 30 && !engineUp; i++) { yield return new WaitForSecondsRealtime(1); yield return CheckEngine(); }
+            if (engineUp) yield return OpenExisting(sponge);
+        }
+
+        // Screenshot for checks and documentation: -spShot out.png [-spSurvey drawing.dxf] [-spEngineUrl url]
+        IEnumerator Shot()
+        {
+            if (Arg("-spEngineUrl") != null) api.baseUrl = Arg("-spEngineUrl");
+            yield return CheckEngine();
+            if (Arg("-spSurvey") != null) yield return StartIntake(Arg("-spSurvey"));
+            yield return new WaitForSecondsRealtime(6);
+            ScreenCapture.CaptureScreenshot(Arg("-spShot"));
+            yield return new WaitForSecondsRealtime(2);
+            Application.Quit(0);
+        }
 
         IEnumerator FinishVideo()
         {
