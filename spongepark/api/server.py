@@ -87,7 +87,9 @@ class OpenRequest(BaseModel):
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
-    return {"ok": True, "engine": __version__, "open_projects": list(_projects)}
+    # features let a client tell an engine started before an update from a current one
+    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d"],
+            "open_projects": list(_projects)}
 
 
 @app.post("/projects/open")

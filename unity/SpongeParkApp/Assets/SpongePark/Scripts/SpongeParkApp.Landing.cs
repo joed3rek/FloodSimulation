@@ -24,6 +24,7 @@ namespace SpongePark
         string intakeProjectPath = "", intakeArea = "";
         bool intakeContours = true;
         const string RecentKey = "spongepark.recent";
+        float nextEngineCheck;
 
         // ------------------------------------------------------------ screens
         void ShowMain()
@@ -206,11 +207,13 @@ namespace SpongePark
         {
             if (landing == null || landing.style.display == DisplayStyle.None) return;
             float t = Time.unscaledTime;
+            if (t > nextEngineCheck) { nextEngineCheck = t + 5; StartCoroutine(CheckEngine()); }   // notice a (re)started engine
             contourArt.style.translate = new Translate(0, 22 * Mathf.Sin(t * 2 * Mathf.PI / 12f));
             contourArt.style.rotate = new Rotate(2 * Mathf.Sin(t * 2 * Mathf.PI / 12f));
             rainArt.style.translate = new Translate(0, -20 * Mathf.Sin(t * 2 * Mathf.PI / 14f));
-            engineChip.text = engineUp ? "engine connected" : "engine not running";
-            engineChip.EnableInClassList("engine-chip--off", !engineUp);
+            bool ok = engineUp && api.Current;
+            engineChip.text = !engineUp ? "engine not running" : ok ? "engine connected" : "engine out of date: restart spongepark serve";
+            engineChip.EnableInClassList("engine-chip--off", !ok);
         }
 
         static List<string> Recent()
@@ -244,6 +247,12 @@ namespace SpongePark
         void OpenBrowser(string title, string ext, System.Action<string> pick)
         {
             if (!engineUp) { landingStatus.text = "Start the engine first (button at the top)."; return; }
+            if (!api.Current)
+            {
+                landingStatus.text = "The running engine is older than this app. In its window press Ctrl+C, run spongepark serve again, then click Check or try again.";
+                StartCoroutine(CheckEngine());
+                return;
+            }
             browserExt = ext;
             browserPick = pick;
             browser?.RemoveFromHierarchy();
@@ -303,7 +312,13 @@ namespace SpongePark
             landingStatus.text = "Reading " + System.IO.Path.GetFileName(path) + "…";
             JToken r = null;
             yield return api.Send("POST", "/intake/start", new { path }, x => r = x, 600);
-            if (r == null) { landingStatus.text = "Could not read the drawing: " + api.LastError; yield break; }
+            if (r == null)
+            {
+                landingStatus.text = api.LastError.Contains("404")
+                    ? "The running engine is older than this app: restart spongepark serve, then try again."
+                    : "Could not read the drawing: " + api.LastError;
+                yield break;
+            }
             PlayerPrefs.SetString("spongepark.lastsurvey", path);
             landingStatus.text = "";
             intake = r;

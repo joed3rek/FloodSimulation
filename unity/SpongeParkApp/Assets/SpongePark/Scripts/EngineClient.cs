@@ -17,6 +17,9 @@ namespace SpongePark
         public string ProjectId { get; private set; }
         public JObject BundleManifest { get; private set; }
         public string LastError { get; private set; } = "";
+        /// What the running engine can do (empty for an engine older than this app).
+        public string[] Features { get; private set; } = new string[0];
+        public bool Current => Array.IndexOf(Features, "intake") >= 0;
 
         public IEnumerator Get(string path, Action<JToken> done, int timeoutS = 600)
         {
@@ -91,7 +94,13 @@ namespace SpongePark
                 using var req = UnityWebRequest.Get(baseUrl + "/health");
                 req.timeout = 5;
                 yield return req.SendWebRequest();
-                if (req.result == UnityWebRequest.Result.Success) { done(true); yield break; }
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    try { Features = JToken.Parse(req.downloadHandler.text)["features"]?.ToObject<string[]>() ?? new string[0]; }
+                    catch (Exception) { Features = new string[0]; }
+                    done(true);
+                    yield break;
+                }
                 LastError = $"{baseUrl}/health: {req.error}";
                 Debug.LogWarning("engine health check failed: " + LastError);
             }
