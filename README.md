@@ -71,6 +71,8 @@ edge engineering (4.11) and in-line SWD check dam (4.12).
 
 ## Documentation
 
+- [docs/BRIEF.md](docs/BRIEF.md): **the project brief (Sponge Park Designer)**: the reference for scope, principles and phases
+
 - [docs/project_file.md](docs/project_file.md): the `.sponge` package and the parameter system
 - [docs/rainfall.md](docs/rainfall.md): return-period tables and design storms
 - [docs/nbs_components.md](docs/nbs_components.md): components, SWMM representation and guideline checks
