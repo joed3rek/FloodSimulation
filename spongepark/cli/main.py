@@ -29,9 +29,12 @@ site_app = typer.Typer(help="Site layers.", no_args_is_help=True)
 option_app = typer.Typer(help="NbS layout options.", no_args_is_help=True)
 terrain_app = typer.Typer(help="Terrain (synthetic test terrains in Phase 0).", no_args_is_help=True)
 layout_app = typer.Typer(help="Generated NbS layouts (Phase 4).", no_args_is_help=True)
+optimise_app = typer.Typer(help="Optimisation with NSGA-II and a surrogate, SWMM-verified (Phase 5).",
+                           no_args_is_help=True)
 nbs_app = typer.Typer(help="Component catalogue and design guidelines.", no_args_is_help=True)
 for sub, name in [(project_app, "project"), (params_app, "params"), (rain_app, "rainfall"), (site_app, "site"),
-                  (option_app, "option"), (terrain_app, "terrain"), (layout_app, "layout"), (nbs_app, "nbs")]:
+                  (option_app, "option"), (terrain_app, "terrain"), (layout_app, "layout"), (optimise_app, "optimise"),
+                  (nbs_app, "nbs")]:
     app.add_typer(sub, name=name)
 
 SITE_LAYERS = {
@@ -144,6 +147,39 @@ def layout_generate(path: Path, option: str = typer.Argument("auto"),
         typer.echo(f"area {r['generated_area_m2']:.0f} of {r['area_budget_m2']:.0f} m2 budget; cut {r['cut_total_m3']:.0f} m3")
         p.save()
     typer.echo(f"next: spongepark option run {path} {option}")
+
+
+# ------------------------------------------------------------------ optimise
+@optimise_app.command("run")
+def optimise_run(path: Path, mode: str = typer.Option("forward", help="forward | inverse"),
+                 initial: Optional[int] = None, rounds: Optional[int] = None) -> None:
+    """Search layouts (surrogate + NSGA-II), verify the Pareto options in SWMM and write them as options."""
+    from spongepark.engine.optimise.run import optimise
+
+    with _open(path) as p:
+        r = optimise(p, mode, n_initial=initial, rounds=rounds)
+        for h in r["rounds"]:
+            typer.echo(f"round {h['round']}: {h['rows']} layouts in SWMM; surrogate "
+                       f"{'used' if h['surrogate_used'] else 'not used'} {h.get('note', '')}")
+        typer.echo(f"{r['evaluations_swmm']} SWMM-evaluated layouts, {r['pareto_size']} on the Pareto set")
+        for o in r["options"]:
+            ret = ", ".join(f"{k}-yr {v:.0f}%" for k, v in o["retained_pct"].items())
+            typer.echo(f"  {o['option_id']}: {o['area_pct']:.1f} % of site, cut {o['cut_m3']:.0f} m3, "
+                       f"design retention storm {o['design_retention_storm_yr'] or '-'} yr; retained {ret}")
+        p.save()
+
+
+@optimise_app.command("curve")
+def optimise_curve(path: Path, budgets: Optional[List[float]] = typer.Option(None, "--budget")) -> None:
+    """Performance curve: largest storm fully retained against area budget."""
+    from spongepark.engine.optimise.run import performance_curve
+
+    with _open(path) as p:
+        out = performance_curve(p, budgets or None)
+        for r in out["rows"]:
+            typer.echo(f"  budget {r['budget_pct']:>4g} %: area {r['area_pct']:.1f} %, largest storm fully retained "
+                       f"{r['design_retention_storm_yr'] or 'none'}")
+        p.save()
 
 
 # ------------------------------------------------------------------ terrain
