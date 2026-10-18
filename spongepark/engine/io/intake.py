@@ -130,6 +130,32 @@ def _segments(path: str, mtime: float) -> Tuple[Dict[str, Any], Tuple[float, flo
     return {"lines": lines, "points": pts}, ext
 
 
+def geometry(path: Path, detail: float = 4000.0) -> Dict[str, Any]:
+    """The drawing's linework per layer for an interactive plan view (pan and zoom in the client).
+
+    Coordinates are drawing units relative to ``origin`` (the lower-left of the extent), rounded to
+    0.01; lines are simplified to 1/``detail`` of the drawing's size, which is finer than a screen
+    pixel at fit zoom. Returns {"origin": [x, y], "extent": [w, h], "layers": {name: {"lines":
+    [[x0, y0, x1, y1, ...], ...], "points": [x0, y0, ...]}}}."""
+    from shapely.geometry import LineString
+
+    path = Path(path)
+    geo, (x0, y0, x1, y1) = _segments(str(path), path.stat().st_mtime)
+    tol = max(x1 - x0, y1 - y0, 1e-9) / detail
+    layers: Dict[str, Any] = {}
+    for name in sorted(set(geo["lines"]) | set(geo["points"])):
+        out_lines = []
+        for seg in geo["lines"].get(name, []):
+            xy = seg
+            if len(seg) > 2:
+                xy = list(LineString(seg).simplify(tol, preserve_topology=False).coords)
+            if len(xy) >= 2:
+                out_lines.append([round(v, 2) for q in xy for v in (q[0] - x0, q[1] - y0)])
+        pts = [round(v, 2) for q in geo["points"].get(name, []) for v in (q[0] - x0, q[1] - y0)]
+        layers[name] = {"lines": out_lines, "points": pts}
+    return {"origin": [x0, y0], "extent": [x1 - x0, y1 - y0], "layers": layers}
+
+
 def preview(path: Path, layer: Optional[str] = None, size_px: int = 560) -> bytes:
     """PNG of the drawing (faint) with ``layer`` highlighted in terracotta."""
     import matplotlib

@@ -147,6 +147,11 @@ namespace SpongePark
             yield return CheckEngine();
             if (Arg("-spSurvey") != null) yield return StartIntake(Arg("-spSurvey"));
             yield return new WaitForSecondsRealtime(6);
+            // intake plan checks: -spZoomLayer <layer> highlights and zooms to it; -spPanelClosed hides the questions
+            if (plan != null && Arg("-spZoomLayer") != null) { Focus(Arg("-spZoomLayer")); plan.ZoomToLayer(Arg("-spZoomLayer")); }
+            if (plan != null && System.Environment.GetCommandLineArgs().Contains("-spPanelClosed")) SetPanel(false);
+            yield return new WaitForSecondsRealtime(1);
+            if (plan != null) Debug.Log($"plan zoom {plan.Zoom:0.000} offset {plan.Offset} size {plan.contentRect.size}");
             ScreenCapture.CaptureScreenshot(Arg("-spShot"));
             yield return new WaitForSecondsRealtime(2);
             Application.Quit(0);

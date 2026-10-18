@@ -17,8 +17,9 @@ namespace SpongePark
         Label landingStatus, engineChip;
         JToken intake;
         readonly Dictionary<string, string> links = new Dictionary<string, string>();   // layer -> SP name ("" = not needed)
-        readonly Dictionary<string, Texture2D> previews = new Dictionary<string, Texture2D>();
-        Image focusImage;
+        PlanView plan;
+        VisualElement intakePanel;
+        Button panelOpen;
         Label focusCaption, answeredLabel, intakeStatus;
         Button buildButton;
         string intakeProjectPath = "", intakeArea = "";
@@ -369,18 +370,43 @@ namespace SpongePark
             intakeView.AddToClassList("intake");
             doc.rootVisualElement.Insert(doc.rootVisualElement.IndexOf(mainApp), intakeView);
 
+            // the plan fills the screen; the questions sit in a panel on the left that slides away
+            plan = new PlanView();
+            plan.Clicked += () => SetPanel(false);
+            intakeView.Add(plan);
+            focusCaption = Text("The whole drawing · loading the linework…", "plan-caption");
+            intakeView.Add(focusCaption);
+            var tools = new VisualElement();
+            tools.AddToClassList("plan-tools");
+            var zin = Btn("+", () => plan.ZoomBy(1.4f), "plan-btn");
+            zin.tooltip = "Zoom in (or scroll)";
+            var zout = Btn("−", () => plan.ZoomBy(1 / 1.4f), "plan-btn");
+            zout.tooltip = "Zoom out (or scroll)";
+            var fit = Btn("Fit", () => plan.ZoomExtents(), "plan-btn plan-btn--fit");
+            fit.tooltip = "Zoom to the whole plan";
+            tools.Add(zin);
+            tools.Add(zout);
+            tools.Add(fit);
+            intakeView.Add(tools);
+            intakeView.Add(Text("Scroll to zoom · drag to move · click the plan to hide the questions", "plan-hint"));
+            panelOpen = Btn("Questions ›", () => SetPanel(true), "plan-open");
+            intakeView.Add(panelOpen);
+
+            intakePanel = new VisualElement();
+            intakePanel.AddToClassList("intake-panel");
+            intakeView.Add(intakePanel);
             var left = new ScrollView { horizontalScrollerVisibility = ScrollerVisibility.Hidden };
-            left.AddToClassList("intake-left");
-            intakeView.Add(left);
-            var right = new VisualElement();
-            right.AddToClassList("intake-right");
-            intakeView.Add(right);
+            left.AddToClassList("intake-scroll");
+            intakePanel.Add(left);
 
             var layers = intake["layers"].ToList();
             var questions = layers.Where(l => l["question"] != null && l["question"].Type != JTokenType.Null).ToList();
             var linked = layers.Where(l => l["question"] == null || l["question"].Type == JTokenType.Null).ToList();
 
-            left.Add(Btn("← Back", () => { intakeView.style.display = DisplayStyle.None; landing.style.display = DisplayStyle.Flex; }, "btn--ghost btn--back"));
+            var top = Row("panel-top");
+            top.Add(Btn("← Back", () => { intakeView.style.display = DisplayStyle.None; landing.style.display = DisplayStyle.Flex; }, "btn--ghost btn--back"));
+            top.Add(Btn("‹ Hide", () => SetPanel(false), "btn--ghost btn--back"));
+            left.Add(top);
             left.Add(Text("SURVEY INTAKE", "eyebrow"));
             left.Add(Text((string)intake["name"], "page-title"));
             left.Add(Text($"The engine read {layers.Count} layers. It linked {linked.Count} of them on its own" +
@@ -394,29 +420,16 @@ namespace SpongePark
                 answeredLabel = Text("", "badge");
                 qh.Add(answeredLabel);
                 left.Add(qh);
-                var grid = Row("q-grid");
                 int i = 0;
-                foreach (var q in questions) grid.Add(QuestionCard(q, i++));
-                left.Add(grid);
+                foreach (var q in questions) left.Add(QuestionCard(q, i++));
             }
 
             left.Add(Text("Linked by the engine", "h2"));
-            left.Add(Text("Point at a layer to see it in the drawing on the right. Change any link that is wrong.", "muted"));
+            left.Add(Text("Point at a layer to see it in clay on the plan; Show zooms to it. Change any link that is wrong.", "muted"));
             var listBox = new VisualElement();
             listBox.AddToClassList("link-list");
             foreach (var l in linked) listBox.Add(LinkRow(l));
             left.Add(listBox);
-
-            // right: the drawing with the focused layer, and the finish card
-            var fig = new VisualElement();
-            fig.AddToClassList("figure");
-            focusImage = new Image { scaleMode = ScaleMode.ScaleToFit };
-            focusImage.AddToClassList("figure-image");
-            fig.Add(focusImage);
-            right.Add(fig);
-            focusCaption = Text("The whole drawing", "muted", "caption");
-            right.Add(focusCaption);
-            StartCoroutine(Focus(null));
 
             var fin = Card("card--sand");
             fin.Add(Text("DONE", "eyebrow"));
@@ -431,8 +444,35 @@ namespace SpongePark
             fin.Add(buildButton);
             intakeStatus = Text("", "muted");
             fin.Add(intakeStatus);
-            right.Add(fin);
+            left.Add(fin);
+            SetPanel(true);
             UpdateIntakeState();
+            focused = "\u0000";
+            StartCoroutine(LoadPlan());
+        }
+
+        const float PanelWidth = 500;   // .intake-panel width plus its left margin
+
+        void SetPanel(bool open)
+        {
+            intakePanel.EnableInClassList("intake-panel--closed", !open);
+            panelOpen.style.display = open ? DisplayStyle.None : DisplayStyle.Flex;
+            plan.LeftInset = open ? PanelWidth : 0;
+        }
+
+        IEnumerator LoadPlan()
+        {
+            JToken geo = null;
+            yield return api.Get("/intake/geometry?path=" + UnityEngine.Networking.UnityWebRequest.EscapeURL((string)intake["survey"]), x => geo = x, 300);
+            if (geo == null)
+            {
+                focusCaption.text = api.LastError.Contains("404")
+                    ? "The running engine is older than this app: restart spongepark serve to see the plan."
+                    : "Could not draw the plan: " + api.LastError;
+                yield break;
+            }
+            plan.SetGeometry(geo);
+            focusCaption.text = "The whole drawing";
         }
 
         VisualElement QuestionCard(JToken q, int index)
@@ -441,12 +481,15 @@ namespace SpongePark
             var question = q["question"];
             var card = Card(index % 2 == 0 ? null : "card--alt");
             card.AddToClassList("q-card");
-            var img = new Image { scaleMode = ScaleMode.ScaleToFit };
-            img.AddToClassList("q-image");
-            card.Add(img);
-            StartCoroutine(LoadPreview(layer, t => img.image = t));
-            card.Add(Text("LAYER · HIGHLIGHTED IN CLAY", "eyebrow"));
-            card.Add(Text(layer, "mono"));
+            var head = Row("q-card-head");
+            var nm = new VisualElement();
+            nm.style.flexGrow = 1;
+            nm.style.flexShrink = 1;
+            nm.Add(Text("LAYER · HIGHLIGHTED IN CLAY", "eyebrow"));
+            nm.Add(Text(layer, "mono"));
+            head.Add(nm);
+            head.Add(ShowButton(layer));
+            card.Add(head);
             card.Add(Text(Contents(q), "muted"));
             card.Add(Text((string)question["ask"], "q-ask"));
 
@@ -466,6 +509,8 @@ namespace SpongePark
                 card.EnableInClassList("q-card--done", true);
                 if (dd != null && quick.Any(x => x.name == name)) dd.SetValueWithoutNotify("Something else…");
                 UpdateIntakeState();
+                focused = "\u0000";
+                Focus(layer);
             }
             foreach (var (name, title) in quick)
             {
@@ -485,7 +530,7 @@ namespace SpongePark
                 if (c != null) Pick((string)c["name"]);
             });
             card.Add(dd);
-            card.RegisterCallback<PointerEnterEvent>(_ => StartCoroutine(Focus(layer)));
+            card.RegisterCallback<PointerEnterEvent>(_ => Focus(layer));
             return card;
         }
 
@@ -500,6 +545,7 @@ namespace SpongePark
             names.Add(Text(layer, "mono"));
             names.Add(Text(Contents(l), "muted"));
             row.Add(names);
+            row.Add(ShowButton(layer));
             var titles = Choices.Select(c => (string)c["title"]).ToList();
             var dd = new DropdownField(titles, Mathf.Max(0, titles.IndexOf(TitleOf(links[layer]))));
             dd.AddToClassList("input");
@@ -507,36 +553,29 @@ namespace SpongePark
             dd.RegisterValueChangedCallback(e =>
             {
                 var c = Choices.FirstOrDefault(x => (string)x["title"] == e.newValue);
-                if (c != null) { links[layer] = (string)c["name"]; UpdateIntakeState(); StartCoroutine(Focus(layer)); }
+                if (c != null) { links[layer] = (string)c["name"]; UpdateIntakeState(); focused = "\u0000"; Focus(layer); }
             });
             row.Add(dd);
-            row.RegisterCallback<PointerEnterEvent>(_ => StartCoroutine(Focus(layer)));
+            row.RegisterCallback<PointerEnterEvent>(_ => Focus(layer));
             return row;
         }
 
         string focused = "\u0000";
 
-        IEnumerator Focus(string layer)
+        Button ShowButton(string layer)
         {
-            if (layer == focused) yield break;
-            focused = layer;
-            focusCaption.text = layer == null ? "The whole drawing" : $"Highlighted: {layer}  →  {(links.TryGetValue(layer, out var n) ? TitleOf(n) : "not answered yet")}";
-            yield return LoadPreview(layer, t => { if (focused == layer) focusImage.image = t; });
+            var b = Btn("Show", () => { Focus(layer); plan.ZoomToLayer(layer); }, "btn--ghost btn--show");
+            b.tooltip = "Zoom the plan to this layer";
+            return b;
         }
 
-        IEnumerator LoadPreview(string layer, System.Action<Texture2D> done)
+        /// Highlights a layer on the plan (null: none) and names it in the caption.
+        void Focus(string layer)
         {
-            var key = layer ?? "";
-            if (previews.TryGetValue(key, out var cached)) { done(cached); yield break; }
-            byte[] bytes = null;
-            var q = "/intake/preview?path=" + UnityEngine.Networking.UnityWebRequest.EscapeURL((string)intake["survey"]) +
-                    (layer == null ? "" : "&layer=" + UnityEngine.Networking.UnityWebRequest.EscapeURL(layer));
-            yield return api.GetBytes(q, b => bytes = b);
-            if (bytes == null) yield break;
-            var tex = new Texture2D(2, 2);
-            tex.LoadImage(bytes);
-            previews[key] = tex;
-            done(tex);
+            if (layer == focused) return;
+            focused = layer;
+            focusCaption.text = layer == null ? "The whole drawing" : $"Highlighted: {layer}  →  {(links.TryGetValue(layer, out var n) ? TitleOf(n) : "not answered yet")}";
+            plan.Highlight(layer);
         }
 
         void UpdateIntakeState()

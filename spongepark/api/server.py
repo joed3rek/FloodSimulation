@@ -88,7 +88,7 @@ class OpenRequest(BaseModel):
 @app.get("/health")
 def health() -> Dict[str, Any]:
     # features let a client tell an engine started before an update from a current one
-    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d"],
+    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan"],
             "open_projects": list(_projects)}
 
 
@@ -497,6 +497,17 @@ def intake_start(path: str = Body(..., embed=True)) -> Dict[str, Any]:
     try:
         return intake.start(Path(path))
     except CadError as ex:
+        raise HTTPException(400, str(ex))
+
+
+@app.get("/intake/geometry")
+def intake_geometry(path: str) -> Dict[str, Any]:
+    """The drawing's linework per layer, for the zoomable plan in the intake screen."""
+    from spongepark.engine.io import intake
+
+    try:
+        return intake.geometry(Path(path))
+    except (OSError, ValueError) as ex:
         raise HTTPException(400, str(ex))
 
 

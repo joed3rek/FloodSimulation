@@ -210,9 +210,35 @@ Label, Button, TextField, .unity-base-text-field__input, .unity-text-element { -
 .file-item--file { color: var(--primary); -unity-font: resource("UI/Fonts/Nunito-Bold"); }
 
 /* ================= intake (light) ================= */
-.intake { position: absolute; left: 0; top: 0; right: 0; bottom: 0; flex-direction: row; background-color: var(--background); }
-.intake-left { flex-grow: 1; flex-basis: 0; padding: 30px 30px 30px 60px; }
-.intake-right { width: 40%; padding: 30px 50px 30px 10px; }
+.intake { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: var(--background); }
+/* the plan fills the screen; the questions panel floats over its left side and slides away */
+.plan { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: var(--background); }
+.intake-panel {
+    position: absolute; left: 16px; top: 16px; bottom: 16px; width: 484px;
+    background-color: rgba(254, 254, 250, 0.96); border-width: 1px; border-color: rgba(222, 216, 207, 0.8);
+    border-radius: 32px; border-bottom-left-radius: 64px;
+    transition-property: translate, opacity; transition-duration: 0.25s, 0.25s; transition-timing-function: ease-out-cubic, ease-out-cubic;
+}
+.intake-panel--closed { translate: -110% 0; opacity: 0; }
+.intake-scroll { flex-grow: 1; padding: 22px 26px 22px 30px; }
+.panel-top { justify-content: space-between; }
+.plan-caption {
+    position: absolute; top: 22px; right: 24px; padding: 8px 16px; border-radius: 18px;
+    background-color: rgba(254, 254, 250, 0.92); border-width: 1px; border-color: var(--border);
+    color: var(--accent-foreground); font-size: 13px; -unity-font: resource("UI/Fonts/Nunito-Bold");
+}
+.plan-tools { position: absolute; right: 24px; bottom: 24px; align-items: flex-end; }
+.btn.plan-btn {
+    width: 46px; height: 46px; min-width: 46px; margin: 8px 0 0 0; padding: 0; border-radius: 23px;
+    background-color: var(--card); border-width: 1px; border-color: var(--border); color: var(--foreground);
+    font-size: 22px; -unity-text-align: middle-center;
+}
+.btn.plan-btn:hover { background-color: var(--accent); }
+.btn.plan-btn--fit { width: auto; padding: 0 18px; font-size: 13px; -unity-font: resource("UI/Fonts/Nunito-Bold"); }
+.plan-hint { position: absolute; right: 96px; bottom: 36px; color: var(--muted-foreground); font-size: 12px; }
+.btn.plan-open { position: absolute; left: 24px; top: 22px; }
+.q-card-head { align-items: flex-start; }
+.btn.btn--show { height: 30px; padding: 0 12px; font-size: 12px; margin-left: 8px; flex-shrink: 0; }
 .page-title { font-size: 40px; -unity-font: resource("UI/Fonts/Fraunces-SemiBold"); white-space: normal; margin: 2px 0 8px 0; }
 .lead { font-size: 15px; color: var(--muted-foreground); white-space: normal; margin-bottom: 26px; }
 .q-head { justify-content: space-between; align-items: center; margin-top: 4px; }
@@ -221,7 +247,7 @@ Label, Button, TextField, .unity-base-text-field__input, .unity-text-element { -
     font-size: 12px; -unity-font: resource("UI/Fonts/Nunito-Bold");
 }
 .q-grid { align-items: flex-start; margin-bottom: 24px; }
-.q-card { width: 47%; margin-right: 3%; padding: 16px; }
+.q-card { padding: 16px; margin-bottom: 12px; }
 .card--alt { border-top-left-radius: 24px; border-bottom-right-radius: 48px; }
 .q-card--done { border-color: var(--primary); border-width: 2px; }
 .q-image {
@@ -236,7 +262,7 @@ Label, Button, TextField, .unity-base-text-field__input, .unity-text-element { -
 }
 .link-row { flex-direction: row; align-items: center; padding: 6px 16px; border-bottom-width: 1px; border-color: rgba(222, 216, 207, 0.5); }
 .link-row:hover { background-color: rgba(230, 220, 205, 0.35); }
-.link-dropdown { width: 240px; flex-shrink: 0; }
+.link-dropdown { width: 190px; flex-shrink: 0; }
 .input .unity-base-popup-field__input, .input .unity-popup-field__input {
     height: 34px; border-radius: 17px; border-width: 1px; border-color: var(--border); background-color: rgba(255, 255, 255, 0.7);
     padding: 0 14px; color: var(--foreground); font-size: 13px;

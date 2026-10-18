@@ -37,6 +37,21 @@ def test_preview_is_a_png(drawing):
     assert png[:8] == b"\x89PNG\r\n\x1a\n" and len(png) > 2000
 
 
+def test_geometry_gives_linework_per_layer_for_the_plan(drawing):
+    g = intake.geometry(drawing)
+    w, h = g["extent"]
+    assert w > 0 and h > 0
+    assert "BE-LEVEL" in g["layers"]
+    for layer in g["layers"].values():
+        for line in layer["lines"]:
+            assert len(line) >= 4 and len(line) % 2 == 0
+        assert len(layer["points"]) % 2 == 0
+    # coordinates are relative to the extent's lower-left, so most of the drawing sits inside it
+    xs = [v for L in g["layers"].values() for line in L["lines"] for v in line[0::2]]
+    inside = sum(-0.05 * w <= x <= 1.05 * w for x in xs) / len(xs)
+    assert inside > 0.9
+
+
 def test_finish_cleans_the_drawing_and_builds_the_ground(drawing, tmp_path):
     r = intake.start(drawing)
     links = {l["layer"]: l["proposed"] for l in r["layers"]}
