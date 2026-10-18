@@ -565,11 +565,16 @@ def screen(parks_json: Path, rainfall_csv: Path, out: Optional[Path] = None) -> 
 # ------------------------------------------------------------------ options
 @option_app.command("import")
 def option_import(path: Path, option_id: str, geojson: Path, source_crs: Optional[str] = None) -> None:
+    """Load NbS elements into a scenario: a GeoJSON FeatureCollection, or element records
+    (an elements.json file, or a JSON list of records as in brief section 8.3)."""
     with _open(path) as p:
-        from spongepark.engine.nbs.components import save_elements_fc
+        from spongepark.engine.nbs.components import read_elements, save_elements_fc, to_feature_collection
         from spongepark.engine.project.crs import ensure_project_crs
 
-        fc = ensure_project_crs(json.loads(geojson.read_text(encoding="utf-8")), p.manifest.crs, source_crs)
+        data = json.loads(geojson.read_text(encoding="utf-8"))
+        if not (isinstance(data, dict) and data.get("type") == "FeatureCollection"):
+            data = to_feature_collection(read_elements(data))
+        fc = ensure_project_crs(data, p.manifest.crs, source_crs)
         save_elements_fc(p, option_id, fc)
         p.history.log("option_import", option=option_id, file=geojson.name)
         p.save()

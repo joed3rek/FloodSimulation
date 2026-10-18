@@ -172,9 +172,19 @@ def run_option(
             "hydrograph": peak_and_time(res.timeseries),
             "peak_outfall_inflow_cms": res.peak_outfall_inflow_cms,
             "elements": element_summary(spec, res, threshold),
+            "timing": overflow_timing(spec, res),
+            "flooded_locations": flooded_locations(spec, res, elements),
             "flags": flags,
             "rpt": str((Path("swmm") / f"rp{rp}.rpt").as_posix()),
         }
+    # verified results per return period on each element (brief 8.3), written back to elements.json
+    by_id = {e.id: e for e in elements}
+    for rp_key, r in per_rp.items():
+        for row in r["elements"]:
+            el = by_id.get(row["id"])
+            if el is not None:
+                el.results[rp_key] = {k: v for k, v in row.items() if k not in ("id", "type") and v is not None}
+    save_elements(project, option_id, elements)
     site_area = site.site_area_m2
     nbs_area = sum(e.area_m2 or 0.0 for e in elements)
     summary = {
@@ -195,6 +205,29 @@ def run_option(
     project.write_json(f"scenarios/{option_id}/results/summary.json", to_jsonable(summary))
     project.history.log("run_option", option=option_id, rps=rps, flags=sum(len(v["flags"]) for v in per_rp.values()))
     return summary
+
+
+def overflow_timing(spec, res) -> Dict[str, Any]:
+    """When water first leaves the site, and when uncontrolled overflow (weirs, flooding) starts (hr)."""
+    from .metrics.water_balance import first_time_above
+
+    ts = res.timeseries
+    starts = [t for eid in spec.elements for t in (first_time_above(ts, f"overflow_{eid}_cms"),
+                                                   first_time_above(ts, f"flooding_{eid}_cms")) if t is not None]
+    return {"first_outflow_hr": first_time_above(ts, "outflow_total_cms"),
+            "uncontrolled_overflow_start_hr": min(starts) if starts else None}
+
+
+def flooded_locations(spec, res, elements: List[NbSElement]) -> List[Dict[str, Any]]:
+    """Storage elements that flooded (water above the node's capacity), with where they are."""
+    out = []
+    by_id = {e.id: e for e in elements}
+    for eid, vol in sorted(res.node_flooding_m3.items()):
+        if vol > 1e-3:
+            c = by_id[eid].footprint().centroid if eid in by_id else None
+            out.append({"element": eid, "volume_m3": float(vol),
+                        "x": float(c.x) if c is not None else None, "y": float(c.y) if c is not None else None})
+    return out
 
 
 def compare(project: Project, option_id: str, baseline_id: str = BASELINE) -> Dict[str, Any]:

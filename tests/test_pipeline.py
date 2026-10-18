@@ -62,3 +62,54 @@ def test_site_area_reconciles(example):
     els = read_elements(elements_fc(p, "manual"))
     spec = build_spec(site, els, p.parameters, "manual")
     assert spec.area_m2(("site", "lid", "direct")) == pytest.approx(site.site_area_m2, rel=1e-3)
+
+
+def test_verified_results_are_stored_on_each_element(example):
+    """Brief 8.3: every element carries its verified (SWMM) results per return period."""
+    from spongepark.engine.project.jsonschema import validate_package
+
+    p, *_ = example
+    els = p.read_json("scenarios/manual/elements.json")["elements"]
+    assert els
+    for e in els:
+        assert sorted(map(int, e["results"])) == [1, 2, 5, 10, 25, 50, 100], e["id"]
+        assert "inflow_m3" in e["results"]["10"]
+    assert {k: v for k, v in validate_package(p.root).items() if v} == {}
+
+
+def test_overflow_timing_and_flooded_locations(example):
+    _, _, opt, _ = example
+    for rp, r in opt["return_periods"].items():
+        t = r["timing"]
+        assert t["first_outflow_hr"] is None or t["first_outflow_hr"] >= 0
+        if t["uncontrolled_overflow_start_hr"] is not None and t["first_outflow_hr"] is not None:
+            assert t["uncontrolled_overflow_start_hr"] >= t["first_outflow_hr"] - 1e-9, rp
+        for e in r["elements"]:
+            if (e.get("overflow_m3") or 0) > 1e-3:
+                assert e["overflow_start_hr"] is not None and e["overflow_peak_cms"] > 0, (rp, e["id"])
+        for f in r["flooded_locations"]:
+            assert f["volume_m3"] > 0 and f["x"] is not None
+
+
+def test_manual_elements_from_json_records(tmp_path):
+    """Manual NbS from JSON: element records (brief 8.3) load through the CLI like GeoJSON does."""
+    import json
+
+    from typer.testing import CliRunner
+
+    from spongepark.cli.main import app
+    from spongepark.engine.nbs.components import load_elements
+
+    from .sponge_case import ELEMENTS
+
+    path = tmp_path / "m.sponge"
+    Project.create(path, "manual").close()
+    src = tmp_path / "elements.json"
+    src.write_text(json.dumps({"schema_version": "1.1", "elements": ELEMENTS}), encoding="utf-8")
+    r = CliRunner().invoke(app, ["option", "import", str(path), "designer", str(src)])
+    assert r.exit_code == 0, r.output
+    with Project.open(path) as p:
+        els = {e.id: e for e in load_elements(p, "designer")}
+        assert set(els) == {"RG1", "SW1", "DP1", "RW1"}
+        assert els["DP1"].safety_bench_width_m == 1.5 and els["RG1"].outlet_diameter_m == 0.05
+        assert els["RW1"].extra["record"]["future_field"] == {"kept": [1, 2, 3]}

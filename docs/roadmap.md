@@ -7,7 +7,7 @@ reports) is already in the engine and is reused by the later phases.
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Foundations: shared JSON Schema, `.sponge` read and write in C# and Python, engine CLI, synthetic terrains | done: Python to Unity to Python round trip without loss |
-| 1 | Engine core: rainfall and hyetographs, manual NbS from JSON, SWMM builder and runner, water balance, metrics | in progress |
+| 1 | Engine core: rainfall and hyetographs, manual NbS from JSON, SWMM builder and runner, water balance, metrics | done: seven return periods on the synthetic site, continuity below 1 %, matches the hand-built model |
 | 2 | Unity shell and terrain | |
 | 3 | GPU flood simulation | first version exists (WaterSim.compute, checked against the engine) |
 | 4 | Survey import and baseline in the app | survey intake screen exists (DXF) |

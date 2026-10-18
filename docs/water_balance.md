@@ -27,6 +27,12 @@ errors are reported, and any run above 1 % is flagged (`swmm.continuity_error_li
 | Drawdown (design) | ponding depth / limiting infiltration rate (simple estimate) |
 | Largest storm fully retained | largest return period (with all smaller ones) whose outflow plus flooding is at most `nbs.retention_overflow_tolerance_fraction` of rainfall |
 | Largest storm with no uncontrolled overflow | same, counting only direct runoff, spillway overflow and flooding (controlled release allowed) |
+| Overflow timing | per storage element: when its spillway first flows (`overflow_start_hr`) and its peak; for the site: when water first leaves (`first_outflow_hr`) and when uncontrolled overflow or flooding starts (`uncontrolled_overflow_start_hr`), hours from the start of the storm |
+| Flooded locations | storage elements whose water rose above their capacity, with the volume and the element's position; the spread over the ground comes from the 2D model |
+
+Each element's verified results for every return period are also written into its record in
+`scenarios/<id>/elements.json` (`results`, keyed by return period), so the Unity app can show
+them on the element.
 
 The two retention definitions differ when a layout has a detention orifice, which releases water
 in every storm. Which one is reported as the headline is a design decision (see roadmap).

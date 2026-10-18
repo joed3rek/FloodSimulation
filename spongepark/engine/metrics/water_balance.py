@@ -113,6 +113,14 @@ def simulated_drawdown_hr(ts: pd.DataFrame, depth_col: str, base_depth_m: float,
     return float(t[i + after[0]] - t[i])
 
 
+def first_time_above(ts: pd.DataFrame, col: str, threshold: float = 1e-5) -> Optional[float]:
+    """First time (hr from storm start) a series exceeds ``threshold``; None if it never does."""
+    if col not in ts:
+        return None
+    above = np.nonzero(ts[col].to_numpy() > threshold)[0]
+    return float(ts["time_hr"].to_numpy()[above[0]]) if above.size else None
+
+
 def element_summary(spec: ModelSpec, res: RunResult, threshold_m: float) -> List[Dict[str, Any]]:
     ts = res.timeseries
     out = []
@@ -139,6 +147,9 @@ def element_summary(spec: ModelSpec, res: RunResult, threshold_m: float) -> List
                 pct_full=100.0 * float(st["max_depth"]) / em.crest_depth_m if em.crest_depth_m else None,
                 flooding_m3=res.node_flooding_m3[eid],
                 drawdown_hr=simulated_drawdown_hr(ts, dcol, em.pool_depth_m, threshold_m),
+                overflow_start_hr=first_time_above(ts, f"overflow_{eid}_cms"),
+                overflow_peak_cms=float(ts[f"overflow_{eid}_cms"].max()) if f"overflow_{eid}_cms" in ts else None,
+                flooding_start_hr=first_time_above(ts, f"flooding_{eid}_cms"),
             )
         row["analytic_drawdown_hr"] = e.drawdown_time_hr
         out.append(row)
