@@ -261,6 +261,42 @@ def put_components(pid: str, oid: str, fc: Dict[str, Any] = Body(...), rerun: bo
     return _job(pid, f"edit {oid}", fn, wait)
 
 
+# ------------------------------------------------------------------ design tools (designer-placed elements)
+class DesignEdit(BaseModel):
+    features: Dict[str, Any]                 # the scenario's elements as drawn (GeoJSON FeatureCollection)
+    action: Optional[str] = None             # create | edit | move | resize | delete ... (edit log)
+    element_id: Optional[str] = None
+    before: Optional[Dict[str, Any]] = None
+    after: Optional[Dict[str, Any]] = None
+
+
+@app.get("/projects/{pid}/design/tools")
+def design_tools(pid: str) -> Dict[str, Any]:
+    from spongepark.engine.design.edit import defaults
+
+    return defaults(_project(pid))
+
+
+@app.get("/projects/{pid}/design/{sid}")
+def design_get(pid: str, sid: str) -> Dict[str, Any]:
+    from spongepark.engine.design.edit import current
+
+    return current(_project(pid), sid)
+
+
+@app.put("/projects/{pid}/design/{sid}")
+def design_put(pid: str, sid: str, body: DesignEdit, wait: bool = False) -> Dict[str, Any]:
+    """Save the elements as drawn, carve them into the ground and check them (no SWMM)."""
+    from spongepark.engine.design.edit import apply
+
+    def fn(p: Project):
+        out = apply(p, sid, body.features, body.action, body.element_id, body.before, body.after)
+        p.save()   # every design edit is kept, even if the app closes
+        return out
+
+    return _job(pid, f"design {sid}", fn, wait)
+
+
 @app.get("/projects/{pid}/options/{oid}/summary")
 def summary(pid: str, oid: str) -> Dict[str, Any]:
     return _project(pid).read_json(f"scenarios/{oid}/results/summary.json")

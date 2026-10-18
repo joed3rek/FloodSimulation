@@ -28,6 +28,8 @@ def terrain_payload(project: Project, option: Optional[str] = None, max_cells: i
     """Height grid for viewers. With ``extend``, widened over the survey layers' extent (display only);
     "surveyed" (uint8, 1 = surveyed) then marks the ground the survey levels actually cover."""
     rel = f"scenarios/{option}/terrain/graded.tif" if option and option != "baseline" else "terrain/existing.tif"
+    if not project.exists(rel):   # a scenario with nothing carved yet stands on the existing ground
+        rel = "terrain/existing.tif"
     d = read_geotiff(project.path(rel))
     surveyed = None
     if extend and project.exists("site/survey_layers.json"):
