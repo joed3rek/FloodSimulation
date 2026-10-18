@@ -1,0 +1,1087 @@
+{
+  "$defs": {
+    "Connections": {
+      "additionalProperties": true,
+      "properties": {
+        "inflow_from": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Inflow From",
+          "type": "array"
+        },
+        "outflow_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outflow To"
+        },
+        "overflow_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Overflow To"
+        }
+      },
+      "title": "Connections",
+      "type": "object"
+    },
+    "EditLog": {
+      "additionalProperties": true,
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/EditLogEntry"
+          },
+          "title": "Entries",
+          "type": "array"
+        }
+      },
+      "title": "EditLog",
+      "type": "object"
+    },
+    "EditLogEntry": {
+      "additionalProperties": true,
+      "description": "A designer decision about a proposal (training data for learning from designers).",
+      "properties": {
+        "action": {
+          "enum": [
+            "accept",
+            "accept_and_edit",
+            "reject",
+            "create",
+            "edit",
+            "move",
+            "resize",
+            "delete",
+            "lock",
+            "unlock"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Before"
+        },
+        "element_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Element Id"
+        },
+        "proposal_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proposal Id"
+        },
+        "scenario": {
+          "title": "Scenario",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scenario",
+        "action"
+      ],
+      "title": "EditLogEntry",
+      "type": "object"
+    },
+    "ElementParameters": {
+      "additionalProperties": true,
+      "description": "Design parameters of an element (metres, mm/hr, H:V). Absent = taken from project parameters.",
+      "properties": {
+        "check_dam_spacing_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Check Dam Spacing M"
+        },
+        "dam_height_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dam Height M"
+        },
+        "depth_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Depth M"
+        },
+        "diameter_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Diameter M"
+        },
+        "freeboard_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freeboard M"
+        },
+        "invert_elev_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Invert Elev M"
+        },
+        "longitudinal_slope_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Longitudinal Slope Pct"
+        },
+        "manning_n": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manning N"
+        },
+        "outlet": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Outlet"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "overflow_weir_length_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Overflow Weir Length M"
+        },
+        "permanent_pool_depth_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Permanent Pool Depth M"
+        },
+        "safety_bench_width_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Safety Bench Width M"
+        },
+        "seepage_rate_mm_hr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seepage Rate Mm Hr"
+        },
+        "side_slope_h_v": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Side Slope H V"
+        },
+        "soil_media_depth_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Soil Media Depth M"
+        },
+        "storage_layer_depth_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage Layer Depth M"
+        },
+        "vegetation_volume_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vegetation Volume Fraction"
+        },
+        "well_depth_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Well Depth M"
+        },
+        "width_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width M"
+        }
+      },
+      "title": "ElementParameters",
+      "type": "object"
+    },
+    "ElementRecord": {
+      "additionalProperties": true,
+      "description": "One NbS element (brief section 8.3).",
+      "properties": {
+        "area_m2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Area M2"
+        },
+        "connections": {
+          "$ref": "#/$defs/Connections"
+        },
+        "contributing_area_m2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Contributing Area M2"
+        },
+        "drawdown_time_hr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Drawdown Time Hr"
+        },
+        "geometry": {
+          "$ref": "#/$defs/Geometry"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "infiltration_rate_mm_hr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Infiltration Rate Mm Hr"
+        },
+        "locked": {
+          "default": false,
+          "title": "Locked",
+          "type": "boolean"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        },
+        "param_sources": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Param Sources",
+          "type": "object"
+        },
+        "parameters": {
+          "$ref": "#/$defs/ElementParameters"
+        },
+        "results": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Results",
+          "type": "object"
+        },
+        "soil_zone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Soil Zone"
+        },
+        "source": {
+          "default": "proposal",
+          "enum": [
+            "proposal",
+            "designer"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "storage_volume_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage Volume M3"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "geometry"
+      ],
+      "title": "ElementRecord",
+      "type": "object"
+    },
+    "ElementsFile": {
+      "additionalProperties": true,
+      "description": "scenarios/<id>/elements.json",
+      "properties": {
+        "elements": {
+          "items": {
+            "$ref": "#/$defs/ElementRecord"
+          },
+          "title": "Elements",
+          "type": "array"
+        },
+        "schema_version": {
+          "default": "1.1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "ElementsFile",
+      "type": "object"
+    },
+    "Geometry": {
+      "additionalProperties": true,
+      "description": "GeoJSON geometry in project metres: Point (well), LineString (spline: swale, edge), Polygon (basins).",
+      "properties": {
+        "coordinates": {
+          "title": "Coordinates"
+        },
+        "type": {
+          "enum": [
+            "Point",
+            "LineString",
+            "Polygon",
+            "MultiPolygon"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "coordinates"
+      ],
+      "title": "Geometry",
+      "type": "object"
+    },
+    "History": {
+      "additionalProperties": true,
+      "description": "history.json: run and change log.",
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/HistoryEntry"
+          },
+          "title": "Entries",
+          "type": "array"
+        }
+      },
+      "title": "History",
+      "type": "object"
+    },
+    "HistoryEntry": {
+      "additionalProperties": true,
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "detail": {
+          "additionalProperties": true,
+          "title": "Detail",
+          "type": "object"
+        },
+        "engine_version": {
+          "default": "0.1.0",
+          "title": "Engine Version",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "title": "HistoryEntry",
+      "type": "object"
+    },
+    "Locks": {
+      "additionalProperties": true,
+      "description": "locks.json: element ids locked by the designer, per scenario (mirrors each element's ``locked``).",
+      "properties": {
+        "locked": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Locked",
+          "type": "object"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "title": "Locks",
+      "type": "object"
+    },
+    "Manifest": {
+      "additionalProperties": true,
+      "description": "manifest.json: what the project is and which versions wrote it.",
+      "properties": {
+        "app_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "App Version"
+        },
+        "calibration_status": {
+          "default": "uncalibrated",
+          "title": "Calibration Status",
+          "type": "string"
+        },
+        "city": {
+          "default": "Bengaluru",
+          "title": "City",
+          "type": "string"
+        },
+        "created": {
+          "title": "Created",
+          "type": "string"
+        },
+        "crs": {
+          "default": "EPSG:32643",
+          "title": "Crs",
+          "type": "string"
+        },
+        "engine_version": {
+          "default": "0.1.0",
+          "title": "Engine Version",
+          "type": "string"
+        },
+        "modified": {
+          "title": "Modified",
+          "type": "string"
+        },
+        "project_name": {
+          "title": "Project Name",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "units": {
+          "$ref": "#/$defs/Units"
+        }
+      },
+      "required": [
+        "project_name"
+      ],
+      "title": "Manifest",
+      "type": "object"
+    },
+    "Outlet": {
+      "additionalProperties": true,
+      "properties": {
+        "coefficient": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Coefficient"
+        },
+        "diameter_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Diameter M"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "enum": [
+                "orifice",
+                "weir",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "weir_length_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Weir Length M"
+        }
+      },
+      "title": "Outlet",
+      "type": "object"
+    },
+    "ParameterRecord": {
+      "additionalProperties": true,
+      "description": "One entry of parameters.json (keyed by parameter name).",
+      "properties": {
+        "confirmed": {
+          "default": false,
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "note": {
+          "default": "",
+          "title": "Note",
+          "type": "string"
+        },
+        "source": {
+          "default": "default",
+          "enum": [
+            "default",
+            "site measured",
+            "literature",
+            "designer"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "unit": {
+          "default": "-",
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "title": "ParameterRecord",
+      "type": "object"
+    },
+    "Proposal": {
+      "additionalProperties": true,
+      "description": "proposals/<id>.json: an optimiser proposal kept for comparison (elements plus verified summary).",
+      "properties": {
+        "created": {
+          "title": "Created",
+          "type": "string"
+        },
+        "elements": {
+          "items": {
+            "$ref": "#/$defs/ElementRecord"
+          },
+          "title": "Elements",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "metrics": {
+          "additionalProperties": true,
+          "title": "Metrics",
+          "type": "object"
+        },
+        "mode": {
+          "default": "forward",
+          "title": "Mode",
+          "type": "string"
+        },
+        "settings": {
+          "additionalProperties": true,
+          "title": "Settings",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Proposal",
+      "type": "object"
+    },
+    "Scenario": {
+      "additionalProperties": true,
+      "description": "scenarios/<id>/scenario.json",
+      "properties": {
+        "based_on": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Based On"
+        },
+        "created": {
+          "title": "Created",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "note": {
+          "default": "",
+          "title": "Note",
+          "type": "string"
+        },
+        "status": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "proposal",
+            "accepted",
+            "baseline"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Scenario",
+      "type": "object"
+    },
+    "TerrainEdit": {
+      "additionalProperties": true,
+      "description": "A terrain shaping operation; the working terrain = existing ground + edits + NbS carving.",
+      "properties": {
+        "created": {
+          "title": "Created",
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/$defs/Geometry"
+        },
+        "height_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height M"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "raise",
+            "lower",
+            "smooth",
+            "flatten",
+            "berm",
+            "check_dam"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "radius_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Radius M"
+        },
+        "scenario": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scenario"
+        },
+        "strength_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Strength M"
+        },
+        "target_level_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Level M"
+        },
+        "width_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width M"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "geometry"
+      ],
+      "title": "TerrainEdit",
+      "type": "object"
+    },
+    "TerrainEdits": {
+      "additionalProperties": true,
+      "properties": {
+        "edits": {
+          "items": {
+            "$ref": "#/$defs/TerrainEdit"
+          },
+          "title": "Edits",
+          "type": "array"
+        },
+        "schema_version": {
+          "default": "1.1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "TerrainEdits",
+      "type": "object"
+    },
+    "Units": {
+      "additionalProperties": true,
+      "properties": {
+        "flow": {
+          "default": "m3/s",
+          "title": "Flow",
+          "type": "string"
+        },
+        "length": {
+          "default": "m",
+          "title": "Length",
+          "type": "string"
+        },
+        "rainfall": {
+          "default": "mm",
+          "title": "Rainfall",
+          "type": "string"
+        },
+        "time": {
+          "default": "hr",
+          "title": "Time",
+          "type": "string"
+        },
+        "volume": {
+          "default": "m3",
+          "title": "Volume",
+          "type": "string"
+        }
+      },
+      "title": "Units",
+      "type": "object"
+    }
+  },
+  "$id": "https://habitatcollective.in/spongepark/sponge.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The JSON files inside a .sponge package. Each entry of 'files' names a path in the package and the definition that describes it. Generated from spongepark/engine/project/schema.py.",
+  "files": {
+    "edit_log.json": {
+      "$ref": "#/$defs/EditLog",
+      "map_of": false
+    },
+    "history.json": {
+      "$ref": "#/$defs/History",
+      "map_of": false
+    },
+    "locks.json": {
+      "$ref": "#/$defs/Locks",
+      "map_of": false
+    },
+    "manifest.json": {
+      "$ref": "#/$defs/Manifest",
+      "map_of": false
+    },
+    "parameters.json": {
+      "$ref": "#/$defs/ParameterRecord",
+      "map_of": true
+    },
+    "proposals/<id>.json": {
+      "$ref": "#/$defs/Proposal",
+      "map_of": false
+    },
+    "scenarios/<id>/elements.json": {
+      "$ref": "#/$defs/ElementsFile",
+      "map_of": false
+    },
+    "scenarios/<id>/scenario.json": {
+      "$ref": "#/$defs/Scenario",
+      "map_of": false
+    },
+    "terrain/edits.json": {
+      "$ref": "#/$defs/TerrainEdits",
+      "map_of": false
+    }
+  },
+  "title": "Sponge Park project file (.sponge)",
+  "version": "1.1"
+}

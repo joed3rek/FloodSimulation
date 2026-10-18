@@ -16,6 +16,7 @@ from shapely.geometry import mapping, shape
 
 from ..project.package import Project
 from ..site.model import Site
+from spongepark.engine.nbs.components import elements_fc, save_elements_fc
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def scaled_layout(fc: Dict[str, Any], factor: float, boundary=None) -> Dict[str,
                     g = g.intersection(boundary)
             for key in ("area_m2", "storage_volume_m3", "drawdown_time_hr", "contributing_area_m2"):
                 props.pop(key, None)
-        props["source"] = "generated"
+        props["source"] = "proposal"
         props["notes"] = (props.get("notes", "") + f" Scaled x{factor:.2f} in area for performance curve.").strip()
         feats.append({"type": "Feature", "geometry": mapping(g), "properties": props})
     return {"type": "FeatureCollection", "features": feats}
@@ -51,14 +52,14 @@ def build_curve(project: Project, base_option: str, levels_pct: Sequence[float])
     site = Site.load(project)
     elements, _ = prepare_option(project, base_option, site)
     current_pct = 100.0 * sum(e.area_m2 for e in elements) / site.site_area_m2
-    if not project.exists(f"options/{BASELINE}/results/summary.json"):
+    if not project.exists(f"scenarios/{BASELINE}/results/summary.json"):
         run_option(project, BASELINE, site=site)
-    base_fc = project.read_geojson(f"options/{base_option}/components.geojson")
+    base_fc = elements_fc(project, base_option)
     points = []
     for lvl in levels_pct:
         oid = f"{base_option}_area{int(round(lvl))}"
         fc = scaled_layout(base_fc, lvl / current_pct, site.boundary)
-        project.write_geojson(f"options/{oid}/components.geojson", fc)
+        save_elements_fc(project, oid, fc)
         summ = run_option(project, oid, site=site)
         cmp_ = compare(project, oid)
         points.append({
@@ -70,5 +71,5 @@ def build_curve(project: Project, base_option: str, levels_pct: Sequence[float])
         })
         log.info("%s: %.1f %% area -> fully retains up to %s yr", oid, summ["intervention_area_pct"],
                  cmp_["design_retention_storm_yr"])
-    project.write_json(f"options/{base_option}/results/performance_curve.json", points)
+    project.write_json(f"scenarios/{base_option}/results/performance_curve.json", points)
     return points

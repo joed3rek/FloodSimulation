@@ -62,7 +62,7 @@ def test_pipeline_through_the_api(client, project_path):
     ts = client.get(f"/projects/{pid}/options/auto/timeseries/5").json()
     assert ts["columns"][0] == "time_hr" and ts["data"]
     q = client.put(f"/projects/{pid}/parameters/layout.max_area_pct", json={"value": 12, "unit": "%"}).json()
-    assert q["source"] == "user" and q["confirmed"]
+    assert q["source"] == "designer" and q["confirmed"]
     # designer edit through the API: elements become designer elements, locked, regraded and rerun
     fc = client.get(f"/projects/{pid}/options/auto/components").json()
     r = client.put(f"/projects/{pid}/options/auto/components?wait=true", json=fc).json()

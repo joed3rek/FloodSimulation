@@ -1,9 +1,10 @@
 """NbS element schema, parameter resolution and geometry.
 
-An element is read from ``options/<id>/components.geojson``. Missing design
-values are filled from project parameters (``nbs.<type>.<field>``) and every
-filled value is recorded in ``param_sources`` so reports can show which values
-were defaults.
+Elements are stored in ``scenarios/<id>/elements.json`` as element records (the brief's
+section 8.3 model, ``project.schema.ElementRecord``); :func:`to_record` and :func:`from_record`
+convert losslessly between that record and :class:`NbSElement`, the engine's working form. Missing
+design values are filled from project parameters (``nbs.<type>.<field>``) and every filled value is
+recorded in ``param_sources`` so reports can show which values were defaults.
 """
 
 from __future__ import annotations
@@ -43,7 +44,8 @@ class NbSElement(BaseModel):
     outflow_to: Optional[str] = None  # element / outfall id (LID surface outflow, or controlled outlet)
     overflow_to: Optional[str] = None  # element / outfall id (storage overflow weir)
     locked: bool = False
-    source: str = "generated"  # "generated" | "designer"
+    source: str = "proposal"  # "proposal" (generated) | "designer"
+    results: Dict[str, Dict[str, Any]] = Field(default_factory=dict)  # verified metrics per return period
 
     # design detail (filled from parameters when absent)
     invert_elev_m: Optional[float] = None
@@ -277,8 +279,127 @@ def analytic_drawdown_hr(el: NbSElement, params: ParameterSet) -> Optional[float
     return live * 1000.0 / r if r > 0 else None
 
 
-def read_elements(fc: Dict[str, Any]) -> List[NbSElement]:
-    """Parse a components FeatureCollection."""
+# --------------------------------------------------------------------------- element records (brief 8.3)
+# NbSElement field -> ElementRecord.parameters field (same name unless listed)
+_RENAMED = {"top_width_m": "width_m", "max_ponding_depth_m": "depth_m", "well_diameter_m": "diameter_m",
+            "weir_length_m": "overflow_weir_length_m"}
+_PARAMS = ["top_width_m", "max_ponding_depth_m", "side_slope_h_v", "soil_media_depth_m", "storage_layer_depth_m",
+           "permanent_pool_depth_m", "freeboard_m", "invert_elev_m", "longitudinal_slope_pct", "manning_n",
+           "vegetation_volume_fraction", "check_dam_spacing_m", "dam_height_m", "well_diameter_m", "well_depth_m",
+           "seepage_rate_mm_hr", "weir_length_m",
+           # guideline-only attributes travel as extra parameters
+           "forebay_volume_fraction", "cell_count", "length_to_width", "shallow_zone_depth_m", "peak_velocity_m_s",
+           "contained_return_period_yr", "hydraulic_retention_time_hr", "native_ksat_m_s"]
+_TOP = ["infiltration_rate_mm_hr", "area_m2", "storage_volume_m3", "contributing_area_m2", "drawdown_time_hr",
+        "soil_zone", "param_sources", "notes", "results"]
+
+
+def to_record(el: NbSElement) -> Dict[str, Any]:
+    """Element record (an entry of ``scenarios/<id>/elements.json``) from an engine element."""
+    params: Dict[str, Any] = {}
+    for f in _PARAMS:
+        v = getattr(el, f)
+        if v is not None:
+            params[_RENAMED.get(f, f)] = v
+    if el.outlet_diameter_m is not None or el.outlet_weir_length_m is not None or el.outlet_coefficient is not None:
+        params["outlet"] = {k: v for k, v in {
+            "type": "orifice" if el.outlet_diameter_m is not None else "weir",
+            "diameter_m": el.outlet_diameter_m, "weir_length_m": el.outlet_weir_length_m,
+            "coefficient": el.outlet_coefficient}.items() if v is not None}
+    rec: Dict[str, Any] = {"id": el.id, "type": el.type, "geometry": el.geometry, "parameters": params,
+                           "connections": {"inflow_from": list(el.inflow_from), "outflow_to": el.outflow_to,
+                                           "overflow_to": el.overflow_to},
+                           "locked": bool(el.locked),
+                           "source": "designer" if el.source == "designer" else "proposal"}
+    for f in _TOP:
+        v = getattr(el, f)
+        if v is not None and v != {} and v != "":
+            rec[f] = v
+    return rec
+
+
+def from_record(rec: Dict[str, Any]) -> NbSElement:
+    """Engine element from an element record."""
+    inv = {v: k for k, v in _RENAMED.items()}
+    params = dict(rec.get("parameters") or {})
+    outlet = params.pop("outlet", None) or {}
+    d: Dict[str, Any] = {"id": rec["id"], "type": rec["type"], "geometry": rec["geometry"],
+                         "locked": bool(rec.get("locked", False)),
+                         "source": "designer" if rec.get("source") == "designer" else "proposal"}
+    for k, v in params.items():
+        d[inv.get(k, k)] = v
+    if outlet:
+        d["outlet_diameter_m"] = outlet.get("diameter_m")
+        d["outlet_weir_length_m"] = outlet.get("weir_length_m")
+        d["outlet_coefficient"] = outlet.get("coefficient")
+    conn = rec.get("connections") or {}
+    d["inflow_from"] = list(conn.get("inflow_from") or [])
+    d["outflow_to"] = conn.get("outflow_to")
+    d["overflow_to"] = conn.get("overflow_to")
+    for f in _TOP:
+        if f in rec:
+            d[f] = rec[f]
+    return NbSElement.model_validate({k: v for k, v in d.items() if v is not None})
+
+
+def elements_rel(scenario_id: str) -> str:
+    return f"scenarios/{scenario_id}/elements.json"
+
+
+def has_elements(project, scenario_id: str) -> bool:
+    return project.exists(elements_rel(scenario_id))
+
+
+def load_elements(project, scenario_id: str) -> List[NbSElement]:
+    """Elements of a scenario (empty when it has none)."""
+    if not has_elements(project, scenario_id):
+        return []
+    return read_elements(project.read_json(elements_rel(scenario_id)))
+
+
+def save_elements(project, scenario_id: str, elements: List[NbSElement]) -> None:
+    """Write ``scenarios/<id>/elements.json`` (and a scenario.json the first time)."""
+    project.write_json(elements_rel(scenario_id), write_elements(elements))
+    sc = f"scenarios/{scenario_id}/scenario.json"
+    if not project.exists(sc):
+        from ..project.schema import Scenario
+
+        status = "proposal" if elements and all(e.source != "designer" for e in elements) else "draft"
+        project.write_json(sc, Scenario(id=scenario_id, name=scenario_id, status=status).model_dump(mode="json"))
+
+
+def elements_fc(project, scenario_id: str) -> Dict[str, Any]:
+    """The scenario's elements as a GeoJSON FeatureCollection (API, viewers, Grasshopper)."""
+    return to_feature_collection(load_elements(project, scenario_id))
+
+
+def save_elements_fc(project, scenario_id: str, fc: Dict[str, Any]) -> None:
+    save_elements(project, scenario_id, read_elements(fc))
+
+
+def to_feature_collection(elements: List[NbSElement]) -> Dict[str, Any]:
+    feats = []
+    for el in elements:
+        props = el.model_dump(mode="json", exclude={"geometry"}, exclude_none=True)
+        feats.append({"type": "Feature", "geometry": el.geometry, "properties": props})
+    return {"type": "FeatureCollection", "features": feats}
+
+
+def read_elements(data: Any) -> List[NbSElement]:
+    """Elements from an elements.json document, a list of records, or a GeoJSON FeatureCollection."""
+    if isinstance(data, dict) and "elements" in data:
+        data = data["elements"]
+    if isinstance(data, list):
+        out, ids = [], set()
+        for i, rec in enumerate(data):
+            if "id" not in rec:
+                raise ElementError(f"element {i} has no 'id'.")
+            if rec["id"] in ids:
+                raise ElementError(f"duplicate element id '{rec['id']}'.")
+            ids.add(rec["id"])
+            out.append(from_record(rec))
+        return out
+    fc = data
     out = []
     ids = set()
     for i, f in enumerate(fc.get("features", [])):
@@ -289,16 +410,17 @@ def read_elements(fc: Dict[str, Any]) -> List[NbSElement]:
             raise ElementError(f"duplicate element id '{props['id']}'.")
         ids.add(props["id"])
         props["geometry"] = f["geometry"]
+        if props.get("source") == "generated":  # name used before schema 1.1
+            props["source"] = "proposal"
         out.append(NbSElement.model_validate(props))
     return out
 
 
 def write_elements(elements: List[NbSElement]) -> Dict[str, Any]:
-    feats = []
-    for el in elements:
-        props = el.model_dump(mode="json", exclude={"geometry"}, exclude_none=True)
-        feats.append({"type": "Feature", "geometry": el.geometry, "properties": props})
-    return {"type": "FeatureCollection", "features": feats}
+    """The elements.json document for ``elements``."""
+    from ..project.schema import SCHEMA_VERSION
+
+    return {"schema_version": SCHEMA_VERSION, "elements": [to_record(e) for e in elements]}
 
 
 def to_geojson_geometry(g: BaseGeometry) -> Dict[str, Any]:

@@ -3,7 +3,7 @@
 ``run2d(project, option_id, rp)`` uses the option's graded ground (existing ground for the
 baseline), the design storm of ``rp``, the soil zone infiltration rates, and the option's NbS elements
 as sinks (capacity = SWMM element storage volume, emptying at the element's infiltration or seepage
-rate). Writes ``options/<id>/sim2d/rp<rp>.npz`` (depth frames), ``max_depth_rp<rp>.tif``, a summary
+rate). Writes ``scenarios/<id>/sim2d/rp<rp>.npz`` (depth frames), ``max_depth_rp<rp>.tif``, a summary
 JSON and a PNG. Everything is labelled indicative.
 """
 
@@ -18,7 +18,7 @@ from shapely import contains_xy
 from shapely.geometry import shape
 from shapely.ops import unary_union
 
-from ..nbs.components import read_elements
+from ..nbs.components import has_elements, load_elements
 from ..pipeline import load_hyetographs
 from ..project import Project
 from ..site.model import Site
@@ -102,7 +102,7 @@ class Inputs2D:
 def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = None) -> Inputs2D:
     P = project.parameters
     site = Site.load(project, option_id)
-    dem_rel = f"options/{option_id}/terrain/graded.tif"
+    dem_rel = f"scenarios/{option_id}/terrain/graded.tif"
     dem = read_geotiff(project.path(dem_rel if option_id != "baseline" and project.exists(dem_rel)
                                     else "terrain/existing.tif"), crs_fallback=project.manifest.crs)
     cell_m = float(cell_m or P.value("sim2d.cell_m"))
@@ -126,9 +126,8 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
 
     # NbS elements as sinks (resolved values written by the SWMM run of the option)
     els = None
-    rel = f"options/{option_id}/components.geojson"
-    if option_id != "baseline" and project.exists(rel):
-        elements = read_elements(project.read_geojson(rel))
+    if option_id != "baseline" and has_elements(project, option_id):
+        elements = load_elements(project, option_id)
         lab = -np.ones(mask.shape, np.int64)
         caps, rates, areas, ids = [], [], [], []
         for e in elements:
@@ -166,7 +165,7 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
 
     # SWMM comparison
     swmm = None
-    srel = f"options/{option_id}/results/summary.json"
+    srel = f"scenarios/{option_id}/results/summary.json"
     if project.exists(srel):
         r = project.read_json(srel)["return_periods"].get(str(rp))
         if r:
@@ -177,7 +176,7 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
                     "difference_pct_of_rainfall": 100 * (res.balance["outflow_m3"] / res.balance["rainfall_m3"]
                                                          - leaving / rain) if rain else None}
     thr = float(P.value("sim2d.flood_depth_threshold_m"))
-    out_dir = f"options/{option_id}/sim2d"
+    out_dir = f"scenarios/{option_id}/sim2d"
     project.path(out_dir).mkdir(parents=True, exist_ok=True)
     np.savez_compressed(project.path(f"{out_dir}/rp{rp}.npz"), times_s=res.times_s, depth_m=res.frames.astype(np.float16),
                         mask=mask, origin=np.array(g.origin), cell_m=cell)

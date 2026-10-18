@@ -9,6 +9,7 @@ from spongepark.engine.optimise.run import optimise, performance_curve, represen
 from spongepark.engine.optimise.space import Space
 
 from .test_layout import _valley_project
+from spongepark.engine.nbs.components import has_elements
 
 
 @pytest.fixture(scope="module")
@@ -37,7 +38,7 @@ def test_evaluation_is_swmm_and_cleans_up(valley):
     r = evaluate(valley, sp, (lo + hi) / 2 + 0.3 * (hi - lo))
     assert r["feasible"] and r["swmm_verified"] and set(r["per_rp"]) == {"2", "5"}
     assert 0 < r["area_pct"] <= valley.parameters.value("layout.max_area_pct") + 1e-6
-    assert not valley.exists("options/_eval/components.geojson")
+    assert not has_elements(valley, "_eval")
     f, g = objectives(r, "forward", {}, None, 48, 0.01)
     assert f[0] < 0 and 0 < f[1] <= 1.2
 
@@ -77,7 +78,7 @@ def test_forward_optimisation_produces_swmm_verified_options(valley):
     assert rep["pareto_size"] >= 1 and 1 <= len(rep["options"]) <= 3
     for o in rep["options"]:
         assert o["swmm_verified"]
-        assert valley.exists(f"options/{o['option_id']}/results/summary.json")
+        assert valley.exists(f"scenarios/{o['option_id']}/results/summary.json")
         assert o["area_pct"] <= valley.parameters.value("layout.max_area_pct") + 1e-6
     assert valley.exists("optimise/forward_pareto.png") and valley.exists("optimise/dataset.json")
     assert rep["evaluations_swmm"] >= 8

@@ -15,6 +15,7 @@ from ..engine.project.package import Project
 from ..engine.project.parameters import Source
 from ..engine.terrain.raster import write_geotiff
 from ..engine.terrain.synthetic import planar
+from spongepark.engine.nbs.components import save_elements_fc
 
 X0, Y0 = 781000.0, 1434000.0  # SW corner, UTM 43N
 ILLUSTRATIVE = "ILLUSTRATIVE PLACEHOLDER - replace with site data"
@@ -115,6 +116,6 @@ def populate(project: Project, with_dem: bool = True) -> None:
     if with_dem:
         dem = planar(size_m=(100, 100), cell_size=1.0, slope_pct=2.0, base_elev=900.0, origin=(X0, Y0 + 100))
         write_geotiff(dem, project.path("terrain/existing.tif"))
-    project.write_geojson("options/manual/components.geojson", manual_layout(False))
-    project.write_geojson("options/manual_wetland/components.geojson", manual_layout(True))
+    save_elements_fc(project, "manual", manual_layout(False))
+    save_elements_fc(project, "manual_wetland", manual_layout(True))
     project.history.log("example_populated", site="synthetic 1 ha park")

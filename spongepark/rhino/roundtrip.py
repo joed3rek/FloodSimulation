@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from shapely.geometry import LineString, Point, Polygon, shape
 
-from ..engine.nbs.components import NbSElement, read_elements, write_elements
+from ..engine.nbs.components import NbSElement, load_elements, save_elements
 from ..engine.project import Project
 from ..engine.terrain.raster import DEM, read_geotiff
 
@@ -139,7 +139,7 @@ def export_3dm(project: Project, option_id: str, out: Path) -> Dict[str, Any]:
     ex = read_geotiff(project.path("terrain/existing.tif"), crs_fallback=project.manifest.crs)
     z_ex = _sampler(ex)
     f.Objects.AddMesh(_mesh(ex), _attrs(layer("TERRAIN::Existing"), "existing ground"))
-    graded_rel = f"options/{option_id}/terrain/graded.tif"
+    graded_rel = f"scenarios/{option_id}/terrain/graded.tif"
     gr = read_geotiff(project.path(graded_rel)) if project.exists(graded_rel) else None
     z_gr = _sampler(gr) if gr is not None else z_ex
     if gr is not None:
@@ -148,15 +148,15 @@ def export_3dm(project: Project, option_id: str, out: Path) -> Dict[str, Any]:
     for c in contour_lines(ex, interval):
         f.Objects.AddPolyline(_polyline(c["geometry"]["coordinates"], None, c["properties"]["z"]),
                               _attrs(layer("CONTOURS::Existing"), user={"z": c["properties"]["z"]}))
-    if project.exists(f"options/{option_id}/design_contours.geojson"):
-        for c in project.read_geojson(f"options/{option_id}/design_contours.geojson")["features"]:
+    if project.exists(f"scenarios/{option_id}/design_contours.geojson"):
+        for c in project.read_geojson(f"scenarios/{option_id}/design_contours.geojson")["features"]:
             if c["properties"].get("interval_m", interval) == interval:
                 f.Objects.AddPolyline(_polyline(c["geometry"]["coordinates"], None, c["properties"]["z"]),
                                       _attrs(layer("CONTOURS::Proposed"), user={"z": c["properties"]["z"]}))
 
     # NbS elements with their fields and SWMM results
     results: Dict[str, Dict[str, Any]] = {}
-    srel = f"options/{option_id}/results/summary.json"
+    srel = f"scenarios/{option_id}/results/summary.json"
     if project.exists(srel):
         for rp, v in project.read_json(srel)["return_periods"].items():
             for e in v["elements"]:
@@ -164,8 +164,7 @@ def export_3dm(project: Project, option_id: str, out: Path) -> Dict[str, Any]:
                     if k not in ("id", "type") and isinstance(val, (int, float)) and val is not None:
                         results.setdefault(e["id"], {})[f"rp{rp}.{k}"] = round(float(val), 4)
     n_el = 0
-    rel = f"options/{option_id}/components.geojson"
-    for e in (read_elements(project.read_geojson(rel)) if project.exists(rel) else []):
+    for e in load_elements(project, option_id):
         L = layer(f"NBS::{NBS_LAYERS.get(e.type, e.type)}")
         fields = e.model_dump(mode="json", exclude={"geometry", "param_sources"}, exclude_none=True)
         g = shape(e.geometry)
@@ -183,8 +182,8 @@ def export_3dm(project: Project, option_id: str, out: Path) -> Dict[str, Any]:
         n_el += 1
 
     # analysis
-    if project.exists(f"options/{option_id}/site/subcatchments.geojson") or project.exists("site/subcatchments.geojson"):
-        srel = f"options/{option_id}/site/subcatchments.geojson"
+    if project.exists(f"scenarios/{option_id}/site/subcatchments.geojson") or project.exists("site/subcatchments.geojson"):
+        srel = f"scenarios/{option_id}/site/subcatchments.geojson"
         subs = project.read_geojson(srel if project.exists(srel) else "site/subcatchments.geojson")["features"]
         for s in subs:
             g = shape(s["geometry"])
@@ -194,13 +193,13 @@ def export_3dm(project: Project, option_id: str, out: Path) -> Dict[str, Any]:
                                              {"id": s["properties"]["id"], "outlet": s["properties"].get("outlet")}))
     for line in _flow_paths(project):
         f.Objects.AddPolyline(_polyline(line.coords, z_ex), _attrs(layer("ANALYSIS::FlowPaths")))
-    cut_rel = f"options/{option_id}/terrain/cut.tif"
+    cut_rel = f"scenarios/{option_id}/terrain/cut.tif"
     if project.exists(cut_rel) and gr is not None:
         cut = read_geotiff(project.path(cut_rel)).z
         col = _ramp(np.where(cut > 0.005, cut, 0.0), (255, 255, 255), (227, 73, 72))
         f.Objects.AddMesh(_mesh(gr, colours=col), _attrs(layer("ANALYSIS::CutFill"), "cut depth (white 0, red max)"))
-    for tif in sorted(project.path(f"options/{option_id}/sim2d").glob("max_depth_rp*.tif")) \
-            if project.path(f"options/{option_id}/sim2d").exists() else []:
+    for tif in sorted(project.path(f"scenarios/{option_id}/sim2d").glob("max_depth_rp*.tif")) \
+            if project.path(f"scenarios/{option_id}/sim2d").exists() else []:
         d = read_geotiff(tif)
         col = _ramp(np.where(d.z > 0, d.z, 0.0), (240, 240, 240), (31, 95, 191))
         base = DEM(np.where(d.z != d.nodata, d.z + np.nan_to_num(_resample(gr or ex, d)), d.nodata),
@@ -312,8 +311,7 @@ def import_3dm(project: Project, option_id: str, path: Path, rerun: bool = True)
     for i in range(len(f.Layers)):
         L = f.Layers[i]
         layer_path[L.Index] = L.FullPath
-    rel = f"options/{option_id}/components.geojson"
-    current = {e.id: e for e in (read_elements(project.read_geojson(rel)) if project.exists(rel) else [])}
+    current = {e.id: e for e in load_elements(project, option_id)}
     seen, changes = set(), {"moved": [], "resized": [], "reshaped": [], "new": [], "deleted": [], "unchanged": []}
     out: List[NbSElement] = []
     counters: Dict[str, int] = {}
@@ -369,7 +367,7 @@ def import_3dm(project: Project, option_id: str, path: Path, rerun: bool = True)
     for e in out:
         if e.spec.is_storage and e.invert_elev_m is None:
             e.invert_elev_m = 0.0
-    project.write_geojson(rel, write_elements(out))
+    save_elements(project, option_id, out)
     edited = changes["moved"] + changes["resized"] + changes["reshaped"] + changes["new"]
     locked = set(project.locks.locked.get(option_id, [])) - set(changes["deleted"])
     project.locks.locked[option_id] = sorted(locked | set(edited))
@@ -381,6 +379,6 @@ def import_3dm(project: Project, option_id: str, path: Path, rerun: bool = True)
 
         result["regrade"] = regrade(project, option_id)
         run_option(project, option_id)
-        result["comparison"] = compare(project, option_id) if project.exists("options/baseline/results/summary.json") else None
+        result["comparison"] = compare(project, option_id) if project.exists("scenarios/baseline/results/summary.json") else None
         result["rerun"] = True
     return result

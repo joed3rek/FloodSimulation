@@ -11,7 +11,7 @@
 3. **Grading.** Each element is cut below its rim (``grading.grade``).
 4. **Subcatchment rebuild.** Flow is traced again on the graded ground with the elements as sinks:
    each element gets the subcatchment that really drains into it, and the rest keep their outfalls.
-5. **Outputs** under ``options/<id>/``: ``components.geojson`` (generated + kept designer elements),
+5. **Outputs** under ``scenarios/<id>/``: ``elements.json`` (generated + kept designer elements),
    ``site/subcatchments.geojson`` (used by this option's SWMM runs), ``terrain/graded.tif``,
    ``terrain/cut.tif``, ``terrain/suitability_<type>.tif``, ``design_contours.geojson``,
    ``design.dxf`` (SP-DSN-* layers in survey coordinates), ``layout.png`` and ``layout_report.json``.
@@ -35,7 +35,7 @@ from shapely.ops import unary_union
 from ..grading.grade import Cut, flat_volume, grade
 from ..hydrology import flow as fl
 from ..hydrology.delineate import _polygons, context_surfaces
-from ..nbs.components import NbSElement, read_elements, write_elements
+from ..nbs.components import NbSElement, has_elements, load_elements, save_elements
 from ..project import Project, Source
 from ..site.model import Site, SiteError
 from ..terrain.raster import DEM, read_geotiff, write_geotiff
@@ -181,7 +181,7 @@ def surface_depth(P, t: str) -> float:
 def runoff_depth_mm(project: Project) -> Tuple[float, int, str]:
     """Design-storm runoff depth over the site from the baseline SWMM run."""
     rp = int(project.parameters.value("layout.design_return_period_yr"))
-    rel = "options/baseline/results/summary.json"
+    rel = "scenarios/baseline/results/summary.json"
     if not project.exists(rel):
         raise LayoutError("run the baseline first (`option run PATH baseline`): sizing uses its SWMM runoff.")
     r = project.read_json(rel)["return_periods"].get(str(rp))
@@ -232,7 +232,7 @@ def generate(project: Project, option_id: str, types: Optional[List[str]] = None
         rep = _generate(project, option_id, types, write_outputs)
         rep["overrides"] = dict(overrides or {})
         if write_outputs:
-            project.write_json(f"options/{option_id}/layout_report.json", rep)
+            project.write_json(f"scenarios/{option_id}/layout_report.json", rep)
         return rep
     finally:
         project.parameters = saved
@@ -255,11 +255,10 @@ def _generate(project: Project, option_id: str, types: Optional[List[str]], writ
     max_dd = float(P.value("nbs.max_drawdown_hr"))
 
     # designer elements in the option are kept as they are
-    rel = f"options/{option_id}/components.geojson"
     kept: List[NbSElement] = []
-    if project.exists(rel):
+    if has_elements(project, option_id):
         locked = set(project.locked_ids(option_id))
-        kept = [e for e in read_elements(project.read_geojson(rel)) if e.source == "designer" or e.locked or e.id in locked]
+        kept = [e for e in load_elements(project, option_id) if e.source == "designer" or e.locked or e.id in locked]
     taken = np.zeros(g.mask.shape, bool)
     element_cells = np.zeros(g.mask.shape, bool)
     kept_cells: Dict[str, np.ndarray] = {}
@@ -460,7 +459,7 @@ def _generate(project: Project, option_id: str, types: Optional[List[str]], writ
 
 
 def _element_props(p: Placed, P, g: Grid, rp: int, runoff_mm: float) -> Dict[str, Any]:
-    base: Dict[str, Any] = dict(id=p.id, type=p.type, source="generated", outflow_to=p.outflow_to)
+    base: Dict[str, Any] = dict(id=p.id, type=p.type, source="proposal", outflow_to=p.outflow_to)
     if p.type == "bioswale":
         info = p.notes[-1]
         base.update(geometry=info["line"], top_width_m=float(P.value("nbs.bioswale.top_width_m")),
@@ -687,8 +686,8 @@ def _place_wells(project, g: Grid, blocked, placed: List[Placed], accept, skippe
 def _write_outputs(project, option_id, g: Grid, zg, elements, placed, subs, blocked) -> None:
     P = project.parameters
     cell = g.cell
-    odir = f"options/{option_id}"
-    project.write_geojson(f"{odir}/components.geojson", write_elements(elements))
+    odir = f"scenarios/{option_id}"
+    save_elements(project, option_id, elements)
     project.write_geojson(f"{odir}/site/subcatchments.geojson", {"type": "FeatureCollection", "features": subs})
     nod = g.dem.nodata
     graded = DEM(np.where(g.mask, zg, nod), cell, g.dem.origin, g.dem.crs, nod)

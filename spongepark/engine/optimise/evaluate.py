@@ -36,7 +36,7 @@ def evaluate(project: Project, space: Space, x: np.ndarray, option_id: str = "_e
         row["reason"] = str(ex)[:300]
         _cleanup(project, option_id, keep)
         return row
-    summ = project.read_json(f"options/{option_id}/results/summary.json")
+    summ = project.read_json(f"scenarios/{option_id}/results/summary.json")
     per_rp = {}
     max_dd = 0.0
     for r in cmp_["rows"]:

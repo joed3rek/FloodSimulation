@@ -15,7 +15,7 @@ from shapely import contains_xy
 
 from ..grading.grade import Cut, grade
 from ..hydrology import flow as fl
-from ..nbs.components import NbSElement, read_elements
+from ..nbs.components import NbSElement, has_elements, load_elements
 from ..project import Project
 from .generate import (STORAGE_TYPES, LayoutError, Placed, _grade_swale, _rebuild, _subcatchment_raster,
                        _write_outputs, keep_out, load_grid, surface_depth)
@@ -23,10 +23,9 @@ from .generate import (STORAGE_TYPES, LayoutError, Placed, _grade_swale, _rebuil
 
 def regrade(project: Project, option_id: str) -> Dict[str, Any]:
     P = project.parameters
-    rel = f"options/{option_id}/components.geojson"
-    if not project.exists(rel):
-        raise LayoutError(f"option {option_id} has no components.")
-    elements: List[NbSElement] = read_elements(project.read_geojson(rel))
+    if not has_elements(project, option_id):
+        raise LayoutError(f"scenario {option_id} has no elements.")
+    elements: List[NbSElement] = load_elements(project, option_id)
     g = load_grid(project)
     cell2 = g.cell ** 2
     blocked, _ = keep_out(project, g)
@@ -115,6 +114,6 @@ def regrade(project: Project, option_id: str) -> Dict[str, Any]:
     cut = np.where(g.mask, g.dem.z - zg, 0.0)
     rep = {"option_id": option_id, "elements": [e.id for e in elements], "warnings": warnings,
            "cut_total_m3": float(cut[cut > 0].sum() * cell2), "subcatchments": sub_rows}
-    project.write_json(f"options/{option_id}/regrade_report.json", rep)
+    project.write_json(f"scenarios/{option_id}/regrade_report.json", rep)
     project.history.log("regrade", option=option_id, elements=len(elements))
     return rep

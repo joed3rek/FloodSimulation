@@ -16,6 +16,7 @@ import numpy as np
 
 from ..project import Project
 from ..terrain.raster import read_geotiff
+from spongepark.engine.nbs.components import elements_fc, has_elements
 
 
 def b64(a: np.ndarray, dtype: str = "<f4") -> str:
@@ -23,7 +24,7 @@ def b64(a: np.ndarray, dtype: str = "<f4") -> str:
 
 
 def terrain_payload(project: Project, option: Optional[str] = None, max_cells: int = 250_000) -> Dict[str, Any]:
-    rel = f"options/{option}/terrain/graded.tif" if option and option != "baseline" else "terrain/existing.tif"
+    rel = f"scenarios/{option}/terrain/graded.tif" if option and option != "baseline" else "terrain/existing.tif"
     d = read_geotiff(project.path(rel))
     z = np.where(d.z == d.nodata, np.nan, d.z)
     step = max(1, int(np.ceil(np.sqrt(z.size / max_cells))))
@@ -33,7 +34,7 @@ def terrain_payload(project: Project, option: Optional[str] = None, max_cells: i
 
 
 def frames_payload(project: Project, option: str, rp: int, start: int = 0, count: int = 100000) -> Dict[str, Any]:
-    d = np.load(project.path(f"options/{option}/sim2d/rp{rp}.npz"))
+    d = np.load(project.path(f"scenarios/{option}/sim2d/rp{rp}.npz"))
     frames = d["depth_m"][start:start + count]
     return {"label": "indicative", "option": option, "return_period_yr": rp,
             "times_s": d["times_s"][start:start + count].tolist(), "rows": int(frames.shape[1]),
@@ -45,8 +46,8 @@ def retained_payload(project: Project, option: str, rp: int, every: int = 5) -> 
     """Running litres retained on site from the SWMM time series: rainfall so far - water that left."""
     import pandas as pd
 
-    df = pd.read_parquet(project.path(f"options/{option}/results/rp{rp}_timeseries.parquet"))
-    s = project.read_json(f"options/{option}/results/summary.json")
+    df = pd.read_parquet(project.path(f"scenarios/{option}/results/rp{rp}_timeseries.parquet"))
+    s = project.read_json(f"scenarios/{option}/results/summary.json")
     area = float(s["site_area_m2"])
     t = df["time_hr"].to_numpy()
     dt_s = np.diff(t, prepend=t[0]) * 3600
@@ -97,20 +98,20 @@ def write_bundle(project: Project, out_dir: Path, options: Optional[List[str]] =
     put("terrain_existing.json", terrain_payload(project, None))
     for o in options:
         entry: Dict[str, Any] = {"return_periods": [], "sim2d": []}
-        if o != "baseline" and project.exists(f"options/{o}/terrain/graded.tif"):
+        if o != "baseline" and project.exists(f"scenarios/{o}/terrain/graded.tif"):
             put(f"terrain_{o}.json", terrain_payload(project, o))
             entry["terrain"] = f"terrain_{o}.json"
-        if project.exists(f"options/{o}/components.geojson"):
-            put(f"components_{o}.json", project.read_geojson(f"options/{o}/components.geojson"))
-        if project.exists(f"options/{o}/results/summary.json"):
-            s = project.read_json(f"options/{o}/results/summary.json")
+        if has_elements(project, o):
+            put(f"components_{o}.json", elements_fc(project, o))
+        if project.exists(f"scenarios/{o}/results/summary.json"):
+            s = project.read_json(f"scenarios/{o}/results/summary.json")
             entry["return_periods"] = sorted(int(r) for r in s["return_periods"])
             entry["calibration"] = s["calibration"]
             for rp in entry["return_periods"]:
                 put(f"retained_{o}_rp{rp}.json", retained_payload(project, o, rp))
-        if project.exists(f"options/{o}/results/comparison.json"):
-            put(f"comparison_{o}.json", project.read_json(f"options/{o}/results/comparison.json"))
-        sdir = project.path(f"options/{o}/sim2d")
+        if project.exists(f"scenarios/{o}/results/comparison.json"):
+            put(f"comparison_{o}.json", project.read_json(f"scenarios/{o}/results/comparison.json"))
+        sdir = project.path(f"scenarios/{o}/sim2d")
         if sdir.exists():
             for npz in sorted(sdir.glob("rp*.npz")):
                 rp = int(npz.stem[2:])

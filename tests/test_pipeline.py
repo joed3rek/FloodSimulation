@@ -5,6 +5,7 @@ import pytest
 from spongepark.engine.pipeline import compare, make_hyetographs, run_option
 from spongepark.engine.project import Project
 from spongepark.examples.synthetic_park import populate
+from spongepark.engine.nbs.components import elements_fc
 
 
 @pytest.fixture(scope="module")
@@ -45,8 +46,8 @@ def test_nbs_reduce_outflow_and_peak(example):
 
 def test_outputs_written(example):
     p, *_ = example
-    for rel in ("options/manual/model.inp", "options/manual/swmm/rp100.inp", "options/manual/results/summary.json",
-                "options/manual/results/rp10_timeseries.parquet", "options/manual/guideline_findings.json",
+    for rel in ("scenarios/manual/model.inp", "scenarios/manual/swmm/rp100.inp", "scenarios/manual/results/summary.json",
+                "scenarios/manual/results/rp10_timeseries.parquet", "scenarios/manual/guideline_findings.json",
                 "rainfall/hyetographs/rp100.csv"):
         assert p.exists(rel), rel
 
@@ -58,6 +59,6 @@ def test_site_area_reconciles(example):
     from spongepark.engine.swmm import build_spec
 
     site = Site.load(p)
-    els = read_elements(p.read_geojson("options/manual/components.geojson"))
+    els = read_elements(elements_fc(p, "manual"))
     spec = build_spec(site, els, p.parameters, "manual")
     assert spec.area_m2(("site", "lid", "direct")) == pytest.approx(site.site_area_m2, rel=1e-3)

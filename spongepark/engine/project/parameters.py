@@ -25,7 +25,14 @@ class Source(str, Enum):
     DEFAULT = "default"
     SITE_MEASURED = "site measured"
     LITERATURE = "literature"
-    USER = "user"  # a design decision entered by the user (e.g. area budget)
+    DESIGNER = "designer"  # a design decision entered by the designer (e.g. area budget)
+    USER = "designer"  # older name, kept as an alias
+
+    @classmethod
+    def _missing_(cls, value):
+        if value == "user":  # files written before schema 1.1
+            return cls.DESIGNER
+        return None
 
 
 class Parameter(BaseModel):

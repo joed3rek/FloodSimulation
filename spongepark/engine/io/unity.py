@@ -18,6 +18,7 @@ from shapely import contains_xy
 
 from ..project import Project
 from ..terrain.raster import read_geotiff
+from spongepark.engine.nbs.components import elements_fc, has_elements
 
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 
@@ -41,7 +42,7 @@ def _texture(project: Project, dem, valid: np.ndarray, option_id: Optional[str] 
     shade = np.clip((nx * light[0] + ny * light[1] + nz * light[2]) / n, 0, 1)
     img = np.repeat((0.55 + 0.45 * shade)[..., None], 3, axis=2) * np.array([0.93, 0.95, 0.90])
     t = from_origin(dem.origin[0], dem.origin[1], dem.cell_size, dem.cell_size)
-    subs = f"options/{option_id}/site/subcatchments.geojson" if option_id else "site/subcatchments.geojson"
+    subs = f"scenarios/{option_id}/site/subcatchments.geojson" if option_id else "site/subcatchments.geojson"
     if project.exists(subs):
         feats = project.read_geojson(subs)["features"]
         if feats:
@@ -61,9 +62,9 @@ def _texture(project: Project, dem, valid: np.ndarray, option_id: Optional[str] 
         for f in project.read_geojson("site/outfalls.geojson")["features"]:
             x, y = f["geometry"]["coordinates"][:2]
             img[np.hypot(X - x, Y - y) <= max(1.0, 2 * dem.cell_size)] = _rgb("#14201f")
-    if option_id and project.exists(f"options/{option_id}/components.geojson"):
+    if option_id and has_elements(project, option_id):
         X, Y = dem.cell_centres()
-        for f in project.read_geojson(f"options/{option_id}/components.geojson")["features"]:
+        for f in elements_fc(project, option_id)["features"]:
             m = contains_xy(shape(f["geometry"]), X, Y)
             col = "#008300" if f["properties"].get("type") == "rain_garden" else "#2a78d6"
             img[m] = 0.35 * img[m] + 0.65 * _rgb(col)
@@ -91,7 +92,7 @@ def export_obj(project: Project, out_dir: Path, name: str = "terrain", exaggerat
     zmin = float(ex.z[ex_valid].min())
     dem = ex
     if option_id:
-        rel = f"options/{option_id}/terrain/graded.tif"
+        rel = f"scenarios/{option_id}/terrain/graded.tif"
         if not project.exists(rel):
             raise ValueError(f"option {option_id} has no graded ground; run `layout generate` first.")
         dem = read_geotiff(project.path(rel), crs_fallback=project.manifest.crs)

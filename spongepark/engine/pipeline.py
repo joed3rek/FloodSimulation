@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from .metrics.water_balance import element_summary, peak_and_time, water_balance
-from .nbs.components import NbSElement, read_elements, resolve_element, write_elements
+from .nbs.components import NbSElement, has_elements, load_elements, resolve_element, save_elements
 from .nbs.guidelines import Finding, check_elements
 from .project.package import Project
 from .rainfall.hyetograph import Hyetograph, design_storms
@@ -80,11 +80,10 @@ def prepare_option(project: Project, option_id: str, site: Optional[Site] = None
     site = site or Site.load(project, option_id)
     if option_id == BASELINE:
         return [], []
-    rel = f"options/{option_id}/components.geojson"
-    if not project.exists(rel):
-        raise PipelineError(f"Option '{option_id}' has no components.geojson.")
+    if not has_elements(project, option_id):
+        raise PipelineError(f"Scenario '{option_id}' has no elements.json.")
     method = str(project.parameters.value("swmm.infiltration_method")).upper()
-    raw = read_elements(project.read_geojson(rel))
+    raw = load_elements(project, option_id)
     locked = set(project.locked_ids(option_id))
     elements = []
     for e in raw:
@@ -93,8 +92,8 @@ def prepare_option(project: Project, option_id: str, site: Optional[Site] = None
         elements.append(resolve_element(e, project.parameters, site.soil_lookup(method)))
     _contributing_areas(elements, site)
     findings = check_elements(elements)
-    project.write_geojson(rel, write_elements(elements))
-    project.write_json(f"options/{option_id}/guideline_findings.json", [f.model_dump() for f in findings])
+    save_elements(project, option_id, elements)
+    project.write_json(f"scenarios/{option_id}/guideline_findings.json", [f.model_dump() for f in findings])
     errors = [f for f in findings if f.severity == "error"]
     for f in findings:
         log.log(logging.WARNING if f.severity != "info" else logging.INFO, "[%s] %s (%s)", f.severity, f.message, f.citation)
@@ -193,15 +192,15 @@ def run_option(
         "source_of_truth": "All hydrological numbers from EPA SWMM 5.2 (PySWMM, unmodified engine) "
                            "except canopy interception (computed outside SWMM).",
     }
-    project.write_json(f"options/{option_id}/results/summary.json", to_jsonable(summary))
+    project.write_json(f"scenarios/{option_id}/results/summary.json", to_jsonable(summary))
     project.history.log("run_option", option=option_id, rps=rps, flags=sum(len(v["flags"]) for v in per_rp.values()))
     return summary
 
 
 def compare(project: Project, option_id: str, baseline_id: str = BASELINE) -> Dict[str, Any]:
     """Peak reduction, lag and design retention storm against the baseline."""
-    opt = project.read_json(f"options/{option_id}/results/summary.json")
-    base = project.read_json(f"options/{baseline_id}/results/summary.json")
+    opt = project.read_json(f"scenarios/{option_id}/results/summary.json")
+    base = project.read_json(f"scenarios/{baseline_id}/results/summary.json")
     tol = float(project.parameters.value("nbs.retention_overflow_tolerance_fraction"))
     rows = []
     for rp in sorted(opt["return_periods"], key=int):
@@ -238,7 +237,7 @@ def compare(project: Project, option_id: str, baseline_id: str = BASELINE) -> Di
         "design_no_overflow_storm_yr": _largest_consecutive(rows, "no_uncontrolled_overflow"),
         "intervention_area_pct": opt["intervention_area_pct"],
     }
-    project.write_json(f"options/{option_id}/results/comparison.json", to_jsonable(out))
+    project.write_json(f"scenarios/{option_id}/results/comparison.json", to_jsonable(out))
     return out
 
 

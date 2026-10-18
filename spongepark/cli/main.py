@@ -34,10 +34,11 @@ sim2d_app = typer.Typer(help="2D rain-on-grid surface model, indicative (Phase 6
 optimise_app = typer.Typer(help="Optimisation with NSGA-II and a surrogate, SWMM-verified (Phase 5).",
                            no_args_is_help=True)
 nbs_app = typer.Typer(help="Component catalogue and design guidelines.", no_args_is_help=True)
+schema_app = typer.Typer(help="The shared .sponge JSON Schema and the generated Unity classes.", no_args_is_help=True)
 for sub, name in [(project_app, "project"), (params_app, "params"), (rain_app, "rainfall"), (site_app, "site"),
                   (option_app, "option"), (terrain_app, "terrain"), (layout_app, "layout"), (optimise_app, "optimise"),
                   (rhino_app, "rhino"), (sim2d_app, "sim2d"),
-                  (nbs_app, "nbs")]:
+                  (nbs_app, "nbs"), (schema_app, "schema")]:
     app.add_typer(sub, name=name)
 
 SITE_LAYERS = {
@@ -68,6 +69,37 @@ def version() -> None:
     import swmm.toolkit
 
     typer.echo(f"spongepark {__version__}; pyswmm {pyswmm.__version__}; swmm-toolkit {swmm.toolkit.__version__}")
+
+
+@schema_app.command("export")
+def schema_export() -> None:
+    """Write schema/sponge.schema.json from the Python models."""
+    from spongepark.engine.project.jsonschema import export
+
+    typer.echo(f"wrote {export()}")
+
+
+@schema_app.command("csharp")
+def schema_csharp() -> None:
+    """Regenerate the Unity C# data classes from schema/sponge.schema.json."""
+    from spongepark.engine.project.csharp import write
+
+    typer.echo(f"wrote {write()}")
+
+
+@schema_app.command("validate")
+def schema_validate(path: Path) -> None:
+    """Check every JSON file of a project against the shared schema."""
+    from spongepark.engine.project.jsonschema import validate_package
+
+    proj = _open(path)
+    bad = {k: v for k, v in validate_package(proj.root).items() if v}
+    for k, errs in bad.items():
+        for e in errs:
+            typer.echo(f"{k}: {e}")
+    if bad:
+        raise typer.Exit(1)
+    typer.echo("valid")
 
 
 # ------------------------------------------------------------------ project
@@ -106,7 +138,7 @@ def params_list(path: Path, unconfirmed: bool = False, prefix: str = "") -> None
 
 @params_app.command("set")
 def params_set(path: Path, key: str, value: str, unit: Optional[str] = None,
-               source: str = typer.Option("user", help="default | site measured | literature | user"),
+               source: str = typer.Option("designer", help="default | site measured | literature | designer"),
                note: Optional[str] = None) -> None:
     """Set a parameter (value parsed as JSON when possible, e.g. 0.3, true, [1,2])."""
     from spongepark.engine.project import Source
@@ -491,8 +523,8 @@ def site_tr55(path: Path, duration_hr: float = 24.0) -> None:
         tot = {rp: sum(r.runoff_m3[rp] for r in rows) for rp in rps}
         rain = {rp: sum(r.area_m2 for r in rows) * depths[rp] / 1000 for rp in rps}
         typer.echo("TR-55 runoff (m3):   " + "  ".join(f"{rp:g}yr {tot[rp]:.0f} ({100 * tot[rp] / rain[rp]:.0f} %)" for rp in rps))
-        if p.exists("options/baseline/results/summary.json"):
-            sm = p.read_json("options/baseline/results/summary.json")["return_periods"]
+        if p.exists("scenarios/baseline/results/summary.json"):
+            sm = p.read_json("scenarios/baseline/results/summary.json")["return_periods"]
             swmm = {rp: sm[str(int(rp))]["water_balance"] for rp in rps if str(int(rp)) in sm}
             typer.echo("SWMM baseline (m3):  " + "  ".join(
                 f"{rp:g}yr {w['outflow_total_m3'] + w['flooding_m3']:.0f} "
@@ -534,8 +566,11 @@ def screen(parks_json: Path, rainfall_csv: Path, out: Optional[Path] = None) -> 
 @option_app.command("import")
 def option_import(path: Path, option_id: str, geojson: Path, source_crs: Optional[str] = None) -> None:
     with _open(path) as p:
-        p.write_geojson(f"options/{option_id}/components.geojson", json.loads(geojson.read_text(encoding="utf-8")),
-                        source_crs)
+        from spongepark.engine.nbs.components import save_elements_fc
+        from spongepark.engine.project.crs import ensure_project_crs
+
+        fc = ensure_project_crs(json.loads(geojson.read_text(encoding="utf-8")), p.manifest.crs, source_crs)
+        save_elements_fc(p, option_id, fc)
         p.history.log("option_import", option=option_id, file=geojson.name)
         p.save()
 

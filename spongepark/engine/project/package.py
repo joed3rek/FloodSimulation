@@ -21,16 +21,59 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from .crs import ensure_project_crs, validate_project_crs
 from .defaults import default_parameters
 from .parameters import ParameterSet
-from .schema import SCHEMA_VERSION, History, Locks, Manifest, utcnow
+from .schema import SCHEMA_VERSION, EditLog, History, Locks, Manifest, TerrainEdits, utcnow
 
 log = logging.getLogger(__name__)
 
 PathLike = Union[str, os.PathLike]
 
-SUBDIRS = ["terrain", "site", "rainfall", "rainfall/hyetographs", "options"]
+SUBDIRS = ["survey", "terrain", "site", "rainfall", "rainfall/hyetographs", "scenarios", "proposals"]
+
+
+def _migrate_1_0(root: Path) -> str:
+    """1.0 -> 1.1: options/<id>/components.geojson -> scenarios/<id>/elements.json (+ scenario.json),
+    parameter source "user" -> "designer", element source "generated" -> "proposal",
+    edit_log.json and terrain/edits.json created."""
+    from ..nbs.components import read_elements, write_elements
+    from .schema import EditLog, Scenario, TerrainEdits
+
+    old, new = root / "options", root / "scenarios"
+    if old.exists():
+        new.mkdir(exist_ok=True)
+        for d in sorted(x for x in old.iterdir() if x.is_dir()):
+            target = new / d.name
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.move(str(d), str(target))
+            comp = target / "components.geojson"
+            if comp.exists():
+                els = read_elements(_read_json(comp))
+                _write_json(target / "elements.json", write_elements(els))
+                comp.unlink()
+                status = "proposal" if els and all(e.source != "designer" for e in els) else "draft"
+            else:
+                status = "baseline" if d.name == "baseline" else "draft"
+            _write_json(target / "scenario.json", Scenario(id=d.name, name=d.name, status=status).model_dump(mode="json"))
+        shutil.rmtree(old)
+    params = _read_json(root / "parameters.json")
+    for v in params.values():
+        if v.get("source") == "user":
+            v["source"] = "designer"
+    _write_json(root / "parameters.json", params)
+    if not (root / "edit_log.json").exists():
+        _write_json(root / "edit_log.json", EditLog().model_dump(mode="json"))
+    if not (root / "terrain" / "edits.json").exists():
+        _write_json(root / "terrain" / "edits.json", TerrainEdits().model_dump(mode="json"))
+    for sub in SUBDIRS:
+        (root / sub).mkdir(parents=True, exist_ok=True)
+    manifest = _read_json(root / "manifest.json")
+    manifest["schema_version"] = "1.1"
+    _write_json(root / "manifest.json", manifest)
+    return "1.1"
+
 
 # schema migrations: from_version -> function(root) that upgrades in place to the next version
-MIGRATIONS: Dict[str, Callable[[Path], str]] = {}
+MIGRATIONS: Dict[str, Callable[[Path], str]] = {"1.0": _migrate_1_0}
 
 
 class ProjectError(RuntimeError):
@@ -91,6 +134,8 @@ class Project:
         _write_json(root / "manifest.json", Manifest(project_name=name, city=city, crs=crs).model_dump(mode="json"))
         _write_json(root / "parameters.json", default_parameters().to_json_dict())
         _write_json(root / "locks.json", Locks().model_dump(mode="json"))
+        _write_json(root / "edit_log.json", EditLog().model_dump(mode="json"))
+        _write_json(root / "terrain" / "edits.json", TerrainEdits().model_dump(mode="json"))
         hist = History()
         hist.log("create", name=name, city=city, crs=crs)
         _write_json(root / "history.json", hist.model_dump(mode="json"))
@@ -180,12 +225,15 @@ class Project:
         fc = ensure_project_crs(fc, self.manifest.crs, source_crs)
         self.write_json(rel, fc)
 
+    def scenario_ids(self) -> List[str]:
+        return self.option_ids()
+
     def option_ids(self) -> List[str]:
-        d = self.root / "options"
+        d = self.root / "scenarios"
         return sorted(p.name for p in d.iterdir() if p.is_dir()) if d.exists() else []
 
     def option_dir(self, option_id: str) -> Path:
-        d = self.root / "options" / option_id
+        d = self.root / "scenarios" / option_id
         d.mkdir(parents=True, exist_ok=True)
         return d
 

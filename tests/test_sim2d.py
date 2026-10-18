@@ -74,5 +74,5 @@ def test_2d_volume_leaving_matches_swmm(plane_project):
     tol = plane_project.parameters.value("sim2d.volume_tolerance_pct")
     assert abs(s["balance"]["continuity_error_pct"]) < 1
     assert abs(s["swmm_comparison"]["difference_pct_of_rainfall"]) < tol, s
-    assert plane_project.exists("options/baseline/sim2d/rp2.npz")
+    assert plane_project.exists("scenarios/baseline/sim2d/rp2.npz")
     assert s["label"].startswith("indicative")

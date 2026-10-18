@@ -9,6 +9,7 @@ from spongepark.engine.pipeline import run_option
 from spongepark.rhino.roundtrip import export_3dm, import_3dm
 
 from .test_layout import _valley_project
+from spongepark.engine.nbs.components import elements_fc
 
 
 @pytest.fixture(scope="module")
@@ -72,13 +73,13 @@ def test_round_trip_detects_edits_locks_and_reruns(exported):
     assert pond_id in ch["moved"]
     assert sorted(ch["deleted"]) == sorted(o.Attributes.GetUserString("id") for o in swales)
     assert len(ch["new"]) == 1
-    comps = {f["properties"]["id"]: f["properties"] for f in p.read_geojson("options/auto/components.geojson")["features"]}
+    comps = {f["properties"]["id"]: f["properties"] for f in elements_fc(p, "auto")["features"]}
     new_id = ch["new"][0]
     assert comps[new_id]["type"] == "rain_garden" and comps[new_id]["source"] == "designer"
     assert set(p.locks.locked["auto"]) >= {pond_id, new_id}
     assert res["rerun"] and res["comparison"]["rows"]
     # the pond was regraded at its new place: invert recomputed from the new rim
-    g = shape(p.read_geojson("options/auto/components.geojson")["features"][0]["geometry"])
+    g = shape(elements_fc(p, "auto")["features"][0]["geometry"])
     assert comps[pond_id]["invert_elev_m"] > 0 and g.is_valid
 
 

@@ -106,7 +106,7 @@ def info(pid: str) -> Dict[str, Any]:
     p = _project(pid)
     return {"name": p.manifest.project_name, "crs": p.manifest.crs, "calibration": p.manifest.calibration_status,
             "options": p.option_ids(), "unconfirmed_parameters": len(p.parameters.unconfirmed()),
-            "has_terrain": p.exists("terrain/existing.tif"), "has_baseline": p.exists("options/baseline/results/summary.json"),
+            "has_terrain": p.exists("terrain/existing.tif"), "has_baseline": p.exists("scenarios/baseline/results/summary.json"),
             "path": str(p.package_path or p.root),
             "return_periods": p.parameters.value("project.return_periods"),
             "has_soils": bool(p.read_geojson("site/soil_zones.geojson")["features"]),
@@ -140,7 +140,7 @@ def parameters(pid: str, prefix: str = "", unconfirmed: bool = False) -> List[Di
 class ParamSet(BaseModel):
     value: Any
     unit: Optional[str] = None
-    source: str = "user"
+    source: str = "designer"
     note: Optional[str] = None
 
 
@@ -230,7 +230,9 @@ def run(pid: str, oid: str, wait: bool = False) -> Dict[str, Any]:
 
 @app.get("/projects/{pid}/options/{oid}/components")
 def components(pid: str, oid: str) -> Dict[str, Any]:
-    return _project(pid).read_geojson(f"options/{oid}/components.geojson")
+    from spongepark.engine.nbs.components import elements_fc
+
+    return elements_fc(_project(pid), oid)
 
 
 @app.put("/projects/{pid}/options/{oid}/components")
@@ -241,10 +243,12 @@ def put_components(pid: str, oid: str, fc: Dict[str, Any] = Body(...), rerun: bo
     from spongepark.engine.pipeline import compare, run_option
 
     def fn(p: Project):
+        from spongepark.engine.nbs.components import save_elements_fc
+
         for f in fc.get("features", []):
             f["properties"]["source"] = "designer"
             f["properties"]["locked"] = True
-        p.write_geojson(f"options/{oid}/components.geojson", fc)
+        save_elements_fc(p, oid, fc)
         p.locks.locked[oid] = sorted({f["properties"]["id"] for f in fc.get("features", [])})
         out = {"regrade": regrade(p, oid)}
         if rerun:
@@ -257,19 +261,19 @@ def put_components(pid: str, oid: str, fc: Dict[str, Any] = Body(...), rerun: bo
 
 @app.get("/projects/{pid}/options/{oid}/summary")
 def summary(pid: str, oid: str) -> Dict[str, Any]:
-    return _project(pid).read_json(f"options/{oid}/results/summary.json")
+    return _project(pid).read_json(f"scenarios/{oid}/results/summary.json")
 
 
 @app.get("/projects/{pid}/options/{oid}/comparison")
 def comparison(pid: str, oid: str) -> Dict[str, Any]:
-    return _project(pid).read_json(f"options/{oid}/results/comparison.json")
+    return _project(pid).read_json(f"scenarios/{oid}/results/comparison.json")
 
 
 @app.get("/projects/{pid}/options/{oid}/timeseries/{rp}")
 def timeseries(pid: str, oid: str, rp: int, columns: Optional[str] = None) -> Dict[str, Any]:
     import pandas as pd
 
-    df = pd.read_parquet(_project(pid).path(f"options/{oid}/results/rp{rp}_timeseries.parquet"))
+    df = pd.read_parquet(_project(pid).path(f"scenarios/{oid}/results/rp{rp}_timeseries.parquet"))
     if columns:
         df = df[["time_hr"] + [c for c in columns.split(",") if c in df.columns]]
     return {"columns": list(df.columns), "data": df.to_numpy().tolist()}
@@ -313,7 +317,7 @@ def sim2d_frames(pid: str, oid: str, rp: int, start: int = 0, count: int = 1000)
     from spongepark.engine.io.viewer import frames_payload
 
     p = _project(pid)
-    if not p.exists(f"options/{oid}/sim2d/rp{rp}.npz"):
+    if not p.exists(f"scenarios/{oid}/sim2d/rp{rp}.npz"):
         raise HTTPException(404, "run the 2D simulation first")
     return frames_payload(p, oid, rp, start, count)
 
@@ -328,7 +332,7 @@ def sim2d_inputs(pid: str, oid: str, rp: int, cell_m: Optional[float] = None) ->
 
 @app.get("/projects/{pid}/options/{oid}/sim2d/{rp}/summary")
 def sim2d_summary(pid: str, oid: str, rp: int) -> Dict[str, Any]:
-    return _project(pid).read_json(f"options/{oid}/sim2d/rp{rp}_summary.json")
+    return _project(pid).read_json(f"scenarios/{oid}/sim2d/rp{rp}_summary.json")
 
 
 @app.get("/projects/{pid}/options/{oid}/retained/{rp}")
@@ -358,10 +362,10 @@ def export(pid: str, oid: str, out_dir: str = Body(..., embed=True),
             from spongepark.rhino.roundtrip import export_3dm
 
             out["3dm"] = export_3dm(p, oid, d / f"{oid}.3dm")["path"]
-        if "dxf" in formats and p.exists(f"options/{oid}/design.dxf"):
+        if "dxf" in formats and p.exists(f"scenarios/{oid}/design.dxf"):
             import shutil
 
-            out["dxf"] = str(shutil.copy(p.path(f"options/{oid}/design.dxf"), d / f"{oid}_design.dxf"))
+            out["dxf"] = str(shutil.copy(p.path(f"scenarios/{oid}/design.dxf"), d / f"{oid}_design.dxf"))
         if "report" in formats:
             from spongepark.engine.report.html import build_report
 

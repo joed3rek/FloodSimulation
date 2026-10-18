@@ -30,7 +30,7 @@ def build(out: Path) -> None:
         run_option(p, "auto")
         s = run2d(p, "auto", 5)
         (out / "inputs.json").write_text(json.dumps(sim2d_inputs_payload(p, "auto", 5)), encoding="utf-8")
-        frames = np.load(p.path("options/auto/sim2d/rp5.npz"))
+        frames = np.load(p.path("scenarios/auto/sim2d/rp5.npz"))
         final = frames["depth_m"][-1].astype(np.float32)
         (out / "engine.json").write_text(json.dumps({"balance": s["balance"], "depth": b64(final)}), encoding="utf-8")
 

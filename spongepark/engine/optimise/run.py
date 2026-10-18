@@ -159,7 +159,7 @@ def optimise(project: Project, mode: str = "forward", n_initial: Optional[int] =
     n_gen = n_gen or int(P.value("optimise.generations"))
     n_final = n_final or int(P.value("optimise.representatives"))
     prefix = prefix or ("pareto" if mode == "forward" else "inverse")
-    base = project.read_json("options/baseline/results/summary.json")
+    base = project.read_json("scenarios/baseline/results/summary.json")
     rain_mm = {int(rp): float(v["storm"]["depth_mm"]) for rp, v in base["return_periods"].items()}
     missing = [rp for rp in s["rps"] if rp not in rain_mm]
     if missing:

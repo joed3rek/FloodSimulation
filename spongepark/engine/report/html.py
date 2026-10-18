@@ -57,7 +57,7 @@ def _fmt(v: Any, nd: int = 1) -> str:
 
 
 def _option(project: Project, oid: str, charts_dir: Path) -> Dict[str, Any]:
-    base = f"options/{oid}"
+    base = f"scenarios/{oid}"
     summ = project.read_json(f"{base}/results/summary.json")
     cmp_ = project.read_json(f"{base}/results/comparison.json") if project.exists(f"{base}/results/comparison.json") else None
     layout = project.read_json(f"{base}/layout_report.json") if project.exists(f"{base}/layout_report.json") else None
@@ -114,10 +114,10 @@ def build_report(project: Project, option_ids: Optional[List[str]], out_dir: Pat
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     charts_dir = out_dir / "charts"
-    if not project.exists("options/baseline/results/summary.json"):
+    if not project.exists("scenarios/baseline/results/summary.json"):
         raise ValueError("run the baseline first: the report compares every option with the existing site.")
     option_ids = option_ids or [o for o in project.option_ids()
-                                if o != "baseline" and not o.startswith("_") and project.exists(f"options/{o}/results/summary.json")]
+                                if o != "baseline" and not o.startswith("_") and project.exists(f"scenarios/{o}/results/summary.json")]
     P = project.parameters
     params = [{"key": q.key, "value": _fmt(q.value, 3) if isinstance(q.value, float) else str(q.value)[:80], "unit": q.unit,
                "source": q.source.value, "confirmed": q.confirmed, "note": q.note} for q in P]
@@ -150,7 +150,7 @@ def build_report(project: Project, option_ids: Optional[List[str]], out_dir: Pat
     swmm_dir = out_dir / "swmm"
     inps = []
     for oid in ["baseline"] + option_ids:
-        src = project.path(f"options/{oid}/swmm")
+        src = project.path(f"scenarios/{oid}/swmm")
         if src.exists():
             for f in sorted(src.glob("*.inp")):
                 dest = swmm_dir / oid / f.name

@@ -12,6 +12,7 @@ from spongepark.engine.pipeline import compare, make_hyetographs, run_option
 from spongepark.engine.project import Project, Source
 from spongepark.engine.site import Site
 from spongepark.engine.terrain import read_geotiff, v_valley, write_geotiff
+from spongepark.engine.nbs.components import elements_fc
 
 BUILDING = box(2, 50, 12, 60)  # south-west hillside (valley runs north-south through x = 30)
 
@@ -88,7 +89,7 @@ def test_elements_placed_in_the_valley_and_away_from_the_building(valley):
     into_pond = sum(e["drains_here_after_grading_m2"] for e in rep["elements"] if ends_in(e, pond["id"]))
     assert into_pond > 0.9 * rep["site_area_m2"]  # the valley floor and its swales feed the pond
     assert pond["holds_m3_estimate"] >= 0.98 * pond["target_m3"] and pond["limited_by"] == "design storm"
-    comps = p.read_geojson("options/auto/components.geojson")["features"]
+    comps = elements_fc(p, "auto")["features"]
     setback = p.parameters.value("layout.building_setback_m")
     for f in comps:
         g = shape(f["geometry"])
@@ -102,7 +103,7 @@ def test_elements_placed_in_the_valley_and_away_from_the_building(valley):
 def test_graded_surface_only_cuts(valley):
     p, *_ = valley
     z0 = read_geotiff(p.path("terrain/existing.tif")).z
-    zg = read_geotiff(p.path("options/auto/terrain/graded.tif")).z
+    zg = read_geotiff(p.path("scenarios/auto/terrain/graded.tif")).z
     m = zg != -9999
     assert (zg[m] <= z0[m] + 1e-4).all() and (zg[m] < z0[m] - 0.05).any()
 
@@ -111,7 +112,7 @@ def test_rebuilt_subcatchments_tile_the_site_and_feed_elements(valley):
     p, _, rep, _, _ = valley
     site = Site.load(p, "auto")
     assert sum(s.shape().area for s in site.subcatchments) == pytest.approx(site.boundary.area, rel=1e-3)
-    comps = p.read_geojson("options/auto/components.geojson")["features"]
+    comps = elements_fc(p, "auto")["features"]
     for f in comps:
         assert f["properties"]["inflow_from"] == [f"SC_{f['properties']['id']}"]
     # the baseline still uses the delineated subcatchments
@@ -132,10 +133,10 @@ def test_design_drawing_and_contours(valley):
     p, *_ = valley
     import ezdxf
 
-    doc = ezdxf.readfile(p.path("options/auto/design.dxf"))
+    doc = ezdxf.readfile(p.path("scenarios/auto/design.dxf"))
     layers = {e.dxf.layer for e in doc.modelspace()}
     assert {"SP-DSN-CONTOUR", "SP-DSN-POND", "SP-DSN-LABEL", "SP-SITE-BOUNDARY"} <= layers
-    assert p.read_geojson("options/auto/design_contours.geojson")["features"]
+    assert p.read_geojson("scenarios/auto/design_contours.geojson")["features"]
 
 
 def test_swale_follows_the_valley_line_and_feeds_the_pond(tmp_path):
@@ -145,7 +146,7 @@ def test_swale_follows_the_valley_line_and_feeds_the_pond(tmp_path):
                        overrides={"nbs.bioswale.min_longitudinal_slope_pct": 0.5})
         sw = [e for e in rep["elements"] if e["type"] == "bioswale"]
         assert sw, rep["skipped"]
-        comps = {f["properties"]["id"]: f for f in p.read_geojson("options/train/components.geojson")["features"]}
+        comps = {f["properties"]["id"]: f for f in elements_fc(p, "train")["features"]}
         line = shape(comps[sw[0]["id"]]["geometry"])
         assert line.geom_type == "LineString" and abs(line.centroid.x - 30) < 3  # on the valley line
         last = sw[-1]
@@ -168,7 +169,7 @@ def test_recharge_wells_need_site_data_then_take_pond_overflow(tmp_path):
         rep = generate(p, "wells", ["detention_pond", "recharge_well"])
         well = next(e for e in rep["elements"] if e["type"] == "recharge_well")
         pond = next(e for e in rep["elements"] if e["type"] == "detention_pond")
-        comps = {f["properties"]["id"]: f["properties"] for f in p.read_geojson("options/wells/components.geojson")["features"]}
+        comps = {f["properties"]["id"]: f["properties"] for f in elements_fc(p, "wells")["features"]}
         assert comps[pond["id"]]["overflow_to"] == well["id"]
         assert comps[well["id"]]["overflow_to"].startswith("OUT")
         res = run_option(p, "wells")

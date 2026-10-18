@@ -10,6 +10,7 @@ import pytest
 
 from spongepark.engine.project import Project, Source
 from spongepark.engine.rainfall import Hyetograph
+from spongepark.engine.nbs.components import save_elements_fc
 
 X0, Y0 = 500000.0, 1400000.0
 
@@ -49,7 +50,7 @@ def make_project(
     p.write_geojson("site/outfalls.geojson",
                     fc([({"type": "Point", "coordinates": (X0, Y0 - 5)}, {"id": "OUT", "invert_elev_m": outfall_elev})]))
     if elements is not None:
-        p.write_geojson("options/opt/components.geojson", fc(elements))
+        save_elements_fc(p, "opt", fc(elements))
     p.parameters.set("evaporation.rate_mm_day", 0.0, source=Source.USER)
     p.parameters.set("sim.post_storm_hr", post_storm_hr, source=Source.USER)
     return p
