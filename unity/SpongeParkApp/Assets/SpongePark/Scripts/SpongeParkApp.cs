@@ -156,10 +156,15 @@ namespace SpongePark
             if (float.TryParse(Arg("-spPitch"), out var pitch)) rigLeft.Pitch = pitch;
             if (float.TryParse(Arg("-spZoom"), out var zoomBy)) rigLeft.Distance /= zoomBy;
             if (float.TryParse(Arg("-spYaw"), out var yaw)) rigLeft.Yaw = yaw;
+            if (System.Environment.GetCommandLineArgs().Contains("-spPlan")) rigLeft.Plan = true;
             var look = Arg("-spLookAt")?.Split(',');   // -spLookAt x,y (survey metres)
             if (look != null && look.Length == 2 && frame != null && float.TryParse(look[0], out var lx) && float.TryParse(look[1], out var ly))
                 rigLeft.Target = frame.World(lx, ly, left.Terrain.GroundAt(lx, ly) is var gz && !float.IsNaN(gz) ? gz : frame.ZRef);
             yield return new WaitForSecondsRealtime(1);
+            if (Arg("-spDraw") != null) { yield return DrawForTest(Arg("-spDraw")); yield return new WaitForSecondsRealtime(2); }
+            if (float.TryParse(Arg("-spScroll"), out var sc) && sidebarScroll != null) sidebarScroll.scrollOffset = new Vector2(0, sc);
+            yield return new WaitForSecondsRealtime(0.5f);
+            Debug.Log($"camera: plan {rigLeft.Plan} pitch {rigLeft.Pitch} yaw {rigLeft.Yaw} distance {rigLeft.Distance} ortho {camLeft.orthographic}");
             if (plan != null) Debug.Log($"plan zoom {plan.Zoom:0.000} offset {plan.Offset} size {plan.contentRect.size}");
             ScreenCapture.CaptureScreenshot(Arg("-spShot"));
             yield return new WaitForSecondsRealtime(2);
@@ -225,6 +230,7 @@ namespace SpongePark
         IEnumerator Run(IEnumerator work, string what)
         {
             busy = true;
+            api.ClearError();   // only errors from this piece of work are reported
             status = what + "...";
             yield return work;
             busy = false;
@@ -238,6 +244,11 @@ namespace SpongePark
             if (r == null) yield break;
             surveyLayers = null;
             layerVisible.Clear();
+            flowData = null;
+            designFc = null;
+            designFor = null;
+            selectedId = null;
+            tool = null;
             yield return Refresh();
             Remember((string)r["path"] ?? projectPath, (string)r["name"]);   // the engine's resolved path
             status = $"Opened {(string)r["name"]}.";
@@ -251,7 +262,8 @@ namespace SpongePark
             yield return api.Send("POST", api.P("/site/confirm"), new { confirmed }, x => r = x);
             if (r == null) yield break;
             siteConfirmed = confirmed;
-            status = confirmed ? "Site model confirmed. Next: the targets." : "Site model reopened.";
+            status = confirmed ? "Site model confirmed. Step 2 shows where water runs and collects." : "Site model reopened.";
+            if (confirmed) yield return LoadFlow();
         }
 
         IEnumerator Refresh()
@@ -260,7 +272,8 @@ namespace SpongePark
             yield return api.Get(api.P(""), x => r = x);
             if (r == null) yield break;
             info = (JObject)r;
-            options = r["options"].ToObject<List<string>>().Where(o => !o.StartsWith("_")).ToList();
+            // the designer's own scenario is worked on in Step 3, not chosen among the options
+            options = r["options"].ToObject<List<string>>().Where(o => !o.StartsWith("_") && o != DesignScenario).ToList();
             JToken ps = null;
             yield return api.Get(api.P("/parameters?prefix=project.return_periods"), x => ps = x);
             if (ps != null && ps.Any()) returnPeriods = ps[0]["value"].ToObject<List<int>>();
@@ -318,7 +331,7 @@ namespace SpongePark
         {
             var opt = CurrentOption;
             comparison = null;
-            if (opt == null || opt == "baseline") yield break;
+            if (opt == null || opt == "baseline" || opt == DesignScenario) yield break;
             if (bundle) yield return api.LoadBundleFile($"comparison_{opt}.json", r => comparison = r);
             else yield return api.Get(api.P($"/options/{opt}/comparison"), r => comparison = r);
         }
@@ -351,7 +364,9 @@ namespace SpongePark
             right.Terrain.SetContours(contours);
             left.Survey.Build(surveyLayers, frame, layerVisible);
             right.Survey.Build(surveyLayers, frame, layerVisible);
+            if (siteConfirmed && !bundle) yield return LoadFlow();
             yield return LoadComparison();
+            if (designFor == projectPath && designFc != null && siteConfirmed) { yield return ShowDesignGround(); RefreshDesign(); }
             // with nothing to compare yet (only the existing site), one full view of it
             if (right.Option == "baseline" && !bundle) { sideBySide = false; showProposed = false; ApplyViewports(); }
             var b = left.Terrain.GetComponent<MeshFilter>().sharedMesh.bounds;
@@ -401,6 +416,7 @@ namespace SpongePark
         // ------------------------------------------------------------ frame update
         void Update()
         {
+            DesignInput();
             if (!playing) return;
             float dtSim = Time.deltaTime * speed;
             simT += dtSim;

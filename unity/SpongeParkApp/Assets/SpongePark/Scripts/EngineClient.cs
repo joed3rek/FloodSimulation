@@ -17,6 +17,8 @@ namespace SpongePark
         public string ProjectId { get; private set; }
         public JObject BundleManifest { get; private set; }
         public string LastError { get; private set; } = "";
+        /// Forget the last error (before a new piece of work, or after optional data that may be missing).
+        public void ClearError() => LastError = "";
         /// What the running engine can do (empty for an engine older than this app).
         public string[] Features { get; private set; } = new string[0];
         public bool Current => Array.IndexOf(Features, "intake") >= 0;

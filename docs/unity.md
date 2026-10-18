@@ -30,12 +30,14 @@ the top of the sidebar returns to the landing. After that, the left panel walks 
 | Step | Does |
 |---|---|
 | 1. Site model | Shown as soon as a project opens: the ground model with everything the survey drawing shows on it (compound wall, fences, gates, buildings, trees and palms, paths, roads, drains, manholes, poles, steps), one row per drawing layer with the surveyor's own layer names; click a row to show or hide that layer. Confirm the model to go on |
-| 2. Targets | Area budget, sizing storm, maximum drawdown, inverse-mode storm (saved as your decisions); shown once the site model is confirmed |
-| 3. Analyse and design | Existing-site analysis; generate a layout; optimise (best retention, or least area) |
-| 4. Compare | Choose option and storm; retention and peak reduction against the existing site |
-| 5. Simulate | Runs the 2D model for existing and proposed; play, restart, speed; live GPU mode; GPU verification |
-| 6. View | Side by side or one view, existing/proposed toggle, vertical exaggeration, camera tour |
-| 7. Export | Drawings + Rhino file + report; web viewer bundle; video of the storm |
+| 2. Flow and flooding | Shown once the site model is confirmed. Where water runs (flow lines, wider where more ground drains to them, and downhill arrows), where it collects (ponding hotspots, listed with depth and volume; click to go there) and where it leaves the park, from the ground alone. Plan (2D) shows it as a map. The flood simulation (depths, flooded area, the water animation) runs once rainfall and soil infiltration rates are in the project; it uses Itzi when set up |
+| 3. Design | Draw NbS on the ground: rain garden, detention pond, retention pond (click the corners, double-click or Enter to finish), bioswale (click along its line), recharge well (one click). Select to move (drag) or change sizes; Delete, Undo/Redo (Ctrl+Z/Y). Each change is carved into the ground by the engine and checked (outside the park, over trees or paths, depth outside the safe range, over the area budget); the budget meter and the checks update. Elements are kept in the project's "design" scenario |
+| 4. Targets | Area budget, sizing storm, maximum drawdown, inverse-mode storm (saved as your decisions) |
+| 5. Analyse and propose | Existing-site SWMM analysis; generate a layout; optimise (best retention, or least area) |
+| 6. Compare | Choose option and storm; retention and peak reduction against the existing site |
+| 7. Simulate | Runs the 2D model for existing and proposed; play, restart, speed; live GPU mode; GPU verification |
+| 8. View | Side by side or one view, existing/proposed toggle, vertical exaggeration, camera tour |
+| 9. Export | Drawings + Rhino file + report; web viewer bundle; video of the storm |
 
 The view shows the storm clock, the rainfall at that moment and a running count of litres kept on
 site for each side (from the SWMM time series: rainfall so far minus water that has left).

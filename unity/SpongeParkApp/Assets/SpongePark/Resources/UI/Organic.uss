@@ -355,3 +355,11 @@ TextField.input, DropdownField.input { height: 40px; min-height: 40px; margin: 0
 .layer-row--off .layer-title, .layer-row--off .layer-count { color: var(--muted-foreground); }
 .layer-row--check { border-color: var(--secondary); border-width: 1px; }
 .layer-row--check .layer-count { color: var(--clay-ink); }
+
+/* flow and design steps */
+.hint { font-size: 12px; color: var(--clay-ink); white-space: normal; margin: 4px 0 8px 0; }
+.budget-bar { height: 8px; border-radius: 4px; background-color: rgba(222, 216, 207, 0.7); margin: 2px 0 10px 0; overflow: hidden; }
+.budget-fill { height: 8px; border-radius: 4px; background-color: var(--primary); width: 0; }
+.budget-fill--over { background-color: var(--destructive); }
+.warn-item { font-size: 12px; color: var(--clay-ink); white-space: normal; margin: 2px 0; }
+.layer-row--selected { border-color: var(--secondary); border-width: 2px; background-color: rgba(193, 140, 93, 0.12); }

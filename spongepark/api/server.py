@@ -421,7 +421,10 @@ def retained(pid: str, oid: str, rp: int, every: int = 5) -> Dict[str, Any]:
     """Running litres retained on site through the storm (SWMM time series)."""
     from spongepark.engine.io.viewer import retained_payload
 
-    return retained_payload(_project(pid), oid, rp, every)
+    p = _project(pid)
+    if not p.exists(f"scenarios/{oid}/results/rp{rp}_timeseries.parquet"):
+        raise HTTPException(404, f"no SWMM results for {oid}, {rp}-year storm yet")
+    return retained_payload(p, oid, rp, every)
 
 
 @app.post("/projects/{pid}/viewer-bundle")

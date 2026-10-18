@@ -54,6 +54,7 @@ namespace SpongePark
                 yield return api.Get(api.P($"/options/{Option}/retained/{rp}"), r => retained = r);
             }
             if (terrain == null) { Status = "no terrain: " + api.LastError; yield break; }
+            api.ClearError();   // storm frames and results are optional: none yet is not an error
             Terrain.Build(HeightGrid.FromPayload(terrain), frame, comps);
             if (frames != null)
             {

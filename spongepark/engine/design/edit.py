@@ -167,6 +167,15 @@ def apply(project: Project, scenario_id: str, fc: Dict[str, Any], action: Option
         p = f.setdefault("properties", {})
         if not p.get("type") or not p.get("id"):
             raise ValueError(f"every element needs an id and a type ({p}).")
+        try:   # a clear message for a malformed shape, before anything is saved
+            g = shape(f.get("geometry") or {})
+        except Exception as ex:
+            raise ValueError(f"{p['id']}: its geometry is not valid GeoJSON ({ex}).")
+        expect = {"polygon": ("Polygon", "MultiPolygon"), "line": ("LineString",), "point": ("Point",)}.get(TOOLS.get(p["type"], ""), None)
+        if expect and g.geom_type not in expect:
+            raise ValueError(f"{p['id']}: a {p['type'].replace('_', ' ')} is drawn as a {expect[0].lower()}, not a {g.geom_type}.")
+        if g.geom_type in ("Polygon", "MultiPolygon") and (not g.is_valid or g.area < 1.0):
+            raise ValueError(f"{p['id']}: the outline crosses itself or is smaller than 1 m2.")
         # sizes not given take the project's defaults, written onto the element so it says what was used
         for k, v in tools.get(p["type"], {}).get("defaults", {}).items():
             if p.get(k) is None:

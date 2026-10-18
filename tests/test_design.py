@@ -87,3 +87,15 @@ def test_flow_analysis_needs_only_the_ground(site):
     with Project.open(site) as p:
         assert p.exists("site/flow_analysis.json")
         assert {k: v for k, v in validate_package(p.root).items() if v} == {}
+
+
+def test_a_malformed_shape_is_refused_with_its_element_named(site):
+    c = TestClient(app)
+    pid = c.post("/projects/open", json={"path": site}).json()["project"]
+    flat = ({"type": "Polygon", "coordinates": [[30, 20], [40, 20], [40, 28], [30, 20]]}, {"id": "DP1", "type": "detention_pond"})
+    r = c.put(f"/projects/{pid}/design/design?wait=true", json={"features": _fc(flat), "action": "create"}).json()
+    assert r["status"] == "error" and "DP1" in r["error"]
+    bow = ({"type": "Polygon", "coordinates": [[[30, 20], [40, 28], [40, 20], [30, 28], [30, 20]]]}, {"id": "RG9", "type": "rain_garden"})
+    r = c.put(f"/projects/{pid}/design/design?wait=true", json={"features": _fc(bow), "action": "create"}).json()
+    assert r["status"] == "error" and "crosses itself" in r["error"]
+    c.post(f"/projects/{pid}/close")

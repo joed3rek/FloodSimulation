@@ -12,6 +12,7 @@ namespace SpongePark
     public partial class SpongeParkApp
     {
         UIDocument doc;
+        ScrollView sidebarScroll;
         Label statusLabel, infoLabel, verifyLabel, videoLabel, stormTitle, stormText, litresLeft, litresRight, leftName, rightName;
         VisualElement compareBox, litresLeftCard, litresRightCard, siteSection, siteLayerList, targetsSection, designSection,
             simulateGpuRow, exportSection;
@@ -85,6 +86,7 @@ namespace SpongePark
             sidebar.Add(statusLabel);
 
             var scroll = new ScrollView(ScrollViewMode.Vertical) { horizontalScrollerVisibility = ScrollerVisibility.Hidden };
+            sidebarScroll = scroll;
             scroll.style.flexGrow = 1;
             sidebar.Add(scroll);
 
@@ -103,8 +105,9 @@ namespace SpongePark
                 siteSection.Add(siteLayerList);
                 confirmSiteButton = Btn("The site model is right: continue", () => StartCoroutine(Run(ConfirmSite(!siteConfirmed), "Saving")), "btn--wide");
                 siteSection.Add(confirmSiteButton);
+                BuildFlowAndDesign(scroll);
 
-                targetsSection = Section(scroll, "Step 2", "Targets");
+                targetsSection = Section(scroll, "Step 4", "Targets");
                 var card = Card("card--stone");
                 card.Add(SliderField("Area budget", 2, 30, budgetPct, "% of site", v => budgetPct = v));
                 card.Add(SliderField("Maximum drawdown", 12, 96, maxDrawdownHr, "hours", v => maxDrawdownHr = v));
@@ -113,7 +116,7 @@ namespace SpongePark
                 card.Add(Btn("Save targets", () => StartCoroutine(Run(SetTargets(), "Saving targets"))));
                 targetsSection.Add(card);
 
-                designSection = Section(scroll, "Steps 3 and 4", "Analyse and design");
+                designSection = Section(scroll, "Step 5", "Analyse and propose");
                 designSection.Add(Btn("Analyse the existing site", () => StartCoroutine(Run(Baseline(), "Analysing")), "btn--wide"));
                 var dr = Row();
                 dr.Add(Btn("Generate", () => StartCoroutine(Run(Generate(false), "Generating")), "btn--outline"));
@@ -326,6 +329,7 @@ namespace SpongePark
                 doc.rootVisualElement.Query<Button>().ForEach(b => { if (b != playButton) b.SetEnabled(!busy); });
             }
             SyncSiteStep();
+            SyncFlowAndDesign();
             SyncChips();
             SyncComparison();
             if (verifyLabel != null && !string.IsNullOrEmpty(verify))
