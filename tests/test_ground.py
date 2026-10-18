@@ -48,3 +48,11 @@ def test_questionnaire_and_rainfall_through_the_api_make_the_project_ready_to_ru
     q = c.get(f"/projects/{pid}/parameters?prefix=swmm.infiltration_method").json()
     assert q[0]["value"] == "CURVE_NUMBER"
     c.post(f"/projects/{pid}/close")
+
+
+def test_soil_group_gives_the_nbs_drain_out_rate_unless_a_test_is_given():
+    from spongepark.engine.site.ground import infiltration_rate
+
+    assert infiltration_rate("C", None)["ksat_mm_hr"] == 1.27 and infiltration_rate("C", None)["assumed"]
+    assert infiltration_rate("C", 12.0) == {"ksat_mm_hr": 12.0, "source": "percolation test (designer)", "assumed": False}
+    assert infiltration_rate("D", None)["ksat_mm_hr"] is None      # 0-1.27 mm/h: needs a percolation test

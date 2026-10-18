@@ -180,8 +180,9 @@ def apply(project: Project, scenario_id: str, fc: Dict[str, Any], action: Option
         for k, v in tools.get(p["type"], {}).get("defaults", {}).items():
             if p.get(k) is None:
                 p[k] = v
-        p["source"] = "designer"
-        p["locked"] = True
+        # suggested elements stay "proposal" until the designer changes them; the designer's own are locked
+        p["source"] = "proposal" if p.get("source") == "proposal" else "designer"
+        p["locked"] = p["source"] == "designer"
     if not project.exists("site/subcatchments.geojson"):   # the ground's drainage, needed to carve
         delineate(project)
     sc = f"scenarios/{scenario_id}/scenario.json"
@@ -189,7 +190,8 @@ def apply(project: Project, scenario_id: str, fc: Dict[str, Any], action: Option
         project.write_json(sc, Scenario(id=scenario_id, name="Design", status="draft",
                                         note="Elements placed by the designer.").model_dump(mode="json"))
     save_elements_fc(project, scenario_id, fc)
-    project.locks.locked[scenario_id] = sorted({f["properties"]["id"] for f in fc.get("features", [])})
+    project.locks.locked[scenario_id] = sorted({f["properties"]["id"] for f in fc.get("features", [])
+                                                if f["properties"].get("source") != "proposal"})
     elements = read_elements(fc)
     if elements:
         rep = regrade(project, scenario_id)

@@ -61,6 +61,20 @@ TR55_KEY = {
 BARREN = "fallow_bare_soil"
 
 
+def infiltration_rate(hsg: str, perc_mm_hr: Optional[float]) -> Dict[str, Any]:
+    """How fast water drains out of an NbS element into the soil (mm/h): a percolation test result when
+    given, otherwise TR-55's minimum rate for the soil group (Appendix A), marked as assumed. Group D's
+    minimum is 0, so it needs a test."""
+    if perc_mm_hr is not None and perc_mm_hr > 0:
+        return {"ksat_mm_hr": float(perc_mm_hr), "source": "percolation test (designer)", "assumed": False}
+    lo = tr55.data()["hsg"][hsg]["min_rate_mm_hr"]
+    if not lo:
+        return {"ksat_mm_hr": None, "assumed": True,
+                "source": f"soil group {hsg} drains 0-1.27 mm/h (TR-55 App. A): a percolation test is needed for NbS"}
+    return {"ksat_mm_hr": float(lo), "assumed": True,
+            "source": f"TR-55 Appendix A minimum for soil group {hsg} (assumed until a percolation test)"}
+
+
 def questions() -> Dict[str, Any]:
     return {"soils": SOILS, "covers": COVERS, "conditions": CONDITIONS, "paths": PATHS,
             "source": "NRCS (1986) TR-55 Urban Hydrology for Small Watersheds, tables 2-2a to 2-2c and Appendix A."}
@@ -100,7 +114,10 @@ def derive(answers: Dict[str, Any], rainfall_rows: Optional[List[Dict[str, float
                      "tr55_cover": key, "tr55_label": d["label"], "cn": cn,
                      "citation": f"TR-55 table {d['table']}, p. {d['page']}, HSG {hsg}"})
     cn = round(cn_sum, 1)
+    perc = answers.get("perc_mm_hr")
+    rate = infiltration_rate(hsg, float(perc) if perc not in (None, "") else None)
     out = {"answers": answers, "hsg": hsg, "soil_assumed": answers.get("soil") == "unknown",
+           "nbs_infiltration": rate,
            "covers": rows, "curve_number": cn,
            "s_mm": round(25400.0 / cn - 254.0, 2), "ia_mm": round(0.2 * (25400.0 / cn - 254.0), 2),
            "paths": answers.get("paths") or "paved",
@@ -184,6 +201,8 @@ def apply(project: Project, answers: Dict[str, Any]) -> Dict[str, Any]:
         project.write_geojson("site/soil_zones.geojson", {"type": "FeatureCollection", "features": [{
             "type": "Feature", "geometry": park.__geo_interface__,
             "properties": {"id": "PARK", "hsg": out["hsg"], "source": "ground questionnaire",
+                           "ksat_mm_hr": out["nbs_infiltration"]["ksat_mm_hr"],
+                           "ksat_source": out["nbs_infiltration"]["source"],
                            "dry_time_days": float(project.parameters.value_or("swmm.cn_dry_time_days", 7.0)),
                            "note": ("soil group assumed (C) until a percolation test" if out["soil_assumed"]
                                     else "soil group from the designer's answer")}}]})

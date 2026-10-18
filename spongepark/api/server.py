@@ -88,7 +88,7 @@ class OpenRequest(BaseModel):
 @app.get("/health")
 def health() -> Dict[str, Any]:
     # features let a client tell an engine started before an update from a current one
-    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan", "site_layers", "flow", "design", "ground", "rainfall"],
+    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan", "site_layers", "flow", "design", "ground", "rainfall", "suggest"],
             "open_projects": list(_projects)}
 
 
@@ -296,6 +296,56 @@ def design_put(pid: str, sid: str, body: DesignEdit, wait: bool = False) -> Dict
         return out
 
     return _job(pid, f"design {sid}", fn, wait)
+
+
+class SuggestRequest(BaseModel):
+    method: str = "quick"          # quick (layout generator) | optimise (NSGA-II + surrogate, SWMM-checked)
+    mode: str = "forward"          # forward: best retention for the budget | inverse: least area for the target storm
+    effort: str = "normal"
+
+
+@app.post("/projects/{pid}/design/{sid}/suggest")
+def design_suggest(pid: str, sid: str, req: SuggestRequest, wait: bool = False) -> Dict[str, Any]:
+    """Suggested layouts (each checked in SWMM and kept as a proposal) for the designer to pick from."""
+    from spongepark.engine.design.propose import suggest
+
+    def fn(p: Project):
+        out = suggest(p, req.method, req.mode, req.effort)
+        p.save()
+        return out
+
+    return _job(pid, f"suggest {req.method}", fn, wait)
+
+
+class AcceptRequest(BaseModel):
+    proposal_id: str
+    replace: bool = True
+
+
+@app.post("/projects/{pid}/design/{sid}/accept")
+def design_accept(pid: str, sid: str, req: AcceptRequest, wait: bool = False) -> Dict[str, Any]:
+    """Put a proposal's elements into the design (carved and checked); the designer edits them from there."""
+    from spongepark.engine.design.propose import accept
+
+    def fn(p: Project):
+        out = accept(p, sid, req.proposal_id, req.replace)
+        p.save()
+        return out
+
+    return _job(pid, f"accept {req.proposal_id}", fn, wait)
+
+
+@app.post("/projects/{pid}/design/{sid}/verify")
+def design_verify(pid: str, sid: str, wait: bool = False) -> Dict[str, Any]:
+    """SWMM on the design for every storm, against the existing site."""
+    from spongepark.engine.design.propose import verify
+
+    def fn(p: Project):
+        out = verify(p, sid)
+        p.save()
+        return out
+
+    return _job(pid, f"verify {sid}", fn, wait)
 
 
 @app.get("/projects/{pid}/options/{oid}/summary")

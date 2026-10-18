@@ -231,11 +231,36 @@ def generate(project: Project, option_id: str, types: Optional[List[str]] = None
     try:
         rep = _generate(project, option_id, types, write_outputs)
         rep["overrides"] = dict(overrides or {})
+        if write_outputs and overrides:
+            _record_sizes(project, option_id)   # the elements say the sizes they were built with
         if write_outputs:
             project.write_json(f"scenarios/{option_id}/layout_report.json", rep)
         return rep
     finally:
         project.parameters = saved
+
+
+# element field -> parameter key suffix (nbs.<type>.<suffix>) for sizes a layout is built with
+_SIZE_FIELDS = {"max_ponding_depth_m": "max_ponding_depth_m", "permanent_pool_depth_m": "permanent_pool_depth_m",
+                "side_slope_h_v": "side_slope_h_v", "soil_media_depth_m": "soil_media_depth_m",
+                "top_width_m": "top_width_m"}
+
+
+def _record_sizes(project: Project, option_id: str) -> None:
+    """Write the sizes in force while the layout was built (optimiser overrides included) onto its elements,
+    so the elements stay true to the graded ground when they are re-resolved or edited later."""
+    from ..nbs.components import has_elements, load_elements, save_elements
+
+    if not has_elements(project, option_id):
+        return
+    P = project.parameters
+    els = load_elements(project, option_id)
+    for e in els:
+        for field, suffix in _SIZE_FIELDS.items():
+            v = P.value_or(f"nbs.{e.type}.{suffix}", None)
+            if isinstance(v, (int, float)) and hasattr(e, field):
+                setattr(e, field, float(v))
+    save_elements(project, option_id, els)
 
 
 def _generate(project: Project, option_id: str, types: Optional[List[str]], write_outputs: bool) -> Dict[str, Any]:
