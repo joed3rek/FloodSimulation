@@ -25,7 +25,7 @@ from ..terrain.raster import read_geotiff
 log = logging.getLogger(__name__)
 
 REL = "site/survey_layers.json"
-STYLE = 3   # how the layers are modelled; a file made with an older style is rebuilt on load
+STYLE = 4   # how the layers are modelled; a file made with an older style is rebuilt on load
 
 # SP layer (or prefix) -> how the viewer draws it. height_m: display height above the ground (m).
 KINDS: List[Tuple[str, Dict[str, Any]]] = [
@@ -64,6 +64,8 @@ SKIP_TYPES = {"TEXT", "MTEXT", "DIMENSION", "HATCH", "LEADER", "MULTILEADER", "A
 TREE_SYMBOL_MAX_M = 15.0   # a closed shape this small on a tree layer is one tree's symbol
 GATE_MAX_M = 15.0          # a "gate" longer than this is something else drawn on the gate layer: drawn on the ground
 GATE_WIDTH_M = (1.0, 8.0)  # a gate symbol's long side, clamped to a sensible gate width
+MAX_OTHER_FEATURES = 3000  # unsorted layers (title blocks, hatching) are capped so the viewer stays quick
+MIN_SURFACE_M2 = 1.0      # smaller road or path surfaces are slivers between drawn lines
 PATH_MAX_WIDTH_M = 5.0     # a band between path lines this narrow (on average) is path surface
 ROAD_MAX_WIDTH_M = 25.0    # a band between road lines narrower than this is road surface
 ROAD_END_GAP_M = 30.0      # loose road ends this close are joined (the break symbols at a road's ends)
@@ -298,6 +300,9 @@ def build(project: Project) -> Dict[str, Any]:
                 feats.append(f)
         if not feats:
             continue
+        if kind == "other" and len(feats) > MAX_OTHER_FEATURES:
+            notes.append(f"{len(feats)} objects: only the first {MAX_OTHER_FEATURES} are drawn (unsorted layer).")
+            feats = feats[:MAX_OTHER_FEATURES]
         sized = sum(1 for f in feats if f.get("radius_m"))
         if notes:
             style["note"] = " ".join(notes)
@@ -485,9 +490,11 @@ def _path_surfaces(pieces):
 def _drape_polygon(poly, ground, step: float) -> Optional[Dict[str, Any]]:
     """A polygon as a triangle mesh lying on the ground: its outline (densified) and a grid of points
     inside it, triangulated; triangles outside the polygon (holes, concave bays) are dropped."""
-    from scipy.spatial import Delaunay
+    from scipy.spatial import Delaunay, QhullError
     from shapely import contains_xy
 
+    if poly.is_empty or poly.area < MIN_SURFACE_M2:   # slivers between nearly touching lines are not surfaces
+        return None
     rings = [np.asarray(poly.exterior.coords)] + [np.asarray(r.coords) for r in poly.interiors]
     pts = np.vstack([_densify(r, step) for r in rings])
     x0, y0, x1, y1 = poly.bounds
@@ -499,7 +506,14 @@ def _drape_polygon(poly, ground, step: float) -> Optional[Dict[str, Any]]:
     pts = np.unique(np.round(pts, 3), axis=0)
     if len(pts) < 3:
         return None
-    tri = Delaunay(pts)
+    try:
+        tri = Delaunay(pts)
+    except QhullError:
+        try:   # nearly flat or collinear points: nudge them slightly so a triangulation exists
+            tri = Delaunay(pts, qhull_options="QJ")
+        except QhullError:
+            log.warning("surface of %.1f m2 could not be triangulated; left out", poly.area)
+            return None
     cen = pts[tri.simplices].mean(axis=1)
     keep = contains_xy(poly.buffer(1e-3), cen[:, 0], cen[:, 1])
     simp = tri.simplices[keep]

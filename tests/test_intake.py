@@ -124,3 +124,20 @@ def test_finish_puts_the_survey_layers_on_the_ground(drawing, tmp_path):
         tree = layers["SP-TREE"]["features"][0]
         assert tree["g"] == "point" and abs(tree["radius_m"] - 3) < 1e-6
         assert not any(n.startswith(("SP-LVL", "SP-ANNO", "SP-CONT-LABEL")) for n in layers)   # no annotation
+
+
+def test_slivers_and_flat_shapes_do_not_stop_the_survey_layers():
+    """Road or path lines that nearly touch enclose slivers; they are left out instead of failing (QH6154)."""
+    import numpy as np
+    from shapely.geometry import Polygon
+
+    from spongepark.engine.site.survey_layers import _drape_polygon
+
+    ground = lambda x, y: np.zeros(len(x))   # noqa: E731
+    sliver = Polygon([(567.4, 733.5), (567.7, 733.5), (567.7, 735.8), (567.4, 735.8)])   # 0.3 x 2.3 m
+    assert _drape_polygon(sliver, ground, 1.0) is None
+    thin = Polygon([(0, 0), (40, 0), (40, 0.03), (0, 0.03)])                               # 1.2 m2, nearly a line
+    m = _drape_polygon(thin, ground, 1.0)
+    assert m is None or len(m["tri"]) % 3 == 0
+    ok = _drape_polygon(Polygon([(0, 0), (10, 0), (10, 3), (0, 3)]), ground, 1.0)
+    assert ok is not None and len(ok["tri"]) >= 6
