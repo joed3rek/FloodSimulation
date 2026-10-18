@@ -51,6 +51,7 @@ def plane_project(tmp_path_factory):
     write_geotiff(dem, p.path("terrain/existing.tif"))
     p.parameters.set("project.return_periods", [2], source=Source.USER)
     p.parameters.set("rainfall.storm_duration_hr", 3.0, source=Source.USER)
+    p.parameters.set("sim2d.engine", "builtin", source=Source.USER)   # Itzi has its own tests (test_itzi.py)
     delineate(p)
     dom = p.read_geojson("site/boundary.geojson")["features"][0]["geometry"]
     p.write_geojson("site/soil_zones.geojson", {"type": "FeatureCollection", "features": [{

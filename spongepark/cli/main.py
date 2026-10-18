@@ -34,11 +34,12 @@ sim2d_app = typer.Typer(help="2D rain-on-grid surface model, indicative (Phase 6
 optimise_app = typer.Typer(help="Optimisation with NSGA-II and a surrogate, SWMM-verified (Phase 5).",
                            no_args_is_help=True)
 nbs_app = typer.Typer(help="Component catalogue and design guidelines.", no_args_is_help=True)
+itzi_app = typer.Typer(help="Itzi, the 2D flood model (run as a separate program).", no_args_is_help=True)
 schema_app = typer.Typer(help="The shared .sponge JSON Schema and the generated Unity classes.", no_args_is_help=True)
 for sub, name in [(project_app, "project"), (params_app, "params"), (rain_app, "rainfall"), (site_app, "site"),
                   (option_app, "option"), (terrain_app, "terrain"), (layout_app, "layout"), (optimise_app, "optimise"),
                   (rhino_app, "rhino"), (sim2d_app, "sim2d"),
-                  (nbs_app, "nbs"), (schema_app, "schema")]:
+                  (nbs_app, "nbs"), (schema_app, "schema"), (itzi_app, "itzi")]:
     app.add_typer(sub, name=name)
 
 SITE_LAYERS = {
@@ -69,6 +70,23 @@ def version() -> None:
     import swmm.toolkit
 
     typer.echo(f"spongepark {__version__}; pyswmm {pyswmm.__version__}; swmm-toolkit {swmm.toolkit.__version__}")
+
+
+@itzi_app.command("setup")
+def itzi_setup(qgis: Path = typer.Option(..., help="QGIS (or OSGeo4W) folder, e.g. 'C:/Program Files/QGIS 3.44.15'.")) -> None:
+    """Install Itzi beside QGIS's Python and write the launcher the engine uses."""
+    from spongepark.engine.sim2d.itzi_model import setup
+
+    typer.echo(f"Itzi ready: {setup(qgis)}")
+
+
+@itzi_app.command("status")
+def itzi_status() -> None:
+    """Show whether Itzi is set up and which launcher the engine uses."""
+    from spongepark.engine.sim2d.itzi_model import launcher
+
+    exe = launcher()
+    typer.echo(f"Itzi launcher: {exe}" if exe else "Itzi is not set up (spongepark itzi setup --qgis <QGIS folder>).")
 
 
 @schema_app.command("export")

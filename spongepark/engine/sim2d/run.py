@@ -151,6 +151,58 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
                     float(P.value("sim2d.courant")), float(P.value("sim2d.max_time_step_s")))
 
 
+def _engine(P) -> str:
+    """'itzi' when chosen (or 'auto' and Itzi is set up), otherwise the built-in model."""
+    from .itzi_model import available
+
+    choice = str(P.value_or("sim2d.engine", "auto")).lower()
+    if choice == "itzi" and not available():
+        raise RuntimeError("sim2d.engine is 'itzi' but Itzi is not set up: run `spongepark itzi setup`.")
+    return "itzi" if choice == "itzi" or (choice == "auto" and available()) else "builtin"
+
+
+def _run_itzi(inp: Inputs2D, frame_s: float):
+    """Run Itzi on the 2D inputs. The grid is widened by a margin of lower ground with an open edge, so
+    water leaving the park runs off; NbS elements are already carved into the graded ground and infiltrate
+    at their own rate. Results are cropped back to the inputs' grid."""
+    from ..terrain.extend import extend_dem
+    from .itzi_model import simulate_itzi
+
+    g, mask, cell = inp.dem, inp.mask, inp.dem.cell_size
+    R, C = mask.shape
+    x0, y1 = g.origin
+    bounds = (x0, y1 - R * cell, x0 + C * cell, y1)
+    big, _ = extend_dem(DEM(np.where(mask, g.z, g.nodata), cell, g.origin, g.crs, g.nodata), bounds, margin_m=4 * cell)
+    left = int(round((x0 - big.origin[0]) / cell))
+    top = int(round((big.origin[1] - y1) / cell))
+    pad = ((top, big.z.shape[0] - R - top), (left, big.z.shape[1] - C - left))
+    f = inp.f.copy()
+    el = inp.elements
+    if el is not None:   # element cells infiltrate (or seep) at the element's own rate
+        for k, rate in enumerate(el.rate_m_s):
+            f[el.label == k] = rate * 1000 * 3600
+    n_big = np.pad(inp.n, pad, mode="edge")
+    f_big = np.pad(np.where(mask, f, 0.0), pad)
+    fn = None
+    if inp.infil_fn is not None:
+        base_fn = inp.infil_fn
+
+        def fn(t, i, cum):
+            grid = base_fn(t, i, cum)
+            if el is not None:
+                for k, rate in enumerate(el.rate_m_s):
+                    grid = np.where(el.label == k, rate * 1000 * 3600, grid)
+            return np.pad(np.where(mask, grid, 0.0), pad)
+
+    res = simulate_itzi(big.z, np.pad(mask, pad), cell, inp.rain_mm_hr, inp.rain_dt_s, inp.duration_s,
+                        n_big, f_big, frame_every_s=frame_s, infil_fn=fn)
+    rs, cs = slice(top, top + R), slice(left, left + C)
+    res.frames = res.frames[:, rs, cs]
+    res.max_depth = res.max_depth[rs, cs]
+    flow = {k: v[rs, cs] for k, v in res.extra.items()}
+    return res, flow
+
+
 def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = None,
           frame_every_s: Optional[float] = None) -> Dict[str, Any]:
     P = project.parameters
@@ -159,9 +211,21 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
     dem = g
     infil_note = inp.infil_note
     duration_s = inp.duration_s
-    res = simulate(g.z, mask, cell, inp.rain_mm_hr, inp.rain_dt_s, duration_s, inp.n, inp.f, els,
-                   frame_every_s=float(frame_every_s or P.value("sim2d.frame_interval_s")),
-                   alpha=inp.alpha, dt_max=inp.dt_max, infil_fn=inp.infil_fn)
+    frame_s = float(frame_every_s or P.value("sim2d.frame_interval_s"))
+    engine = _engine(P)
+    engine_note = None
+    if engine == "itzi" and inp.elements is not None and not project.exists(f"scenarios/{option_id}/terrain/graded.tif"):
+        # Itzi holds water only where the ground does: elements must be carved into the scenario's ground
+        if str(P.value_or("sim2d.engine", "auto")).lower() == "itzi":
+            raise RuntimeError(f"{option_id}: the elements are not carved into the ground yet (regrade it first), "
+                               "so Itzi would not see their storage.")
+        engine, engine_note = "builtin", "Itzi needs the elements carved into the ground; the built-in model was used."
+    flow = None
+    if engine == "itzi":
+        res, flow = _run_itzi(inp, frame_s)
+    else:
+        res = simulate(g.z, mask, cell, inp.rain_mm_hr, inp.rain_dt_s, duration_s, inp.n, inp.f, els,
+                       frame_every_s=frame_s, alpha=inp.alpha, dt_max=inp.dt_max, infil_fn=inp.infil_fn)
 
     # SWMM comparison
     swmm = None
@@ -179,11 +243,14 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
     out_dir = f"scenarios/{option_id}/sim2d"
     project.path(out_dir).mkdir(parents=True, exist_ok=True)
     np.savez_compressed(project.path(f"{out_dir}/rp{rp}.npz"), times_s=res.times_s, depth_m=res.frames.astype(np.float16),
-                        mask=mask, origin=np.array(g.origin), cell_m=cell)
+                        mask=mask, origin=np.array(g.origin), cell_m=cell,
+                        **({k: v.astype(np.float32) for k, v in flow.items()} if flow else {}))
     write_geotiff(DEM(np.where(mask, res.max_depth, dem.nodata), cell, g.origin, g.crs, dem.nodata),
                   project.path(f"{out_dir}/max_depth_rp{rp}.tif"))
     summary = {
         "label": INDICATIVE,
+        "model": "Itzi (Courty et al., local inertial shallow water)" if engine == "itzi" else "built-in local inertial model",
+        "model_note": engine_note,
         "option_id": option_id, "return_period_yr": rp, "cell_m": cell, "duration_hr": duration_s / 3600,
         "balance": res.balance,
         "infiltration": infil_note,

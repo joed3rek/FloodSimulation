@@ -53,6 +53,7 @@ def make_project(
         save_elements_fc(p, "opt", fc(elements))
     p.parameters.set("evaporation.rate_mm_day", 0.0, source=Source.USER)
     p.parameters.set("sim.post_storm_hr", post_storm_hr, source=Source.USER)
+    p.parameters.set("sim2d.engine", "builtin", source=Source.USER)   # tests do not depend on Itzi being installed
     return p
 
 

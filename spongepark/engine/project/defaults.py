@@ -219,6 +219,9 @@ _DEFAULTS: List[Tuple[str, object, str, Source, str]] = [
     ("ml.min_r2", 0.8, "-", D, "Hold-out R2 every surrogate target must reach before the surrogate is used."),
     ("ml.test_fraction", 0.25, "fraction", D, "Share of SWMM-evaluated layouts held out to test the surrogate."),
     # --- 2D surface model (Phase 6) ---------------------------------------------------------------
+    ("sim2d.engine", "auto", "-", D,
+     "2D flood model: 'itzi' (Itzi, GPL, run as a separate program; set up with `spongepark itzi setup`), "
+     "'builtin' (the engine's own local inertial model), or 'auto' (Itzi when it is set up)."),
     ("sim2d.cell_m", 1.0, "m", D, "2D model cell size (the DEM is block-averaged up to it)."),
     ("sim2d.courant", 0.7, "-", L, "Time step factor alpha in dt = alpha dx / sqrt(g h) (Bates et al. 2010)."),
     ("sim2d.max_time_step_s", 10.0, "s", D, "Longest 2D time step (dry periods)."),
