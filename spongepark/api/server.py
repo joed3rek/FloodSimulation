@@ -88,7 +88,7 @@ class OpenRequest(BaseModel):
 @app.get("/health")
 def health() -> Dict[str, Any]:
     # features let a client tell an engine started before an update from a current one
-    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan", "site_layers", "flow", "design"],
+    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan", "site_layers", "flow", "design", "ground", "rainfall"],
             "open_projects": list(_projects)}
 
 
@@ -112,7 +112,8 @@ def info(pid: str) -> Dict[str, Any]:
             "has_soils": bool(p.read_geojson("site/soil_zones.geojson")["features"]),
             "has_rainfall": p.exists("rainfall/return_periods.csv"),
             "has_survey": any(p.path("survey").glob("*_SP.dxf")),
-            "site_confirmed": bool(p.parameters.value_or("site.model_confirmed", False))}
+            "site_confirmed": bool(p.parameters.value_or("site.model_confirmed", False)),
+            "has_ground": p.exists("site/ground.json")}
 
 
 @app.post("/projects/{pid}/save")
@@ -376,6 +377,71 @@ def flow_analysis(pid: str, rebuild: bool = False) -> Dict[str, Any]:
         out = flowmap.load(p, rebuild)
         if fresh:
             p.save()
+    return out
+
+
+@app.get("/ground/questions")
+def ground_questions() -> Dict[str, Any]:
+    """The ground questionnaire: soil types, covers, conditions, footpath surfaces (TR-55)."""
+    from spongepark.engine.site.ground import questions
+
+    return questions()
+
+
+@app.get("/projects/{pid}/site/ground")
+def ground_get(pid: str) -> Dict[str, Any]:
+    from spongepark.engine.site.ground import load
+
+    return load(_project(pid)) or {}
+
+
+@app.put("/projects/{pid}/site/ground")
+def ground_put(pid: str, answers: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """Save the ground questionnaire: TR-55 curve numbers, the park's soil zone, CURVE_NUMBER infiltration."""
+    from spongepark.engine.site.ground import apply
+
+    p = _project(pid)
+    with _locks[pid]:
+        try:
+            out = apply(p, answers)
+        except ValueError as ex:
+            raise HTTPException(400, str(ex))
+        p.save()
+    return out
+
+
+@app.get("/rainfall/presets")
+def rainfall_presets() -> Dict[str, Any]:
+    from spongepark.engine.rainfall.presets import presets
+
+    return presets()
+
+
+@app.get("/projects/{pid}/rainfall")
+def rainfall_get(pid: str) -> Dict[str, Any]:
+    from spongepark.engine.rainfall.presets import current
+
+    return current(_project(pid)) or {}
+
+
+class RainfallSet(BaseModel):
+    preset: Optional[str] = None
+    rows: Optional[List[Dict[str, float]]] = None
+    source: str = ""
+
+
+@app.put("/projects/{pid}/rainfall")
+def rainfall_put(pid: str, body: RainfallSet) -> Dict[str, Any]:
+    """Set the rainfall table (a preset, or rows with their source) and make the design storms."""
+    from spongepark.engine.rainfall.presets import apply
+
+    p = _project(pid)
+    with _locks[pid]:
+        try:
+            out = apply(p, body.preset, body.rows, body.source)
+        except Exception as ex:
+            raise HTTPException(400, str(ex))
+        p.save()
     return out
 
 

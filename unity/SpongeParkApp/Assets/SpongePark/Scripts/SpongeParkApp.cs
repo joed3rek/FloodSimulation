@@ -245,6 +245,10 @@ namespace SpongePark
             surveyLayers = null;
             layerVisible.Clear();
             flowData = null;
+            groundFor = null;
+            groundSaved = null;
+            rainSaved = null;
+            planSetFor = false;
             designFc = null;
             designFor = null;
             selectedId = null;
@@ -357,7 +361,10 @@ namespace SpongePark
             yield return left.Load(api, frame, rp, bundle);
             yield return right.Load(api, frame, rp, bundle);
             if (!bundle && surveyLayers == null && (bool?)info?["has_survey"] == true)
-                yield return api.Get(api.P("/site/layers"), x => surveyLayers = x, 300);
+            {
+                status = "Placing the survey's walls, trees and paths on the ground (a large drawing can take a minute the first time)…";
+                yield return api.Get(api.P("/site/layers"), x => surveyLayers = x, 600);
+            }
             FillSiteLayers();
             bool contours = !layerVisible.TryGetValue(ContoursLayer, out var con) || con;
             left.Terrain.SetContours(contours);

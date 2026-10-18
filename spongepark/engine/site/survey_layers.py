@@ -25,7 +25,7 @@ from ..terrain.raster import read_geotiff
 log = logging.getLogger(__name__)
 
 REL = "site/survey_layers.json"
-STYLE = 2   # how the layers are modelled; a file made with an older style is rebuilt on load
+STYLE = 3   # how the layers are modelled; a file made with an older style is rebuilt on load
 
 # SP layer (or prefix) -> how the viewer draws it. height_m: display height above the ground (m).
 KINDS: List[Tuple[str, Dict[str, Any]]] = [
@@ -41,6 +41,7 @@ KINDS: List[Tuple[str, Dict[str, Any]]] = [
     ("SP-ROAD-ANNO", None),
     ("SP-ROAD", {"kind": "road", "width_m": 0.2, "color": "#3F4042", "visible": True}),
     ("SP-DRAIN-MANHOLE", {"kind": "manhole", "color": "#5A5A55", "visible": True}),
+    ("SP-WELL-RECHARGE", {"kind": "recharge_well", "color": "#6A5ACD", "visible": True}),
     ("SP-DRAIN", {"kind": "drain", "width_m": 0.4, "color": "#4A7C96", "visible": True}),
     ("SP-WATER", {"kind": "water", "width_m": 0.3, "color": "#4A7C96", "visible": True}),
     ("SP-UTIL-POWER", {"kind": "pole", "height_m": 7.0, "color": "#4A4A44", "visible": False}),
@@ -58,7 +59,7 @@ KINDS: List[Tuple[str, Dict[str, Any]]] = [
     ("SP-X-", None),       # layers the designer marked "not needed"
 ]
 OTHER = {"kind": "other", "width_m": 0.15, "color": "#9A9A90", "visible": False}
-POINT_KINDS = {"tree", "palm", "manhole", "pole", "furniture"}
+POINT_KINDS = {"tree", "palm", "manhole", "pole", "furniture", "recharge_well"}
 SKIP_TYPES = {"TEXT", "MTEXT", "DIMENSION", "HATCH", "LEADER", "MULTILEADER", "ATTDEF", "ATTRIB", "VIEWPORT", "IMAGE"}
 TREE_SYMBOL_MAX_M = 15.0   # a closed shape this small on a tree layer is one tree's symbol
 GATE_MAX_M = 15.0          # a "gate" longer than this is something else drawn on the gate layer: drawn on the ground

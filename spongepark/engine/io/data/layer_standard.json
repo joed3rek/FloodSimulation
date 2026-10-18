@@ -1,483 +1,501 @@
 {
- "version": "1.0",
- "prefix": "SP-",
- "note": "Sponge park survey layer standard. Every survey drawing is converted to these names so the engine reads all parks the same way. Layers whose meaning is unclear go to SP-CHECK-* until the designer decides.",
- "layers": [
-  {
-   "name": "SP-LVL-SPOT",
-   "role": "spot_levels",
-   "color": 7,
-   "description": "Ground spot levels (text = level in m, or 3D points)",
-   "aliases": [
-    "block levels",
-    "spot levels",
-    "spot level",
-    "spot heights",
-    "levels"
-   ],
-   "title": "Ground spot levels"
-  },
-  {
-   "name": "SP-LVL-ROAD",
-   "role": "spot_levels",
-   "color": 8,
-   "description": "Road surface levels (text = level in m)",
-   "aliases": [
-    "road levels",
-    "road level"
-   ],
-   "title": "Road levels"
-  },
-  {
-   "name": "SP-CONT-MAJOR",
-   "role": "contours",
-   "color": 30,
-   "description": "Major contours (3D, or at Z = 0 with labels)",
-   "aliases": [
-    "esmajor",
-    "contour major",
-    "major contour",
-    "cont_maj"
-   ],
-   "title": "Major contours"
-  },
-  {
-   "name": "SP-CONT-MINOR",
-   "role": "contours",
-   "color": 32,
-   "description": "Minor contours",
-   "aliases": [
-    "esminor",
-    "contour minor",
-    "minor contour",
-    "cont_min"
-   ],
-   "title": "Minor contours"
-  },
-  {
-   "name": "SP-CONT-LABEL",
-   "role": "contour_labels",
-   "color": 40,
-   "description": "Contour level labels",
-   "aliases": [
-    "escontann",
-    "contour labels",
-    "contour text",
-    "cont_txt"
-   ],
-   "title": "Contour labels"
-  },
-  {
-   "name": "SP-SITE-BOUNDARY",
-   "role": "boundary",
-   "color": 3,
-   "description": "Park boundary (one closed polyline)",
-   "aliases": [
-    "boundary",
-    "site boundary"
-   ],
-   "title": "Park boundary"
-  },
-  {
-   "name": "SP-SITE-BOUNDARY-LABEL",
-   "role": null,
-   "color": 3,
-   "description": "Boundary corner labels (B1, B2 ...)",
-   "aliases": [
-    "boudnary text",
-    "boundary text",
-    "boundary corners"
-   ],
-   "title": "Boundary labels"
-  },
-  {
-   "name": "SP-BLDG",
-   "role": "buildings",
-   "color": 5,
-   "description": "Buildings and sheds (closed polylines)",
-   "aliases": [
-    "bldg",
-    "bulding",
-    "building",
-    "existing building",
-    "shed"
-   ],
-   "title": "Buildings and sheds"
-  },
-  {
-   "name": "SP-WALL",
-   "role": "walls",
-   "color": 6,
-   "description": "Compound and retaining walls",
-   "aliases": [
-    "compound wall",
-    "cwall",
-    "stonewall",
-    "stone wall"
-   ],
-   "title": "Walls"
-  },
-  {
-   "name": "SP-FENCE",
-   "role": "walls",
-   "color": 6,
-   "description": "Fences",
-   "aliases": [
-    "fence",
-    "fencing"
-   ],
-   "title": "Fences"
-  },
-  {
-   "name": "SP-GATE",
-   "role": null,
-   "color": 1,
-   "description": "Gates and entries (possible water exits)",
-   "aliases": [
-    "gate",
-    "entry gate",
-    "gateway hat"
-   ],
-   "title": "Gates and entries"
-  },
-  {
-   "name": "SP-STEP",
-   "role": null,
-   "color": 9,
-   "description": "Steps",
-   "aliases": [
-    "step",
-    "steps"
-   ],
-   "title": "Steps"
-  },
-  {
-   "name": "SP-FURNITURE",
-   "role": null,
-   "color": 9,
-   "description": "Benches, chairs, play equipment",
-   "aliases": [
-    "chair",
-    "bench"
-   ],
-   "title": "Benches and play equipment"
-  },
-  {
-   "name": "SP-PATH",
-   "role": "paths",
-   "color": 42,
-   "description": "Footpaths and walking tracks",
-   "aliases": [
-    "foot path",
-    "footpath",
-    "pathway"
-   ],
-   "title": "Footpaths"
-  },
-  {
-   "name": "SP-ROAD",
-   "role": "roads",
-   "color": 8,
-   "description": "Road edges and kerbs",
-   "aliases": [
-    "road"
-   ],
-   "title": "Roads and kerbs"
-  },
-  {
-   "name": "SP-ROAD-ANNO",
-   "role": null,
-   "color": 8,
-   "description": "Road names and traffic arrows",
-   "aliases": [
-    "traffic direction",
-    "a-txt-road-stat"
-   ],
-   "title": "Road names and arrows"
-  },
-  {
-   "name": "SP-DRAIN-EDGE",
-   "role": "drains",
-   "color": 4,
-   "description": "Storm water drain edges (top of drain)",
-   "aliases": [
-    "dsec drain top",
-    "drain top"
-   ],
-   "title": "Drain edges"
-  },
-  {
-   "name": "SP-DRAIN-LINE",
-   "role": "drains",
-   "color": 4,
-   "description": "Drain and canal centre lines",
-   "aliases": [
-    "drain",
-    "canal",
-    "swd",
-    "nala"
-   ],
-   "title": "Drains and canals"
-  },
-  {
-   "name": "SP-DRAIN-MANHOLE",
-   "role": null,
-   "color": 4,
-   "description": "Manholes and chambers",
-   "aliases": [
-    "drainage",
-    "manhole"
-   ],
-   "title": "Manholes"
-  },
-  {
-   "name": "SP-WATER",
-   "role": "water",
-   "color": 150,
-   "description": "Ponds, lakes, open water",
-   "aliases": [
-    "water",
-    "pond",
-    "lake"
-   ],
-   "title": "Ponds and open water"
-  },
-  {
-   "name": "SP-WATER-TANK",
-   "role": null,
-   "color": 150,
-   "description": "Water tanks and sumps",
-   "aliases": [
-    "water tank",
-    "sump"
-   ],
-   "title": "Water tanks and sumps"
-  },
-  {
-   "name": "SP-TREE",
-   "role": "trees",
-   "color": 94,
-   "description": "Trees (blocks or circles = canopy)",
-   "aliases": [
-    "tree",
-    "tree_d2",
-    "existing trees",
-    "trees"
-   ],
-   "title": "Trees"
-  },
-  {
-   "name": "SP-TREE-COCONUT",
-   "role": "trees",
-   "color": 96,
-   "description": "Coconut and other palms",
-   "aliases": [
-    "coconut tree",
-    "palm"
-   ],
-   "title": "Coconut and palm trees"
-  },
-  {
-   "name": "SP-UTIL-POWER",
-   "role": null,
-   "color": 11,
-   "description": "Electric poles and cables",
-   "aliases": [
-    "power",
-    "electric poles"
-   ],
-   "title": "Electric poles and cables"
-  },
-  {
-   "name": "SP-ANNO-TEXT",
-   "role": null,
-   "color": 7,
-   "description": "General labels",
-   "aliases": [
-    "text"
-   ],
-   "title": "General text"
-  },
-  {
-   "name": "SP-ANNO-DIM",
-   "role": null,
-   "color": 7,
-   "description": "Dimensions",
-   "aliases": [
-    "dim",
-    "dimensions"
-   ],
-   "title": "Dimensions"
-  },
-  {
-   "name": "SP-ANNO-GRID",
-   "role": null,
-   "color": 252,
-   "description": "Survey grid lines",
-   "aliases": [
-    "grid"
-   ],
-   "title": "Survey grid"
-  },
-  {
-   "name": "SP-ANNO-GRID-LABEL",
-   "role": null,
-   "color": 252,
-   "description": "Survey grid labels",
-   "aliases": [
-    "gridann"
-   ],
-   "title": "Grid labels"
-  },
-  {
-   "name": "SP-ANNO-TITLE",
-   "role": null,
-   "color": 252,
-   "description": "Title block, legend, surveyor details",
-   "aliases": [
-    "title",
-    "disttxt",
-    "legend"
-   ],
-   "title": "Title block and legend"
-  },
-  {
-   "name": "SP-ANNO-HATCH",
-   "role": null,
-   "color": 253,
-   "description": "Decorative hatching",
-   "aliases": [
-    "hatch"
-   ],
-   "title": "Hatching"
-  },
-  {
-   "name": "SP-DSN-CONTOUR",
-   "role": null,
-   "color": 30,
-   "description": "Design (graded) contours, polyline elevation = level",
-   "aliases": [],
-   "title": "Design contours"
-  },
-  {
-   "name": "SP-DSN-RAINGARDEN",
-   "role": null,
-   "color": 94,
-   "description": "Design rain garden footprints",
-   "aliases": [],
-   "title": "Design rain gardens"
-  },
-  {
-   "name": "SP-DSN-SWALE",
-   "role": null,
-   "color": 92,
-   "description": "Design bioswale footprints",
-   "aliases": [],
-   "title": "Design swales"
-  },
-  {
-   "name": "SP-DSN-WELL",
-   "role": null,
-   "color": 170,
-   "description": "Design recharge wells",
-   "aliases": [],
-   "title": "Design recharge wells"
-  },
-  {
-   "name": "SP-DSN-POND",
-   "role": null,
-   "color": 150,
-   "description": "Design pond / basin footprints",
-   "aliases": [],
-   "title": "Design ponds"
-  },
-  {
-   "name": "SP-DSN-LABEL",
-   "role": null,
-   "color": 7,
-   "description": "Design labels (id, area, rim and bottom levels)",
-   "aliases": [],
-   "title": "Design labels"
-  },
-  {
-   "name": "SP-CHECK-BE-LEVEL",
-   "role": "check",
-   "color": 1,
-   "description": "Levels of unknown meaning (drain bed? plinth?) - decide",
-   "aliases": [
-    "be-level",
-    "be level"
-   ],
-   "title": "Unclear levels"
-  },
-  {
-   "name": "SP-CHECK-BOUNDARY-ALT",
-   "role": "check",
-   "color": 1,
-   "description": "A second boundary - decide which is the park",
-   "aliases": [
-    "boundery"
-   ],
-   "title": "A second boundary"
-  },
-  {
-   "name": "SP-CHECK-BUILDING-LINE",
-   "role": "check",
-   "color": 1,
-   "description": "'Building line' - buildings outside the park or a setback line? decide",
-   "aliases": [
-    "building line"
-   ],
-   "title": "Building line"
+  "version": "1.0",
+  "prefix": "SP-",
+  "note": "Sponge park survey layer standard. Every survey drawing is converted to these names so the engine reads all parks the same way. Layers whose meaning is unclear go to SP-CHECK-* until the designer decides.",
+  "layers": [
+    {
+      "name": "SP-LVL-SPOT",
+      "role": "spot_levels",
+      "color": 7,
+      "description": "Ground spot levels (text = level in m, or 3D points)",
+      "aliases": [
+        "block levels",
+        "spot levels",
+        "spot level",
+        "spot heights",
+        "levels"
+      ],
+      "title": "Ground spot levels"
+    },
+    {
+      "name": "SP-LVL-ROAD",
+      "role": "spot_levels",
+      "color": 8,
+      "description": "Road surface levels (text = level in m)",
+      "aliases": [
+        "road levels",
+        "road level"
+      ],
+      "title": "Road levels"
+    },
+    {
+      "name": "SP-CONT-MAJOR",
+      "role": "contours",
+      "color": 30,
+      "description": "Major contours (3D, or at Z = 0 with labels)",
+      "aliases": [
+        "esmajor",
+        "contour major",
+        "major contour",
+        "cont_maj"
+      ],
+      "title": "Major contours"
+    },
+    {
+      "name": "SP-CONT-MINOR",
+      "role": "contours",
+      "color": 32,
+      "description": "Minor contours",
+      "aliases": [
+        "esminor",
+        "contour minor",
+        "minor contour",
+        "cont_min"
+      ],
+      "title": "Minor contours"
+    },
+    {
+      "name": "SP-CONT-LABEL",
+      "role": "contour_labels",
+      "color": 40,
+      "description": "Contour level labels",
+      "aliases": [
+        "escontann",
+        "contour labels",
+        "contour text",
+        "cont_txt"
+      ],
+      "title": "Contour labels"
+    },
+    {
+      "name": "SP-SITE-BOUNDARY",
+      "role": "boundary",
+      "color": 3,
+      "description": "Park boundary (one closed polyline)",
+      "aliases": [
+        "boundary",
+        "site boundary"
+      ],
+      "title": "Park boundary"
+    },
+    {
+      "name": "SP-SITE-BOUNDARY-LABEL",
+      "role": null,
+      "color": 3,
+      "description": "Boundary corner labels (B1, B2 ...)",
+      "aliases": [
+        "boudnary text",
+        "boundary text",
+        "boundary corners"
+      ],
+      "title": "Boundary labels"
+    },
+    {
+      "name": "SP-BLDG",
+      "role": "buildings",
+      "color": 5,
+      "description": "Buildings and sheds (closed polylines)",
+      "aliases": [
+        "bldg",
+        "bulding",
+        "building",
+        "existing building",
+        "shed"
+      ],
+      "title": "Buildings and sheds"
+    },
+    {
+      "name": "SP-WALL",
+      "role": "walls",
+      "color": 6,
+      "description": "Compound and retaining walls",
+      "aliases": [
+        "compound wall",
+        "cwall",
+        "stonewall",
+        "stone wall"
+      ],
+      "title": "Walls"
+    },
+    {
+      "name": "SP-FENCE",
+      "role": "walls",
+      "color": 6,
+      "description": "Fences",
+      "aliases": [
+        "fence",
+        "fencing"
+      ],
+      "title": "Fences"
+    },
+    {
+      "name": "SP-GATE",
+      "role": null,
+      "color": 1,
+      "description": "Gates and entries (possible water exits)",
+      "aliases": [
+        "gate",
+        "entry gate",
+        "gateway hat"
+      ],
+      "title": "Gates and entries"
+    },
+    {
+      "name": "SP-STEP",
+      "role": null,
+      "color": 9,
+      "description": "Steps",
+      "aliases": [
+        "step",
+        "steps"
+      ],
+      "title": "Steps"
+    },
+    {
+      "name": "SP-FURNITURE",
+      "role": null,
+      "color": 9,
+      "description": "Benches, chairs, play equipment",
+      "aliases": [
+        "chair",
+        "bench"
+      ],
+      "title": "Benches and play equipment"
+    },
+    {
+      "name": "SP-PATH",
+      "role": "paths",
+      "color": 42,
+      "description": "Footpaths and walking tracks",
+      "aliases": [
+        "foot path",
+        "footpath",
+        "pathway"
+      ],
+      "title": "Footpaths"
+    },
+    {
+      "name": "SP-ROAD",
+      "role": "roads",
+      "color": 8,
+      "description": "Road edges and kerbs",
+      "aliases": [
+        "road"
+      ],
+      "title": "Roads and kerbs"
+    },
+    {
+      "name": "SP-ROAD-ANNO",
+      "role": null,
+      "color": 8,
+      "description": "Road names and traffic arrows",
+      "aliases": [
+        "traffic direction",
+        "a-txt-road-stat"
+      ],
+      "title": "Road names and arrows"
+    },
+    {
+      "name": "SP-DRAIN-EDGE",
+      "role": "drains",
+      "color": 4,
+      "description": "Storm water drain edges (top of drain)",
+      "aliases": [
+        "dsec drain top",
+        "drain top"
+      ],
+      "title": "Drain edges"
+    },
+    {
+      "name": "SP-DRAIN-LINE",
+      "role": "drains",
+      "color": 4,
+      "description": "Drain and canal centre lines",
+      "aliases": [
+        "drain",
+        "canal",
+        "swd",
+        "nala"
+      ],
+      "title": "Drains and canals"
+    },
+    {
+      "name": "SP-DRAIN-MANHOLE",
+      "role": null,
+      "color": 4,
+      "description": "Drain manholes and inspection chambers",
+      "aliases": [
+        "drain chamber",
+        "inspection chamber",
+        "drain manhole"
+      ],
+      "title": "Manholes"
+    },
+    {
+      "name": "SP-WELL-RECHARGE",
+      "role": "recharge_wells",
+      "color": 170,
+      "description": "Existing recharge wells (on these surveys the manhole symbols, on 'MANHOLE' or 'drainage' layers, are recharge wells)",
+      "aliases": [
+        "manhole",
+        "manholes",
+        "drainage",
+        "recharge well",
+        "recharge wells",
+        "rw",
+        "percolation well",
+        "soak pit"
+      ],
+      "title": "Recharge wells"
+    },
+    {
+      "name": "SP-WATER",
+      "role": "water",
+      "color": 150,
+      "description": "Ponds, lakes, open water",
+      "aliases": [
+        "water",
+        "pond",
+        "lake"
+      ],
+      "title": "Ponds and open water"
+    },
+    {
+      "name": "SP-WATER-TANK",
+      "role": null,
+      "color": 150,
+      "description": "Water tanks and sumps",
+      "aliases": [
+        "water tank",
+        "sump"
+      ],
+      "title": "Water tanks and sumps"
+    },
+    {
+      "name": "SP-TREE",
+      "role": "trees",
+      "color": 94,
+      "description": "Trees (blocks or circles = canopy)",
+      "aliases": [
+        "tree",
+        "tree_d2",
+        "existing trees",
+        "trees"
+      ],
+      "title": "Trees"
+    },
+    {
+      "name": "SP-TREE-COCONUT",
+      "role": "trees",
+      "color": 96,
+      "description": "Coconut and other palms",
+      "aliases": [
+        "coconut tree",
+        "palm"
+      ],
+      "title": "Coconut and palm trees"
+    },
+    {
+      "name": "SP-UTIL-POWER",
+      "role": null,
+      "color": 11,
+      "description": "Electric poles and cables",
+      "aliases": [
+        "power",
+        "electric poles"
+      ],
+      "title": "Electric poles and cables"
+    },
+    {
+      "name": "SP-ANNO-TEXT",
+      "role": null,
+      "color": 7,
+      "description": "General labels",
+      "aliases": [
+        "text"
+      ],
+      "title": "General text"
+    },
+    {
+      "name": "SP-ANNO-DIM",
+      "role": null,
+      "color": 7,
+      "description": "Dimensions",
+      "aliases": [
+        "dim",
+        "dimensions"
+      ],
+      "title": "Dimensions"
+    },
+    {
+      "name": "SP-ANNO-GRID",
+      "role": null,
+      "color": 252,
+      "description": "Survey grid lines",
+      "aliases": [
+        "grid"
+      ],
+      "title": "Survey grid"
+    },
+    {
+      "name": "SP-ANNO-GRID-LABEL",
+      "role": null,
+      "color": 252,
+      "description": "Survey grid labels",
+      "aliases": [
+        "gridann"
+      ],
+      "title": "Grid labels"
+    },
+    {
+      "name": "SP-ANNO-TITLE",
+      "role": null,
+      "color": 252,
+      "description": "Title block, legend, surveyor details",
+      "aliases": [
+        "title",
+        "disttxt",
+        "legend"
+      ],
+      "title": "Title block and legend"
+    },
+    {
+      "name": "SP-ANNO-HATCH",
+      "role": null,
+      "color": 253,
+      "description": "Decorative hatching",
+      "aliases": [
+        "hatch"
+      ],
+      "title": "Hatching"
+    },
+    {
+      "name": "SP-DSN-CONTOUR",
+      "role": null,
+      "color": 30,
+      "description": "Design (graded) contours, polyline elevation = level",
+      "aliases": [],
+      "title": "Design contours"
+    },
+    {
+      "name": "SP-DSN-RAINGARDEN",
+      "role": null,
+      "color": 94,
+      "description": "Design rain garden footprints",
+      "aliases": [],
+      "title": "Design rain gardens"
+    },
+    {
+      "name": "SP-DSN-SWALE",
+      "role": null,
+      "color": 92,
+      "description": "Design bioswale footprints",
+      "aliases": [],
+      "title": "Design swales"
+    },
+    {
+      "name": "SP-DSN-WELL",
+      "role": null,
+      "color": 170,
+      "description": "Design recharge wells",
+      "aliases": [],
+      "title": "Design recharge wells"
+    },
+    {
+      "name": "SP-DSN-POND",
+      "role": null,
+      "color": 150,
+      "description": "Design pond / basin footprints",
+      "aliases": [],
+      "title": "Design ponds"
+    },
+    {
+      "name": "SP-DSN-LABEL",
+      "role": null,
+      "color": 7,
+      "description": "Design labels (id, area, rim and bottom levels)",
+      "aliases": [],
+      "title": "Design labels"
+    },
+    {
+      "name": "SP-CHECK-BE-LEVEL",
+      "role": "check",
+      "color": 1,
+      "description": "Levels of unknown meaning (drain bed? plinth?) - decide",
+      "aliases": [
+        "be-level",
+        "be level"
+      ],
+      "title": "Unclear levels"
+    },
+    {
+      "name": "SP-CHECK-BOUNDARY-ALT",
+      "role": "check",
+      "color": 1,
+      "description": "A second boundary - decide which is the park",
+      "aliases": [
+        "boundery"
+      ],
+      "title": "A second boundary"
+    },
+    {
+      "name": "SP-CHECK-BUILDING-LINE",
+      "role": "check",
+      "color": 1,
+      "description": "'Building line' - buildings outside the park or a setback line? decide",
+      "aliases": [
+        "building line"
+      ],
+      "title": "Building line"
+    }
+  ],
+  "questions": {
+    "SP-CHECK-BE-LEVEL": {
+      "ask": "These numbers look like levels, but not ground levels. What are they?",
+      "answers": [
+        [
+          "SP-DRAIN-LINE",
+          "Drain bed / invert levels"
+        ],
+        [
+          "SP-LVL-SPOT",
+          "Ground levels: use them"
+        ],
+        [
+          "SP-BLDG",
+          "Building plinth levels"
+        ],
+        [
+          "",
+          "Not needed"
+        ]
+      ]
+    },
+    "SP-CHECK-BOUNDARY-ALT": {
+      "ask": "This layer is named like a boundary, but the drawing already has one. Is this the park boundary?",
+      "answers": [
+        [
+          "SP-SITE-BOUNDARY",
+          "Yes, the park boundary"
+        ],
+        [
+          "",
+          "No, not needed"
+        ]
+      ]
+    },
+    "SP-CHECK-BUILDING-LINE": {
+      "ask": "Is this a building outline, or a setback / plot line?",
+      "answers": [
+        [
+          "SP-BLDG",
+          "Buildings"
+        ],
+        [
+          "",
+          "A setback or plot line: not needed"
+        ]
+      ]
+    }
   }
- ],
- "questions": {
-  "SP-CHECK-BE-LEVEL": {
-   "ask": "These numbers look like levels, but not ground levels. What are they?",
-   "answers": [
-    [
-     "SP-DRAIN-LINE",
-     "Drain bed / invert levels"
-    ],
-    [
-     "SP-LVL-SPOT",
-     "Ground levels: use them"
-    ],
-    [
-     "SP-BLDG",
-     "Building plinth levels"
-    ],
-    [
-     "",
-     "Not needed"
-    ]
-   ]
-  },
-  "SP-CHECK-BOUNDARY-ALT": {
-   "ask": "This layer is named like a boundary, but the drawing already has one. Is this the park boundary?",
-   "answers": [
-    [
-     "SP-SITE-BOUNDARY",
-     "Yes, the park boundary"
-    ],
-    [
-     "",
-     "No, not needed"
-    ]
-   ]
-  },
-  "SP-CHECK-BUILDING-LINE": {
-   "ask": "Is this a building outline, or a setback / plot line?",
-   "answers": [
-    [
-     "SP-BLDG",
-     "Buildings"
-    ],
-    [
-     "",
-     "A setback or plot line: not needed"
-    ]
-   ]
-  }
- }
 }

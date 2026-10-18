@@ -146,6 +146,9 @@ def delineate(project: Project) -> Dict[str, Any]:
     project.write_json("terrain/flow/report.json", report)
     _plot(project, dem, mask, acc, lab, outs, deps, cell)
     project.history.log("delineate", subcatchments=len(subs), depressions=len(deps))
+    from ..site.ground import apply_to_subcatchments
+
+    apply_to_subcatchments(project)   # the ground questionnaire's curve numbers, if answered
     return report
 
 

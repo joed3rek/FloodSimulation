@@ -382,13 +382,28 @@ def extract(doc, layer_map: Dict[str, Any], label_search_m: float = 3.0,
                                    "properties": {"kind": "tree" if r else "tree_unsized", "layer": e.dxf.layer,
                                                   "block": e.dxf.name if e.dxftype() == "INSERT" else "",
                                                   "canopy_radius_m": r}})
+    # existing recharge wells: one point each (a circle gives the diameter)
+    seen_w = set()
+    for e in on("recharge_wells"):
+        t = e.dxftype()
+        if t not in ("INSERT", "CIRCLE", "POINT"):
+            continue
+        p = e.dxf.insert if t == "INSERT" else (e.dxf.center if t == "CIRCLE" else e.dxf.location)
+        key = (round(p.x * k, 1), round(p.y * k, 1))
+        if key in seen_w:
+            continue
+        seen_w.add(key)
+        d = 2 * float(e.dxf.radius) * k if t == "CIRCLE" else None
+        feats["recharge_wells"].append({"geometry": {"type": "Point", "coordinates": (p.x * k, p.y * k)},
+                                        "properties": {"kind": "recharge_well", "layer": e.dxf.layer, "existing": True,
+                                                       "diameter_m": d, "block": e.dxf.name if t == "INSERT" else ""}})
     return Survey(contours, spots, dict(feats), issues, stats)
 
 
 ROLE_COLOURS = {
     "spot_levels": "#14201f", "contours": "#eb6834", "contour_labels": "#eda100", "boundary": "#1baf7a",
     "buildings": "#6250d6", "trees": "#008300", "drains": "#2a78d6", "roads": "#8a8a8a", "paths": "#c9a26b",
-    "water": "#5fb3cf", "walls": "#e87ba4",
+    "water": "#5fb3cf", "walls": "#e87ba4", "recharge_wells": "#6a5acd",
 }
 
 

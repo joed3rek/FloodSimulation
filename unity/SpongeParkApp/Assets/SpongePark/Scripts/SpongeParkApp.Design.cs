@@ -37,7 +37,7 @@ namespace SpongePark
 
         VisualElement flowStep, drawStep, hotspotList, toolRow, elementList, propsBox, warnBox, budgetFill;
         Label flowText, floodText, drawHint, budgetLabel;
-        Button floodButton, planChip;
+        Button floodButton;
         readonly Dictionary<string, Button> toolChips = new Dictionary<string, Button>();
         readonly Dictionary<string, Button> flowChips = new Dictionary<string, Button>();
         JToken flowData, designTools, designResult;
@@ -57,11 +57,12 @@ namespace SpongePark
         {
             // Step 2: flow and flooding
             flowStep = Section(scroll, "Step 2", "Flow and flooding");
+            BuildGroundAndRain(flowStep);
+            flowStep.Add(Text("WHERE WATER RUNS AND COLLECTS", "eyebrow"));
             flowText = Text("Confirm the site model to see where water runs.", "muted");
             flowStep.Add(flowText);
             var fr = Row();
-            planChip = Chip("Plan (2D)", () => { rigLeft.Plan = !rigLeft.Plan; });
-            fr.Add(planChip);
+            BuildViewSwitch(fr);
             foreach (var (key, label) in new[] { (FlowView.Lines, "Flow lines"), (FlowView.Arrows, "Arrows"), (FlowView.Ponding, "Ponding"), (FlowView.Exits, "Exits") })
             {
                 var k = key;
@@ -126,14 +127,14 @@ namespace SpongePark
             var show = siteConfirmed ? DisplayStyle.Flex : DisplayStyle.None;
             flowStep.style.display = show;
             drawStep.style.display = show;
-            planChip.EnableInClassList("chip--on", rigLeft.Plan);
+            SyncGroundAndRain();
             foreach (var kv in flowChips) kv.Value.EnableInClassList("chip--on", FlowOn(kv.Key));
             foreach (var kv in toolChips) kv.Value.EnableInClassList("chip--on", (tool ?? "") == kv.Key);
-            bool rain = (bool?)info?["has_rainfall"] == true, soils = (bool?)info?["has_soils"] == true;
+            bool rain = (bool?)info?["has_rainfall"] == true, soils = (bool?)info?["has_ground"] == true || (bool?)info?["has_soils"] == true;
             floodText.text = rain && soils
                 ? $"Runs the {CurrentRp}-year storm over the existing ground: depths, flooded area and the water animation."
-                : "Needs " + (rain ? "" : "design storms (rainfall)") + (!rain && !soils ? " and " : "") + (soils ? "" : "soil infiltration rates") +
-                  " in this project. The flow lines and hotspots above need neither.";
+                : "First " + (rain ? "" : "use the design rainfall") + (!rain && !soils ? " and " : "") + (soils ? "" : "answer the ground questions") +
+                  " above. The flow lines and hotspots need neither.";
             floodButton.SetEnabled(rain && soils && !busy);
             drawHint.text = tool == null
                 ? (selectedId != null ? $"{selectedId} selected: drag it to move, Delete to remove, or change its sizes below." : "Click an element to select it. Right-drag to orbit, scroll to zoom.")
@@ -160,6 +161,7 @@ namespace SpongePark
             yield return api.Get(api.P("/flow"), x => a = x, 600);
             if (a == null) { flowText.text = "Could not work out the flow: " + api.LastError; yield break; }
             flowData = a;
+            PlanFirst();
             left.Flow.Build(a, frame, layerVisible);
             right.Flow.Build(a, frame, layerVisible);
             var s = a["summary"];

@@ -219,6 +219,9 @@ _DEFAULTS: List[Tuple[str, object, str, Source, str]] = [
     ("ml.min_r2", 0.8, "-", D, "Hold-out R2 every surrogate target must reach before the surrogate is used."),
     ("ml.test_fraction", 0.25, "fraction", D, "Share of SWMM-evaluated layouts held out to test the surrogate."),
     # --- 2D surface model (Phase 6) ---------------------------------------------------------------
+    ("soil.cn_dry_time_days", 7.0, "days", L,
+     "SWMM curve-number drying time (days for saturated soil to recover); it barely affects a single design "
+     "storm. 7 days is the SWMM 5 manual's typical value."),
     ("sim2d.engine", "auto", "-", D,
      "2D flood model: 'itzi' (Itzi, GPL, run as a separate program; set up with `spongepark itzi setup`), "
      "'builtin' (the engine's own local inertial model), or 'auto' (Itzi when it is set up)."),

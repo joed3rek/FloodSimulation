@@ -33,7 +33,7 @@ def _choices() -> List[Dict[str, str]]:
     """Every standard layer a drawing layer can be linked to, grouped for the interface."""
     groups = {"LVL": "Levels", "CONT": "Contours", "SITE": "Site", "BLDG": "Site", "WALL": "Site", "FENCE": "Site",
               "GATE": "Site", "STEP": "Site", "FURNITURE": "Site", "PATH": "Movement", "ROAD": "Movement",
-              "DRAIN": "Water", "WATER": "Water", "TREE": "Planting", "UTIL": "Utilities", "ANNO": "Annotation"}
+              "DRAIN": "Water", "WELL": "Water", "WATER": "Water", "TREE": "Planting", "UTIL": "Utilities", "ANNO": "Annotation"}
     out = []
     for l in _standard()["layers"]:
         key = l["name"].split("-")[1]

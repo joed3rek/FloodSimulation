@@ -140,6 +140,15 @@ namespace SpongePark
                     break;
                 }
                 case "manhole": m.Prism(p, 0.4f, 0.12f, 8, col); break;
+                case "recharge_well":   // existing recharge well: a concrete ring with a dark grated top
+                {
+                    float rr = r > 0 ? Mathf.Clamp(r, 0.4f, 1.2f) : 0.6f;
+                    m.Trunk(p, rr, rr, 0.2f, new Color(0.7f, 0.69f, 0.66f));
+                    m.Prism(p + Vector3.up * 0.2f, rr * 0.8f, 0.02f, 16, new Color(0.25f, 0.25f, 0.28f));
+                    m.Prism(p, 0.06f, 1.2f, 6, col);                                  // a post so it can be found
+                    m.RoundCrown(p + Vector3.up * 1.3f, 0.18f, col);
+                    break;
+                }
                 case "pole": m.Prism(p, 0.1f, h > 0 ? h : 7f, 4, col); break;
                 case "furniture": m.Box(p, 0.6f, h > 0 ? h : 0.6f, col); break;
                 default: m.Box(p, 0.3f, 0.3f, col); break;

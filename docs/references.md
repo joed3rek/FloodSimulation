@@ -52,3 +52,23 @@ The wastewater estimate is not yet routed into SWMM. It needs the point where a 
 enters the park, and the population it serves. These are site facts the engine will not assume.
 The appendix uses a daily time step for lake cascades. The park model is event based (minutes), so
 the cascade is represented by SWMM storage nodes and links, not by the daily equation.
+
+## HSR_SPDN Runoff Volumes for Parks (Habitat Collective)
+
+| Taken | Where |
+|---|---|
+| IMD 24-hour design depths, 2 to 1000 years (the same for Dhara Bendre, Chennaveera Kanavi, Nethravathi, Tree Park) | rainfall preset `hsr_imd_24h` (`spongepark/engine/rainfall/data/presets.json`), offered in Step 2 of the app |
+| Open park (well maintained) CN 74; impervious 98, commercial 94, residential 90, herbaceous 70 | the same TR-55 values the ground questionnaire looks up (`site/ground.py`); CN 74 = TR-55 open space, good condition, soil group C |
+| Park runoff per storm at CN 74 | `tests/test_ground.py` checks the questionnaire's runoff against this column |
+| Catchment areas draining to each park (Dhara 11 550 m², Chennaveera 105 200 m², Nethravathi 211 640 m², Tree Park 2 231 452 m²) | not yet used: the external catchment needs its extent and where it enters the park |
+
+The document has no 1-year depth, so with this rainfall the analysis covers 2 to 100 years.
+
+## Ground questionnaire (TR-55)
+
+Soil type gives the hydrologic soil group (Appendix A); each cover (grass lawn, shrubs, woods, trees over
+grass, bare soil) and condition (well maintained > 75 % cover, fair 50-75 %, not maintained < 50 %,
+barren) gives a TR-55 cover (tables 2-2a to 2-2c); the open park's curve number is the area-weighted mean.
+"Not sure" about the soil uses group C, marked as assumed until a percolation test. Paved footpaths (from
+the survey layers) are added to the impervious share. Infiltration becomes CURVE_NUMBER in SWMM and the 2D
+model; SWMM's drying time is `soil.cn_dry_time_days` (7 days, SWMM manual).

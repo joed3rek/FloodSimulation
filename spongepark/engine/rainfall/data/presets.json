@@ -1,0 +1,50 @@
+{
+  "hsr_imd_24h": {
+    "label": "IMD 24-hour design rainfall, HSR Layout, Bengaluru",
+    "source": "HSR_SPDN Runoff Volumes for Parks (Habitat Collective), column 'IMD 24H'; the same table is used for Dhara Bendre, Chennaveera Kanavi, Nethravathi and Tree Park.",
+    "kind": "24h",
+    "rows": [
+      {
+        "return_period_yr": 2,
+        "duration_hr": 24,
+        "depth_mm": 101.51
+      },
+      {
+        "return_period_yr": 5,
+        "duration_hr": 24,
+        "depth_mm": 129.781
+      },
+      {
+        "return_period_yr": 10,
+        "duration_hr": 24,
+        "depth_mm": 148.49
+      },
+      {
+        "return_period_yr": 25,
+        "duration_hr": 24,
+        "depth_mm": 172.155
+      },
+      {
+        "return_period_yr": 50,
+        "duration_hr": 24,
+        "depth_mm": 189.713
+      },
+      {
+        "return_period_yr": 100,
+        "duration_hr": 24,
+        "depth_mm": 207.11
+      },
+      {
+        "return_period_yr": 500,
+        "duration_hr": 24,
+        "depth_mm": 247.374
+      },
+      {
+        "return_period_yr": 1000,
+        "duration_hr": 24,
+        "depth_mm": 264.675
+      }
+    ],
+    "note": "No 1-year depth in the source: the analysis uses 2 to 100 years."
+  }
+}

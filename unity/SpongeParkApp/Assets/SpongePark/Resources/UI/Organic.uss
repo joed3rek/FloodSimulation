@@ -363,3 +363,7 @@ TextField.input, DropdownField.input { height: 40px; min-height: 40px; margin: 0
 .budget-fill--over { background-color: var(--destructive); }
 .warn-item { font-size: 12px; color: var(--clay-ink); white-space: normal; margin: 2px 0; }
 .layer-row--selected { border-color: var(--secondary); border-width: 2px; background-color: rgba(193, 140, 93, 0.12); }
+.cover-row { border-width: 1px; border-color: rgba(222, 216, 207, 0.8); border-radius: 16px; padding: 8px; margin: 4px 0; }
+.cover-share { width: 70px; flex-shrink: 0; margin-right: 8px; }
+.field-stack { flex-direction: column; height: auto; min-height: 64px; }
+.field-stack > Label { margin-bottom: 4px; -unity-font: resource("UI/Fonts/Nunito-Bold"); font-size: 12px; }
