@@ -223,6 +223,7 @@ namespace SpongePark
             yield return api.Open(projectPath, create, x => r = x);
             if (r == null) yield break;
             yield return Refresh();
+            Remember((string)r["path"] ?? projectPath, (string)r["name"]);   // the engine's resolved path
             status = $"Opened {(string)r["name"]}.";
         }
 

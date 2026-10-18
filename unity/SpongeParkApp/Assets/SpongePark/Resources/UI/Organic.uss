@@ -152,17 +152,8 @@ Label, Button, TextField, .unity-base-text-field__input, .unity-text-element { -
     position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: #1B1C16; overflow: hidden;
     align-items: center;
 }
-.contour-art { position: absolute; left: -8%; top: -14%; width: 760px; height: 760px; }
-.rain-art { position: absolute; right: -4%; bottom: -6%; width: 640px; height: 460px; }
 .landing-nav { position: absolute; left: 0; right: 0; top: 0; padding: 30px 90px; align-items: center; }
 .landing-brand { color: var(--primary-foreground); font-size: 26px; -unity-font: resource("UI/Fonts/Fraunces-SemiBold"); }
-.engine-chip {
-    color: var(--primary-foreground); background-color: rgba(93, 112, 82, 0.45); border-radius: 16px;
-    padding: 6px 14px; margin-right: 10px; font-size: 12px; -unity-font: resource("UI/Fonts/Nunito-Bold");
-}
-.engine-chip--off { background-color: rgba(168, 84, 72, 0.55); }
-.btn--light { background-color: var(--primary-foreground); color: #1B1C16; }
-.btn--light:hover { background-color: #FFFFFF; }
 .hero { margin-top: 140px; width: 760px; align-items: center; }
 .hero-title {
     color: var(--primary-foreground); font-size: 64px; -unity-font: resource("UI/Fonts/Fraunces-SemiBold");
@@ -183,17 +174,7 @@ Label, Button, TextField, .unity-base-text-field__input, .unity-text-element { -
 .drop-arrow { color: var(--primary-foreground); font-size: 28px; -unity-font: resource("UI/Fonts/Nunito-Bold"); }
 .drop-title { color: var(--primary-foreground); font-size: 26px; -unity-font: resource("UI/Fonts/Fraunces-SemiBold"); }
 .drop-text { color: rgba(243, 244, 241, 0.6); font-size: 13px; margin-top: 2px; }
-.hero-small { color: rgba(243, 244, 241, 0.5); font-size: 11px; letter-spacing: 3px; margin: 28px 0 8px 0; -unity-font: resource("UI/Fonts/Nunito-Bold"); }
-.path-row { width: 560px; flex-wrap: nowrap; }
-.path-input { flex-grow: 1; margin-right: 8px; }
 .hero-status { color: var(--accent); font-size: 13px; margin-top: 10px; white-space: normal; -unity-text-align: middle-center; }
-.recent-row { justify-content: center; }
-.btn--recent { background-color: rgba(255, 255, 255, 0.06); border-width: 1px; border-color: rgba(255, 255, 255, 0.15); color: var(--primary-foreground); }
-.btn--recent:hover { background-color: rgba(193, 140, 93, 0.35); }
-.wordmark {
-    position: absolute; left: 60px; bottom: -30px; font-size: 150px; color: rgba(255, 255, 255, 0.06);
-    -unity-font: resource("UI/Fonts/Fraunces-SemiBold");
-}
 
 /* file browser */
 .modal-back { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: rgba(27, 28, 22, 0.55); align-items: center; justify-content: center; }
@@ -248,11 +229,8 @@ Label, Button, TextField, .unity-base-text-field__input, .unity-text-element { -
 .figure-image { flex-grow: 1; }
 .caption { -unity-text-align: middle-center; margin: 8px 0 14px 0; }
 
-/* fixes: text fields keep their full height; dark-background field; back link */
+/* fixes: text fields keep their full height; back link */
 .input { min-height: 40px; margin-bottom: 6px; }
-.path-input .unity-base-text-field__input {
-    background-color: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.25); color: var(--primary-foreground);
-}
 .btn--back { align-self: flex-start; padding-left: 0; }
 /* the field itself carries the height; its inner box fills it */
 TextField.input, DropdownField.input { height: 40px; min-height: 40px; margin: 0 0 8px 0; }
@@ -265,3 +243,71 @@ TextField.input, DropdownField.input { height: 40px; min-height: 40px; margin: 0
 .drop--new, .drop--open { width: 330px; margin: 0 10px; padding: 26px 16px; }
 .drop--open { border-top-left-radius: 40px; border-top-right-radius: 72px; }
 .drop-icon--clay { background-color: var(--secondary); }
+
+/* landing: two columns under the nav, new / open on the left (3 parts), recently opened on the right (2 parts) */
+.landing-columns { position: absolute; left: 90px; right: 90px; top: 120px; bottom: 48px; flex-direction: row; }
+.landing-left { flex-grow: 3; flex-basis: 0; margin-right: 56px; }
+.landing-right { flex-grow: 2; flex-basis: 0; min-width: 380px; }
+.landing-columns .unity-scroller--vertical .unity-base-slider__dragger { background-color: rgba(255, 255, 255, 0.16); }
+.landing-left .hero { margin-top: 36px; width: auto; align-items: flex-start; padding-bottom: 40px; }
+.landing-left .hero-title { -unity-text-align: middle-left; }
+.landing-left .hero-text { -unity-text-align: middle-left; margin: 18px 0 32px 0; max-width: 640px; }
+.landing-left .choice-row { justify-content: flex-start; align-self: stretch; }
+.landing-left .drop--new, .landing-left .drop--open { width: auto; flex-grow: 1; flex-basis: 0; margin: 0 20px 0 0; }
+.landing-left .drop--open { margin-right: 0; }
+.landing-left .hero-status { -unity-text-align: middle-left; }
+
+/* landing: recently opened (right column; the list fills the height and scrolls) */
+.recent { flex-grow: 1; margin-top: 36px; }
+.recent-head { justify-content: space-between; align-items: center; flex-wrap: nowrap; margin-bottom: 8px; padding: 0 6px 0 14px; }
+.recent-title { color: rgba(243, 244, 241, 0.5); font-size: 11px; letter-spacing: 3px; -unity-font: resource("UI/Fonts/Nunito-Bold"); }
+.btn--link {
+    height: 28px; padding: 0 12px; margin: 0; background-color: rgba(0, 0, 0, 0); color: rgba(243, 244, 241, 0.6); font-size: 12px;
+}
+.btn--link:hover { background-color: rgba(255, 255, 255, 0.08); color: var(--primary-foreground); scale: 1 1; }
+.recent-list {
+    background-color: rgba(255, 255, 255, 0.04); border-width: 1px; border-color: rgba(255, 255, 255, 0.12);
+    border-radius: 28px; border-top-right-radius: 48px; padding: 6px; flex-grow: 1;
+}
+.recent-item { flex-direction: row; align-items: center; flex-shrink: 0; }
+.recent-open {
+    flex-grow: 1; flex-shrink: 1; flex-direction: row; align-items: center; height: 60px; margin: 0; padding: 0 14px 0 10px;
+    border-width: 0; border-radius: 22px; background-color: rgba(0, 0, 0, 0);
+    transition-property: background-color; transition-duration: 0.3s;
+}
+.recent-open:hover { background-color: rgba(193, 140, 93, 0.2); }
+.recent-open:active { background-color: rgba(193, 140, 93, 0.3); }
+.recent-icon {
+    width: 38px; height: 38px; border-radius: 19px; background-color: rgba(93, 112, 82, 0.6);
+    align-items: center; justify-content: center; margin-right: 14px; flex-shrink: 0;
+}
+.recent-glyph { color: var(--primary-foreground); font-size: 14px; }
+.recent-words { flex-grow: 1; flex-shrink: 1; overflow: hidden; justify-content: center; }
+.recent-name {
+    height: 22px; margin: 0; padding: 0; flex-shrink: 0;
+    color: var(--primary-foreground); font-size: 16px; -unity-font: resource("UI/Fonts/Nunito-Bold");
+    -unity-text-align: middle-left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.recent-path {
+    height: 18px; margin: 0; padding: 0; flex-shrink: 0;
+    color: rgba(243, 244, 241, 0.45); font-size: 12px; -unity-text-align: middle-left;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.recent-when { color: rgba(243, 244, 241, 0.6); font-size: 12px; margin-left: 12px; flex-shrink: 0; -unity-text-align: middle-right; }
+.recent-remove {
+    width: 32px; height: 32px; margin: 0 8px 0 2px; padding: 0; border-width: 0; border-radius: 16px; flex-shrink: 0;
+    background-color: rgba(0, 0, 0, 0); color: rgba(243, 244, 241, 0.4); font-size: 18px;
+    transition-property: background-color, color; transition-duration: 0.3s;
+}
+.recent-remove:hover { background-color: rgba(168, 84, 72, 0.5); color: #FFFFFF; }
+.recent-item--missing .recent-icon { background-color: rgba(255, 255, 255, 0.08); }
+.recent-item--missing .recent-name, .recent-item--missing .recent-path { color: rgba(243, 244, 241, 0.35); }
+.recent-item--missing .recent-when { color: var(--secondary); }
+/* the default theme's .unity-button:hover:enabled outranks a plain :hover, so the landing's buttons repeat theirs */
+.drop:hover:enabled { background-color: rgba(255, 255, 255, 0.11); }
+.btn--link:hover:enabled { background-color: rgba(255, 255, 255, 0.08); }
+.recent-open:hover:enabled { background-color: rgba(193, 140, 93, 0.2); }
+.recent-open:hover:active:enabled { background-color: rgba(193, 140, 93, 0.3); }
+.recent-remove:hover:enabled { background-color: rgba(168, 84, 72, 0.5); }
+.recent-list { background-color: rgba(27, 28, 22, 0.88); }
+.recent-empty { color: rgba(243, 244, 241, 0.45); font-size: 13px; -unity-text-align: middle-center; white-space: normal; padding: 22px 16px; }

@@ -72,6 +72,13 @@ namespace SpongePark
             mark.Add(new Label("s"));
             brand.Add(mark);
             brand.Add(Text("Sponge Park", "brand-name"));
+            if (!bundle)
+            {
+                var gap = new VisualElement();
+                gap.style.flexGrow = 1;
+                brand.Add(gap);
+                brand.Add(Btn("Home", ShowLanding, "btn--ghost"));   // back to new / open / recently opened
+            }
             sidebar.Add(brand);
             statusLabel = Text(status, "status");
             sidebar.Add(statusLabel);

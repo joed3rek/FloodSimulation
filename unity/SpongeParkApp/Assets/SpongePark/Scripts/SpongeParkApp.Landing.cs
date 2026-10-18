@@ -13,8 +13,8 @@ namespace SpongePark
     public partial class SpongeParkApp
     {
         VisualElement mainApp, mainOverlay, landing, intakeView, browser;
-        VisualElement contourArt, rainArt;
-        Label landingStatus, engineChip;
+        bool engineLaunched;   // the landing starts the engine itself, once
+        Label landingStatus;
         JToken intake;
         readonly Dictionary<string, string> links = new Dictionary<string, string>();   // layer -> SP name ("" = not needed)
         readonly Dictionary<string, Texture2D> previews = new Dictionary<string, Texture2D>();
@@ -23,7 +23,11 @@ namespace SpongePark
         Button buildButton;
         string intakeProjectPath = "", intakeArea = "";
         bool intakeContours = true;
-        const string RecentKey = "spongepark.recent";
+        const string RecentKey = "spongepark.recent";          // before: paths joined with '|' (read once, then replaced)
+        const string RecentListKey = "spongepark.recent.v2";   // JSON [{path, name, opened (unix seconds)}]
+        const int RecentKeep = 20;
+        ScrollView recentList;
+        Button recentClear;
         float nextEngineCheck;
 
         // ------------------------------------------------------------ screens
@@ -49,6 +53,8 @@ namespace SpongePark
             if (intakeView != null) intakeView.style.display = DisplayStyle.None;
             SetScene(false);
             if (landing == null) BuildLanding();
+            landingStatus.text = "";
+            FillRecent();
             landing.style.display = DisplayStyle.Flex;
         }
 
@@ -64,14 +70,17 @@ namespace SpongePark
             var glowB = Blob(new Color(0.76f, 0.55f, 0.36f, 0.32f), 1000, 520, 760);
             landing.Add(glowA);
             landing.Add(glowB);
-            contourArt = new VisualElement { pickingMode = PickingMode.Ignore };
-            contourArt.AddToClassList("contour-art");
-            contourArt.generateVisualContent += DrawContours;
-            landing.Add(contourArt);
-            rainArt = new VisualElement { pickingMode = PickingMode.Ignore };
-            rainArt.AddToClassList("rain-art");
-            rainArt.generateVisualContent += DrawRain;
-            landing.Add(rainArt);
+
+            // two columns under the nav: new / open on the left (wider), recently opened on the right
+            var columns = new VisualElement();
+            columns.AddToClassList("landing-columns");
+            landing.Add(columns);
+            var left = new VisualElement();
+            left.AddToClassList("landing-left");
+            columns.Add(left);
+            var right = new VisualElement();
+            right.AddToClassList("landing-right");
+            columns.Add(right);
 
             var nav = Row("landing-nav");
             var brand = Row("brand");
@@ -81,12 +90,6 @@ namespace SpongePark
             brand.Add(mark);
             brand.Add(Text("Sponge Park.", "landing-brand"));
             nav.Add(brand);
-            var spacer = new VisualElement();
-            spacer.style.flexGrow = 1;
-            nav.Add(spacer);
-            engineChip = Text("checking the engine…", "engine-chip");
-            nav.Add(engineChip);
-            nav.Add(Btn("Start engine", () => { launcher.Launch(); StartCoroutine(Later(4, CheckEngine())); }, "btn--light"));
             landing.Add(nav);
 
             var hero = new VisualElement();
@@ -102,39 +105,76 @@ namespace SpongePark
             choices.Add(ChoiceCard("◆", "Open a project", "A .sponge file you saved before",
                 () => PickFile("Open a Sponge Park project", "Sponge Park project", "sponge", p => StartCoroutine(OpenExisting(p))), false));
             hero.Add(choices);
-
-            hero.Add(Text("OR PASTE A PATH (.DXF OR .SPONGE)", "hero-small"));
-            var pathRow = Row("path-row");
-            var pathField = new TextField { value = PlayerPrefs.GetString("spongepark.lastsurvey", "") };
-            pathField.AddToClassList("input");
-            pathField.AddToClassList("path-input");
-            pathRow.Add(pathField);
-            pathRow.Add(Btn("Go", () =>
-            {
-                var path = pathField.value.Trim('"', ' ');
-                if (path.EndsWith(".sponge", System.StringComparison.OrdinalIgnoreCase)) StartCoroutine(OpenExisting(path));
-                else StartCoroutine(StartIntake(path));
-            }, "btn--light"));
-            hero.Add(pathRow);
             landingStatus = Text("", "hero-status");
             hero.Add(landingStatus);
+            left.Add(hero);
 
-            var recent = Recent();
-            if (recent.Count > 0)
+            // right: recently opened projects, newest first; the list scrolls inside its panel
+            var recent = new VisualElement();
+            recent.AddToClassList("recent");
+            var head = Row("recent-head");
+            head.Add(Text("RECENTLY OPENED", "recent-title"));
+            recentClear = Btn("Clear list", () => { SaveRecent(new List<RecentProject>()); FillRecent(); }, "btn--link");
+            head.Add(recentClear);
+            recent.Add(head);
+            recentList = new ScrollView(ScrollViewMode.Vertical) { horizontalScrollerVisibility = ScrollerVisibility.Hidden };
+            recentList.AddToClassList("recent-list");
+            recent.Add(recentList);
+            right.Add(recent);
+        }
+
+        void FillRecent()
+        {
+            recentList.Clear();
+            var all = Recent();
+            recentClear.style.display = all.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            if (all.Count == 0)
             {
-                hero.Add(Text("RECENT PROJECTS", "hero-small"));
-                var list = Row("recent-row");
-                foreach (var r in recent.Where(x => x.EndsWith(".sponge", System.StringComparison.OrdinalIgnoreCase)).Take(4))
-                {
-                    var path = r;
-                    var b = Btn(System.IO.Path.GetFileNameWithoutExtension(r), () => StartCoroutine(OpenExisting(path)), "btn--recent");
-                    b.tooltip = r;
-                    list.Add(b);
-                }
-                hero.Add(list);
+                recentList.Add(Text("Projects you open or create will appear here.", "recent-empty"));
+                return;
             }
-            landing.Add(hero);
-            landing.Add(Text("SPONGE PARK.", "wordmark"));
+            foreach (var r in all) recentList.Add(RecentItem(r));
+        }
+
+        VisualElement RecentItem(RecentProject r)
+        {
+            bool missing = !System.IO.File.Exists(r.path);
+            var item = new VisualElement();
+            item.AddToClassList("recent-item");
+            item.EnableInClassList("recent-item--missing", missing);
+
+            var open = new Button(() => StartCoroutine(OpenExisting(r.path))) { tooltip = r.path };
+            open.AddToClassList("recent-open");
+            var icon = new VisualElement { pickingMode = PickingMode.Ignore };
+            icon.AddToClassList("recent-icon");
+            icon.Add(Text("◆", "recent-glyph"));
+            open.Add(icon);
+            var words = new VisualElement { pickingMode = PickingMode.Ignore };
+            words.AddToClassList("recent-words");
+            words.Add(Text(string.IsNullOrEmpty(r.name) ? System.IO.Path.GetFileNameWithoutExtension(r.path) : r.name, "recent-name"));
+            words.Add(Text(Shorten(System.IO.Path.GetDirectoryName(r.path) ?? "", 48), "recent-path"));
+            open.Add(words);
+            open.Add(Text(missing ? "file not found" : Ago(r.opened), "recent-when"));
+            item.Add(open);
+
+            var remove = new Button(() => { Forget(r.path); FillRecent(); }) { text = "×", tooltip = "Remove from this list (the file is not deleted)" };
+            remove.AddToClassList("recent-remove");
+            item.Add(remove);
+            return item;
+        }
+
+        static string Shorten(string s, int max) => s.Length <= max ? s : "…" + s.Substring(s.Length - (max - 1));
+
+        static string Ago(System.DateTime? when)
+        {
+            if (when == null) return "";
+            var d = System.DateTime.UtcNow - when.Value;
+            if (d.TotalMinutes < 1) return "just now";
+            if (d.TotalHours < 1) return $"{(int)d.TotalMinutes} min ago";
+            if (d.TotalDays < 1) return $"{(int)d.TotalHours} h ago";
+            if (d.TotalDays < 2) return "yesterday";
+            if (d.TotalDays < 7) return $"{(int)d.TotalDays} days ago";
+            return when.Value.ToLocalTime().ToString("d MMM yyyy");
         }
 
         VisualElement ChoiceCard(string glyph, string title, string text, System.Action onClick, bool primary)
@@ -152,91 +192,114 @@ namespace SpongePark
             return card;
         }
 
-        void DrawContours(MeshGenerationContext ctx)
-        {
-            var p = ctx.painter2D;
-            var c = new Color(0.90f, 0.86f, 0.80f);
-            float w = contourArt.contentRect.width, h = contourArt.contentRect.height, cx = w / 2, cy = h / 2;
-            for (int i = 0; i < 9; i++)
-            {
-                float r = (0.1f + i * 0.048f) * Mathf.Min(w, h), k = 0.08f + i * 0.01f;
-                p.strokeColor = new Color(c.r, c.g, c.b, 0.5f - i * 0.045f);
-                p.lineWidth = i % 3 == 0 ? 1.6f : 0.8f;
-                p.BeginPath();
-                for (int j = 0; j <= 12; j++)
-                {
-                    float a = j / 12f * Mathf.PI * 2;
-                    float rr = r * (1 + k * Mathf.Sin(3 * a + i * 0.9f) + 0.05f * Mathf.Cos(5 * a - i));
-                    var pt = new Vector2(cx + rr * Mathf.Cos(a), cy + rr * Mathf.Sin(a));
-                    if (j == 0) p.MoveTo(pt); else p.LineTo(pt);
-                }
-                p.ClosePath();
-                p.Stroke();
-            }
-        }
-
-        void DrawRain(MeshGenerationContext ctx)
-        {
-            var p = ctx.painter2D;
-            float w = rainArt.contentRect.width, h = rainArt.contentRect.height;
-            p.strokeColor = new Color(0.90f, 0.86f, 0.80f, 0.6f);
-            p.lineWidth = 2;
-            p.BeginPath();
-            p.MoveTo(new Vector2(0, h * 0.55f));
-            p.BezierCurveTo(new Vector2(w * 0.25f, h * 0.5f), new Vector2(w * 0.3f, h * 0.85f), new Vector2(w * 0.5f, h * 0.85f));
-            p.BezierCurveTo(new Vector2(w * 0.7f, h * 0.85f), new Vector2(w * 0.78f, h * 0.52f), new Vector2(w, h * 0.58f));
-            p.Stroke();
-            p.fillColor = new Color(0.29f, 0.49f, 0.59f, 0.8f);
-            p.BeginPath();
-            p.MoveTo(new Vector2(w * 0.27f, h * 0.68f));
-            p.BezierCurveTo(new Vector2(w * 0.36f, h * 0.83f), new Vector2(w * 0.64f, h * 0.83f), new Vector2(w * 0.73f, h * 0.68f));
-            p.BezierCurveTo(new Vector2(w * 0.62f, h * 0.74f), new Vector2(w * 0.38f, h * 0.74f), new Vector2(w * 0.27f, h * 0.68f));
-            p.Fill();
-            p.strokeColor = new Color(0.95f, 0.96f, 0.94f, 0.45f);
-            for (int i = 0; i < 6; i++)
-            {
-                p.BeginPath();
-                float x = w * (0.3f + i * 0.08f), y = h * (0.1f + (i % 3) * 0.07f);
-                p.MoveTo(new Vector2(x, y));
-                p.LineTo(new Vector2(x - 8, y + 34));
-                p.Stroke();
-            }
-        }
-
+        /// While the landing is up: checks the engine every few seconds and starts it once if it is not running.
         void AnimateLanding()
         {
             if (landing == null || landing.style.display == DisplayStyle.None) return;
             float t = Time.unscaledTime;
-            if (t > nextEngineCheck) { nextEngineCheck = t + 5; StartCoroutine(CheckEngine()); }   // notice a (re)started engine
-            contourArt.style.translate = new Translate(0, 22 * Mathf.Sin(t * 2 * Mathf.PI / 12f));
-            contourArt.style.rotate = new Rotate(2 * Mathf.Sin(t * 2 * Mathf.PI / 12f));
-            rainArt.style.translate = new Translate(0, -20 * Mathf.Sin(t * 2 * Mathf.PI / 14f));
-            bool ok = engineUp && api.Current;
-            engineChip.text = !engineUp ? "engine not running" : ok ? "engine connected" : "engine out of date: restart spongepark serve";
-            engineChip.EnableInClassList("engine-chip--off", !ok);
+            if (t > nextEngineCheck) { nextEngineCheck = t + 5; StartCoroutine(EnsureEngine()); }
         }
 
-        static List<string> Recent()
+        IEnumerator EnsureEngine()
         {
-            var s = PlayerPrefs.GetString(RecentKey, "");
-            return s.Split('|').Where(x => x.Length > 0).ToList();
+            yield return CheckEngine();
+            if (!engineUp && !engineLaunched) { engineLaunched = true; launcher.Launch(); }
         }
 
-        static void Remember(string path)
+        /// Waits (up to 30 s) for the engine, starting it if needed; then runs next. Says why if it never comes up.
+        IEnumerator WhenEngineReady(System.Action next)
+        {
+            landingStatus.text = "Starting the engine…";
+            for (int i = 0; i < 30 && !engineUp; i++)
+            {
+                yield return EnsureEngine();
+                if (!engineUp) yield return new WaitForSecondsRealtime(1);
+            }
+            if (!engineUp)
+            {
+                landingStatus.text = "The engine did not start" + (launcher.Message.StartsWith("could not") ? " (" + launcher.Message + ")" : "") +
+                                     ". Check that Python and spongepark are installed, or run spongepark serve, then try again.";
+                yield break;
+            }
+            landingStatus.text = "";
+            next();
+        }
+
+        class RecentProject
+        {
+            public string path, name;
+            public System.DateTime? opened;   // UTC; null for entries carried over from the old list
+        }
+
+        static List<RecentProject> Recent()
+        {
+            var json = PlayerPrefs.GetString(RecentListKey, "");
+            if (json.Length == 0)   // first run with this list: carry over the old one
+                return PlayerPrefs.GetString(RecentKey, "").Split('|')
+                    .Where(x => x.EndsWith(".sponge", System.StringComparison.OrdinalIgnoreCase))
+                    .Select(x => new RecentProject { path = x }).ToList();
+            try
+            {
+                return JArray.Parse(json).Select(t => new RecentProject
+                {
+                    path = (string)t["path"],
+                    name = (string)t["name"],
+                    opened = t["opened"] != null && t["opened"].Type == JTokenType.Integer
+                        ? System.DateTimeOffset.FromUnixTimeSeconds((long)t["opened"]).UtcDateTime : (System.DateTime?)null,
+                }).Where(r => !string.IsNullOrEmpty(r.path)).ToList();
+            }
+            catch (Newtonsoft.Json.JsonException) { return new List<RecentProject>(); }
+        }
+
+        static void SaveRecent(List<RecentProject> list)
+        {
+            var a = new JArray(list.Take(RecentKeep).Select(r => new JObject
+            {
+                ["path"] = r.path,
+                ["name"] = r.name,
+                ["opened"] = r.opened == null ? null : (JToken)new System.DateTimeOffset(r.opened.Value).ToUnixTimeSeconds(),
+            }));
+            PlayerPrefs.SetString(RecentListKey, a.ToString(Newtonsoft.Json.Formatting.None));
+            PlayerPrefs.Save();
+        }
+
+        static string FullPath(string p)
+        {
+            try { return System.IO.Path.GetFullPath(p); } catch (System.Exception) { return p; }
+        }
+
+        static bool SamePath(string a, string b) => string.Equals(FullPath(a), FullPath(b), System.StringComparison.OrdinalIgnoreCase);
+
+        /// Puts a project at the top of the recently opened list (called whenever one opens).
+        static void Remember(string path, string name)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            var r = Recent();
+            r.RemoveAll(x => SamePath(x.path, path));
+            r.Insert(0, new RecentProject { path = FullPath(path), name = name, opened = System.DateTime.UtcNow });
+            SaveRecent(r);
+        }
+
+        static void Forget(string path)
         {
             var r = Recent();
-            r.Remove(path);
-            r.Insert(0, path);
-            PlayerPrefs.SetString(RecentKey, string.Join("|", r.Take(6)));
+            r.RemoveAll(x => SamePath(x.path, path));
+            SaveRecent(r);
         }
 
         IEnumerator OpenExisting(string path)
         {
+            if (!engineUp)
+            {
+                bool ready = false;
+                yield return WhenEngineReady(() => ready = true);
+                if (!ready) yield break;
+            }
             projectPath = path;
-            landingStatus.text = "Opening…";
+            info = null;   // so a project open before this one does not count as success
+            landingStatus.text = "Opening " + System.IO.Path.GetFileName(path) + "…";
             yield return OpenProject(false);
             if (info == null) { landingStatus.text = "Could not open: " + api.LastError; yield break; }
-            Remember(path);
             ShowMain();
         }
 
@@ -244,7 +307,7 @@ namespace SpongePark
         /// The Windows file-open dialog; the in-app browser where the system dialog is not available.
         void PickFile(string title, string label, string extensions, System.Action<string> pick)
         {
-            if (!engineUp) { landingStatus.text = "Start the engine first (button at the top)."; return; }
+            if (!engineUp) { StartCoroutine(WhenEngineReady(() => PickFile(title, label, extensions, pick))); return; }
             if (!api.Current)
             {
                 landingStatus.text = "The running engine is older than this app. In its window press Ctrl+C, run spongepark serve again, then try again.";
@@ -266,10 +329,10 @@ namespace SpongePark
 
         void OpenBrowser(string title, string ext, System.Action<string> pick)
         {
-            if (!engineUp) { landingStatus.text = "Start the engine first (button at the top)."; return; }
+            if (!engineUp) { StartCoroutine(WhenEngineReady(() => OpenBrowser(title, ext, pick))); return; }
             if (!api.Current)
             {
-                landingStatus.text = "The running engine is older than this app. In its window press Ctrl+C, run spongepark serve again, then click Check or try again.";
+                landingStatus.text = "The running engine is older than this app. In its window press Ctrl+C, run spongepark serve again, then try again.";
                 StartCoroutine(CheckEngine());
                 return;
             }
@@ -570,7 +633,6 @@ namespace SpongePark
                      (qc != null && qc.Type != JTokenType.Null ? $"; spot levels agree to {(float)qc["rmse_m"]:0.000} m." : ".");
             projectPath = (string)r["project"];
             yield return OpenProject(false);
-            Remember(projectPath);
             ShowMain();
         }
     }
