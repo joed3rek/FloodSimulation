@@ -57,6 +57,6 @@ chose which layouts to run; its hold-out scores are reported for transparency.
 | `optimise/<mode>_report.json` | Rounds, surrogate scores, Pareto set, options |
 | `optimise/<mode>_pareto.png` | All layouts, the Pareto set, the options written |
 | `optimise/performance_curve.json/.png` | Largest storm fully retained and retained % against budget |
-| `options/pareto_n/` | Full options: components, graded DEM, SWMM models and results |
+| `scenarios/pareto_n/` | Full options: components, graded DEM, SWMM models and results |
 
 Runs are deterministic (`optimise.seed`).

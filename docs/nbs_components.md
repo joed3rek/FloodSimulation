@@ -37,7 +37,7 @@ Routing:
 
 `guidelines.json` holds every numeric range from the Habitat Collective chapters 4.10-4.12, each
 with its source, section and page. Before each run, every element is checked against each rule
-that applies to it. Findings are written to `options/<id>/guideline_findings.json`:
+that applies to it. Findings are written to `scenarios/<id>/guideline_findings.json`:
 
 - **error** (e.g. orifice < 75 mm, freeboard < 300 mm): the run stops unless `guidelines.enforce_errors` is false
 - **warning** (e.g. side slopes outside 3:1-4:1, ponding outside 150-300 mm, infiltration < 13 mm/h)

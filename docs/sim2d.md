@@ -29,7 +29,7 @@ surface parameters (impervious on buildings). Water leaves over the edges of the
   limit used in the tests. On Nethravathi (25-yr) the difference was +1.3 % (existing ground) and
   -4.7 % (generated option).
 
-## Outputs (`options/<id>/sim2d/`)
+## Outputs (`scenarios/<id>/sim2d/`)
 
 | File | Content |
 |---|---|

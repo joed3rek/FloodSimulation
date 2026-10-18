@@ -65,6 +65,7 @@ class NbSElement(BaseModel):
     well_depth_m: Optional[float] = None
     dam_height_m: Optional[float] = None
     freeboard_m: Optional[float] = None
+    safety_bench_width_m: Optional[float] = None  # retention pond bench at the permanent pool edge
     # guideline-only attributes (optional, checked when given)
     check_dam_spacing_m: Optional[float] = None
     forebay_volume_fraction: Optional[float] = None
@@ -78,6 +79,9 @@ class NbSElement(BaseModel):
 
     soil_zone: Optional[str] = None
     param_sources: Dict[str, str] = Field(default_factory=dict)
+    # record fields this engine does not model, kept so a round trip loses nothing:
+    # {"record": {...}, "parameters": {...}, "outlet": {...}}
+    extra: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     notes: str = ""
 
     @property
@@ -284,7 +288,7 @@ def analytic_drawdown_hr(el: NbSElement, params: ParameterSet) -> Optional[float
 _RENAMED = {"top_width_m": "width_m", "max_ponding_depth_m": "depth_m", "well_diameter_m": "diameter_m",
             "weir_length_m": "overflow_weir_length_m"}
 _PARAMS = ["top_width_m", "max_ponding_depth_m", "side_slope_h_v", "soil_media_depth_m", "storage_layer_depth_m",
-           "permanent_pool_depth_m", "freeboard_m", "invert_elev_m", "longitudinal_slope_pct", "manning_n",
+           "permanent_pool_depth_m", "freeboard_m", "safety_bench_width_m", "invert_elev_m", "longitudinal_slope_pct", "manning_n",
            "vegetation_volume_fraction", "check_dam_spacing_m", "dam_height_m", "well_diameter_m", "well_depth_m",
            "seepage_rate_mm_hr", "weir_length_m",
            # guideline-only attributes travel as extra parameters
@@ -294,6 +298,9 @@ _TOP = ["infiltration_rate_mm_hr", "area_m2", "storage_volume_m3", "contributing
         "soil_zone", "param_sources", "notes", "results"]
 
 
+_RECORD_KEYS = {"id", "type", "geometry", "parameters", "connections", "locked", "source", *_TOP}
+
+
 def to_record(el: NbSElement) -> Dict[str, Any]:
     """Element record (an entry of ``scenarios/<id>/elements.json``) from an engine element."""
     params: Dict[str, Any] = {}
@@ -301,11 +308,14 @@ def to_record(el: NbSElement) -> Dict[str, Any]:
         v = getattr(el, f)
         if v is not None:
             params[_RENAMED.get(f, f)] = v
-    if el.outlet_diameter_m is not None or el.outlet_weir_length_m is not None or el.outlet_coefficient is not None:
-        params["outlet"] = {k: v for k, v in {
-            "type": "orifice" if el.outlet_diameter_m is not None else "weir",
+    kept_outlet = el.extra.get("outlet", {})
+    if el.outlet_diameter_m is not None or el.outlet_weir_length_m is not None or el.outlet_coefficient is not None \
+            or kept_outlet:
+        params["outlet"] = {**kept_outlet, **{k: v for k, v in {
+            "type": kept_outlet.get("type") or ("orifice" if el.outlet_diameter_m is not None else "weir"),
             "diameter_m": el.outlet_diameter_m, "weir_length_m": el.outlet_weir_length_m,
-            "coefficient": el.outlet_coefficient}.items() if v is not None}
+            "coefficient": el.outlet_coefficient}.items() if v is not None}}
+    params.update(el.extra.get("parameters", {}))
     rec: Dict[str, Any] = {"id": el.id, "type": el.type, "geometry": el.geometry, "parameters": params,
                            "connections": {"inflow_from": list(el.inflow_from), "outflow_to": el.outflow_to,
                                            "overflow_to": el.overflow_to},
@@ -315,6 +325,8 @@ def to_record(el: NbSElement) -> Dict[str, Any]:
         v = getattr(el, f)
         if v is not None and v != {} and v != "":
             rec[f] = v
+    for k, v in el.extra.get("record", {}).items():
+        rec.setdefault(k, v)
     return rec
 
 
@@ -326,12 +338,21 @@ def from_record(rec: Dict[str, Any]) -> NbSElement:
     d: Dict[str, Any] = {"id": rec["id"], "type": rec["type"], "geometry": rec["geometry"],
                          "locked": bool(rec.get("locked", False)),
                          "source": "designer" if rec.get("source") == "designer" else "proposal"}
+    extra: Dict[str, Dict[str, Any]] = {}
+    known = set(NbSElement.model_fields)
     for k, v in params.items():
-        d[inv.get(k, k)] = v
+        f = inv.get(k, k)
+        if f in _PARAMS and f in known:
+            d[f] = v
+        else:
+            extra.setdefault("parameters", {})[k] = v
     if outlet:
         d["outlet_diameter_m"] = outlet.get("diameter_m")
         d["outlet_weir_length_m"] = outlet.get("weir_length_m")
         d["outlet_coefficient"] = outlet.get("coefficient")
+        rest = {k: v for k, v in outlet.items() if k not in ("diameter_m", "weir_length_m", "coefficient")}
+        if rest:
+            extra["outlet"] = rest
     conn = rec.get("connections") or {}
     d["inflow_from"] = list(conn.get("inflow_from") or [])
     d["outflow_to"] = conn.get("outflow_to")
@@ -339,6 +360,10 @@ def from_record(rec: Dict[str, Any]) -> NbSElement:
     for f in _TOP:
         if f in rec:
             d[f] = rec[f]
+    rest = {k: v for k, v in rec.items() if k not in _RECORD_KEYS}
+    if rest:
+        extra["record"] = rest
+    d["extra"] = extra
     return NbSElement.model_validate({k: v for k, v in d.items() if v is not None})
 
 
@@ -380,7 +405,7 @@ def save_elements_fc(project, scenario_id: str, fc: Dict[str, Any]) -> None:
 def to_feature_collection(elements: List[NbSElement]) -> Dict[str, Any]:
     feats = []
     for el in elements:
-        props = el.model_dump(mode="json", exclude={"geometry"}, exclude_none=True)
+        props = el.model_dump(mode="json", exclude={"geometry"} | ({"extra"} if not el.extra else set()), exclude_none=True)
         feats.append({"type": "Feature", "geometry": el.geometry, "properties": props})
     return {"type": "FeatureCollection", "features": feats}
 

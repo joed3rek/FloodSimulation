@@ -1,16 +1,21 @@
 # Roadmap and open questions
 
+The project follows the phases of [BRIEF.md](BRIEF.md) (Sponge Park Designer, section 15). Work
+before that brief (survey import, terrain, layout generation, optimisation, Rhino, the 2D model,
+reports) is already in the engine and is reused by the later phases.
+
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Foundations | done |
-| 1 | SWMM engine with manual layout | done |
-| 2 | DWG/DEM import, layer mapping, TIN, DEM, quality checks | done (DXF; DWG via ODA) |
-| 3 | Sink fill, flow direction/accumulation, subcatchments, baseline SWMM from terrain | done (first pass; outlets to confirm) |
-| 4 | Suitability scoring, placement, sizing, grading, contours, subcatchment rebuild | done (cut-only grading) |
-| 5 | pymoo NSGA-II, surrogate ML, active learning, inverse mode | done |
-| 6 | rhino3dm export/round trip, Grasshopper components, 2D rain-on-grid | done (GH geometry components to check in Rhino) |
-| 7 | Unity app | done (Windows build run; GPU verified against the engine) |
-| 8 | Reports, calibration, documentation | done |
+| 0 | Foundations: shared JSON Schema, `.sponge` read and write in C# and Python, engine CLI, synthetic terrains | done: Python to Unity to Python round trip without loss |
+| 1 | Engine core: rainfall and hyetographs, manual NbS from JSON, SWMM builder and runner, water balance, metrics | in progress |
+| 2 | Unity shell and terrain | |
+| 3 | GPU flood simulation | first version exists (WaterSim.compute, checked against the engine) |
+| 4 | Survey import and baseline in the app | survey intake screen exists (DXF) |
+| 5 | Editing tools | |
+| 6 | Verification loop | |
+| 7 | Proposal and ML | engine side exists (NSGA-II, surrogate) |
+| 8 | Exports and reports | engine side exists |
+| 9 | Calibration and packaging | calibration exists; packaging to do |
 
 ## Technical notes
 

@@ -48,11 +48,11 @@ The baseline must have been run first: elements are sized from its SWMM runoff.
 Designer elements (source `designer`, or locked) already in the option are kept as they are and
 everything else is placed around them.
 
-## Outputs (`options/<id>/`)
+## Outputs (`scenarios/<id>/`)
 
 | File | Content |
 |---|---|
-| `components.geojson` | Elements with all attributes, notes on how each was sized |
+| `elements.json` | Elements with all attributes, notes on how each was sized |
 | `site/subcatchments.geojson` | Rebuilt subcatchments, used by this option's SWMM runs |
 | `terrain/graded.tif` (also `terrain/graded_<id>.tif`) | Graded DEM |
 | `terrain/cut.tif` | Cut depth per cell |

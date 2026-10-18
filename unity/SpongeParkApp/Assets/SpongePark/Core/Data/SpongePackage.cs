@@ -34,6 +34,7 @@ namespace SpongePark.Data
             NullValueHandling = NullValueHandling.Ignore,
             Formatting = Formatting.Indented,
             FloatParseHandling = FloatParseHandling.Double,
+            DateParseHandling = DateParseHandling.None,   // dates stay the strings they were written as
         };
 
         /// Opens a .sponge file (unzipped to a private folder) or a project folder.
@@ -112,7 +113,13 @@ namespace SpongePark.Data
             if (target == null) return Root;   // a folder project is edited in place
             var tmp = target + ".tmp";
             if (File.Exists(tmp)) File.Delete(tmp);
-            ZipFile.CreateFromDirectory(Root, tmp, CompressionLevel.Optimal, false);
+            using (var zip = ZipFile.Open(tmp, ZipArchiveMode.Create))
+                foreach (var f in Directory.GetFiles(Root, "*", SearchOption.AllDirectories).OrderBy(x => x, StringComparer.Ordinal))
+                {
+                    // entry names always use '/', whatever the platform
+                    var rel = f.Substring(Root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Replace('\\', '/');
+                    zip.CreateEntryFromFile(f, rel, CompressionLevel.Optimal);
+                }
             if (File.Exists(target)) File.Delete(target);
             File.Move(tmp, target);
             return target;
