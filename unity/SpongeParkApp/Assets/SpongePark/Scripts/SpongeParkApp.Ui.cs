@@ -330,6 +330,7 @@ namespace SpongePark
             }
             SyncSiteStep();
             SyncFlowAndDesign();
+            SyncAtmosphere();
             SyncChips();
             SyncComparison();
             if (verifyLabel != null && !string.IsNullOrEmpty(verify))
@@ -345,15 +346,21 @@ namespace SpongePark
             videoLabel.text = video.Result;
 
             float th = simT / 3600f;
-            stormTitle.text = CurrentRp > 0 ? $"{CurrentRp}-year storm" : "No storm loaded";
+            float depth = StormDepth(CurrentRp);
+            stormTitle.text = CurrentRp > 0 ? $"{CurrentRp}-year storm" + (depth > 0 ? $" · {depth:0} mm in 24 h" : "") : "No storm yet";
             float rain = left.RainAt(th);
-            stormText.text = $"{th:0.0} h · " + (rain > 0.05f ? $"rain {rain:0} mm/h" : "no rain");
+            bool water = live || left.Frames != null || right.Frames != null;
+            stormText.text = depth <= 0 ? "Step 2: use the design rainfall"
+                : !water ? "Run the flood simulation (Step 2) or add an NbS to watch it"
+                : !playing && simT <= 0 ? "Ready: press Play"
+                : $"{th:0.0} h of 24 · " + (rain > 0.05f ? $"rain {rain:0} mm/h" : "no rain now");
             litresLeftCard.style.display = left.RetainedTime != null ? DisplayStyle.Flex : DisplayStyle.None;
             litresRightCard.style.display = sideBySide && right.RetainedTime != null ? DisplayStyle.Flex : DisplayStyle.None;
             var single = !sideBySide;
-            leftName.text = single && showProposed ? $"PROPOSED · {CurrentOption?.ToUpper()}" : "EXISTING";
+            var rightLabel = right.Option == DesignScenario ? "DESIGN" : $"PROPOSED · {CurrentOption?.ToUpper()}";
+            leftName.text = single && showProposed ? rightLabel : "EXISTING";
             litresLeft.text = (single && showProposed ? right : left).LitresAt(th).ToString("N0");
-            rightName.text = $"PROPOSED · {CurrentOption?.ToUpper()}";
+            rightName.text = rightLabel;
             litresRight.text = right.LitresAt(th).ToString("N0");
         }
 

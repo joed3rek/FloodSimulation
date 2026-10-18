@@ -27,7 +27,7 @@ namespace SpongePark
         JToken surveyLayers;   // what the survey drawing shows, layer by layer (/site/layers)
         string status = "Start the engine or open a results bundle.";
         string projectPath = "", drawingPath = "", layerMapJson = "", exportDir = "";
-        float budgetPct = 10, maxDrawdownHr = 48, exaggeration = 1;   // true heights by default; the View slider exaggerates
+        float budgetPct = 10, maxDrawdownHr = 48, exaggeration = 3;   // heights x3 by default (the parks are nearly flat); x1 shows true heights
         int designRp = 5, targetRp = 10;
         List<string> options = new List<string>();
         List<int> returnPeriods = new List<int>();
@@ -54,6 +54,7 @@ namespace SpongePark
             var light = new GameObject("sun").AddComponent<Light>();
             light.type = LightType.Directional;
             light.transform.rotation = Quaternion.Euler(50, -30, 0);
+            SetupAtmosphere(light);
             // paper behind everything (the sidebar area is outside the scene cameras' viewports)
             var bg = new GameObject("background").AddComponent<Camera>();
             bg.cullingMask = 0;
@@ -153,7 +154,7 @@ namespace SpongePark
             if (plan != null && System.Environment.GetCommandLineArgs().Contains("-spPanelClosed")) SetPanel(false);
             // site model checks: -spOnly <layer> shows just that survey layer; -spPitch <deg> looks from higher up
             if (Arg("-spOnly") != null) { SetAllLayers(false); SetLayer(Arg("-spOnly"), true); }
-            if (float.TryParse(Arg("-spPitch"), out var pitch)) rigLeft.Pitch = pitch;
+            if (float.TryParse(Arg("-spPitch"), out var pitch)) { rigLeft.Pitch = pitch; rigLeft.Plan = false; }
             if (float.TryParse(Arg("-spZoom"), out var zoomBy)) rigLeft.Distance /= zoomBy;
             if (float.TryParse(Arg("-spYaw"), out var yaw)) rigLeft.Yaw = yaw;
             if (System.Environment.GetCommandLineArgs().Contains("-spPlan")) rigLeft.Plan = true;

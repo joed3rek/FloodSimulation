@@ -26,7 +26,10 @@ namespace SpongePark
         /// Contour interval (m) chosen from the park's relief; lines drawn by the terrain shader.
         public float ContourInterval { get; private set; } = 0.5f;
 
-        public void SetContours(bool on) => material.SetFloat("_Opacity", on ? 0.55f : 0f);
+        public void SetContours(bool on) => material.SetFloat("_Opacity", on ? 0.85f : 0f);
+        /// Lowest and highest level of the park (m), for legends.
+        public float ParkLow { get; private set; }
+        public float ParkHigh { get; private set; }
 
         /// A round interval giving about ten contours over the park's relief.
         static float NiceInterval(float relief)
@@ -48,6 +51,8 @@ namespace SpongePark
             for (int k = 0; k < g.Z.Length; k++)
                 if (!float.IsNaN(g.Z[k]) && (g.Surveyed == null || g.Surveyed[k] == 1)) { lo = Mathf.Min(lo, g.Z[k]); hi = Mathf.Max(hi, g.Z[k]); }
             ContourInterval = lo < hi ? NiceInterval(hi - lo) : 0.5f;
+            ParkLow = lo;
+            ParkHigh = hi;
             material.SetFloat("_Interval", ContourInterval);
             var index = new int[g.Rows * g.Cols];
             for (int r = 0; r < g.Rows; r++)
@@ -59,8 +64,11 @@ namespace SpongePark
                 index[k] = verts.Count;
                 verts.Add(frame.World(x, y, g.Z[k]));
                 levels.Add(new Vector2(g.Z[k], g.Surveyed == null || g.Surveyed[k] == 1 ? 1 : 0));   // contours on park ground only
-                float t = Mathf.InverseLerp(g.ZMin, g.ZMax, g.Z[k]);
-                var col = Color.Lerp(new Color(0.42f, 0.55f, 0.32f), new Color(0.72f, 0.68f, 0.52f), t);
+                // colour by height over the park's own range of levels, so its fall shows even when it is nearly flat
+                float t = lo < hi ? Mathf.InverseLerp(lo, hi, g.Z[k]) : 0.5f;
+                var col = t < 0.5f
+                    ? Color.Lerp(new Color(0.30f, 0.50f, 0.44f), new Color(0.50f, 0.62f, 0.34f), t * 2)
+                    : Color.Lerp(new Color(0.50f, 0.62f, 0.34f), new Color(0.80f, 0.70f, 0.47f), (t - 0.5f) * 2);
                 // ground beyond the survey levels (widened for display): pale, so it reads as not surveyed
                 if (g.Surveyed != null && g.Surveyed[k] == 0) col = Color.Lerp(col, new Color(0.86f, 0.84f, 0.78f), 0.75f);
                 foreach (var (type, ring) in polys)

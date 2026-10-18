@@ -204,7 +204,9 @@ def _run_itzi(inp: Inputs2D, frame_s: float):
 
 
 def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = None,
-          frame_every_s: Optional[float] = None) -> Dict[str, Any]:
+          frame_every_s: Optional[float] = None, engine: Optional[str] = None) -> Dict[str, Any]:
+    """``engine``: 'builtin' or 'itzi' for this run only (design changes use the quick built-in model;
+    verification uses Itzi when it is set up)."""
     P = project.parameters
     inp = prepare2d(project, option_id, rp, cell_m)
     g, mask, els, cell = inp.dem, inp.mask, inp.elements, inp.dem.cell_size
@@ -212,7 +214,7 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
     infil_note = inp.infil_note
     duration_s = inp.duration_s
     frame_s = float(frame_every_s or P.value("sim2d.frame_interval_s"))
-    engine = _engine(P)
+    engine = _engine(P) if engine in (None, "", "auto") else engine
     engine_note = None
     if engine == "itzi" and inp.elements is not None and not project.exists(f"scenarios/{option_id}/terrain/graded.tif"):
         # Itzi holds water only where the ground does: elements must be carved into the scenario's ground

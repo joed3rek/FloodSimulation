@@ -99,3 +99,16 @@ def test_a_malformed_shape_is_refused_with_its_element_named(site):
     r = c.put(f"/projects/{pid}/design/design?wait=true", json={"features": _fc(bow), "action": "create"}).json()
     assert r["status"] == "error" and "crosses itself" in r["error"]
     c.post(f"/projects/{pid}/close")
+
+
+def test_an_element_wholly_on_keep_out_ground_is_kept_but_not_carved(site):
+    """A rain garden drawn under a tree's canopy (keep-out) is not dug, and the designer is told why."""
+    c = TestClient(app)
+    pid = c.post("/projects/open", json={"path": site}).json()["project"]
+    under_tree = ({"type": "Polygon", "coordinates": [[[19, 19], [21, 19], [21, 21], [19, 21], [19, 19]]]},
+                  {"id": "RG5", "type": "rain_garden"})
+    r = c.put(f"/projects/{pid}/design/design?wait=true", json={"features": _fc(under_tree), "action": "create"}).json()
+    assert r["status"] == "done", r.get("error")
+    texts = [w["text"] for w in r["result"]["warnings"]]
+    assert any("RG5" in t and ("not carved" in t or "keep-out" in t) for t in texts), texts
+    c.post(f"/projects/{pid}/close")

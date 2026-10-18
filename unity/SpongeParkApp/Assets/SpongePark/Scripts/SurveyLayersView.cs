@@ -89,6 +89,7 @@ namespace SpongePark
 
         // ------------------------------------------------------------ shapes
         static readonly Color Trunk = new Color(0.42f, 0.31f, 0.23f);
+        static int Seed(Vector3 p) => Mathf.Abs((int)(p.x * 73.1f) * 31 + (int)(p.z * 19.7f));
 
         static void AddLine(MeshBuilder m, string kind, List<Vector3> pts, bool closed, float h, float w, Color col, float lift)
         {
@@ -123,20 +124,14 @@ namespace SpongePark
             {
                 case "tree":
                 {
-                    // a round crown: one full sphere with two smaller ones blended in, on a tapered trunk
-                    float cr = r > 0 ? Mathf.Clamp(r, 1.5f, 6f) : 2.8f, trunkH = Mathf.Max(1.8f, h - 1.7f * cr);
-                    m.Trunk(p, 0.22f, 0.14f, trunkH + cr * 0.5f, Trunk);
-                    var c0 = p + Vector3.up * (trunkH + cr * 0.85f);
-                    m.RoundCrown(c0, cr, col);
-                    m.RoundCrown(c0 + new Vector3(cr * 0.45f, -cr * 0.2f, cr * 0.15f), cr * 0.62f, col * 0.95f);
-                    m.RoundCrown(c0 + new Vector3(-cr * 0.35f, -cr * 0.15f, -cr * 0.4f), cr * 0.58f, col * 1.05f);
+                    float cr = r > 0 ? Mathf.Clamp(r, 1.5f, 6f) : 2.8f;
+                    m.BroadleafTree(p, cr, Mathf.Max(h, cr * 2.2f), SpongeParkApp.Vary(col, p), Seed(p));
                     break;
                 }
                 case "palm":
                 {
-                    float cr = r > 0 ? Mathf.Clamp(r, 1.5f, 3.5f) : 2.5f;
-                    m.Trunk(p, 0.18f, 0.13f, h, new Color(0.55f, 0.45f, 0.35f));
-                    m.RoundCrown(p + Vector3.up * (h + cr * 0.35f), cr, col);
+                    float cr = r > 0 ? Mathf.Clamp(r, 2f, 4f) : 3f;
+                    m.CoconutPalm(p, h, cr, SpongeParkApp.Vary(col, p), Seed(p));
                     break;
                 }
                 case "manhole": m.Prism(p, 0.4f, 0.12f, 8, col); break;
@@ -313,6 +308,111 @@ namespace SpongePark
             var tip = p + d * (len / 2);
             Quad(tail - s * (w * 0.18f), tail + s * (w * 0.18f), neck + s * (w * 0.18f), neck - s * (w * 0.18f), col);
             Tri(neck - s * (w / 2), neck + s * (w / 2), tip, col);
+        }
+
+        static float Rand(int seed, int k) => Mathf.Abs(Mathf.Sin(seed * 12.9898f + k * 78.233f) * 43758.5453f) % 1f;
+
+        /// A broadleaf tree: tapered trunk splitting into branches, an irregular crown of clumps.
+        public void BroadleafTree(Vector3 p, float cr, float h, Color leaf, int seed)
+        {
+            var bark = new Color(0.36f, 0.27f, 0.20f);
+            float trunkH = Mathf.Max(1.6f, h - 1.6f * cr);
+            float r0 = Mathf.Clamp(cr * 0.09f, 0.14f, 0.4f);
+            Trunk(p, r0, r0 * 0.7f, trunkH, bark);
+            var top = p + Vector3.up * trunkH;
+            var centre = top + Vector3.up * cr * 0.75f;
+            const int branches = 3;
+            for (int i = 0; i < branches; i++)
+            {
+                float a = (i + Rand(seed, i)) * Mathf.PI * 2 / branches;
+                var tip = centre + new Vector3(Mathf.Cos(a) * cr * 0.45f, cr * 0.1f, Mathf.Sin(a) * cr * 0.45f);
+                Beam(top, tip, r0 * 0.9f, bark);
+            }
+            // clumps: one large in the middle, more around it, each a little lumpy
+            LumpyCrown(centre, cr * 0.72f, leaf, seed);
+            const int clumps = 6;
+            for (int i = 0; i < clumps; i++)
+            {
+                float a = (i + Rand(seed, 10 + i) * 0.6f) * Mathf.PI * 2 / clumps;
+                float d = cr * (0.45f + 0.2f * Rand(seed, 20 + i));
+                float y = cr * (Rand(seed, 30 + i) - 0.45f) * 0.6f;
+                var c = centre + new Vector3(Mathf.Cos(a) * d, y, Mathf.Sin(a) * d);
+                var tint = leaf * (0.82f + 0.3f * Rand(seed, 40 + i));
+                tint.a = 1;
+                LumpyCrown(c, cr * (0.42f + 0.14f * Rand(seed, 50 + i)), tint, seed + i * 7);
+            }
+        }
+
+        /// A crown clump: a sphere pushed in and out a little so it does not look like a ball.
+        public void LumpyCrown(Vector3 c, float r, Color col, int seed)
+        {
+            const int seg = 10, rings = 7;
+            var top = Color.Lerp(col, Color.white, 0.1f);
+            var bottom = col * 0.62f;
+            top.a = bottom.a = 1;
+            float ph = seed * 0.37f;
+            Vector3 N(int i, int j)
+            {
+                float t = Mathf.PI * i / rings, f = 2 * Mathf.PI * (j % seg) / seg;
+                return new Vector3(Mathf.Sin(t) * Mathf.Cos(f), Mathf.Cos(t), Mathf.Sin(t) * Mathf.Sin(f));
+            }
+            float Rr(int i, int j)
+            {
+                float t = Mathf.PI * i / rings, f = 2 * Mathf.PI * (j % seg) / seg;
+                return r * (1 + 0.13f * Mathf.Sin(3 * f + ph) * Mathf.Sin(2 * t + ph * 1.7f) + 0.07f * Mathf.Sin(5 * f - ph));
+            }
+            Color C(int i) => Color.Lerp(top, bottom, i / (float)rings);
+            for (int i = 0; i < rings; i++)
+                for (int j = 0; j < seg; j++)
+                {
+                    Vector3 n00 = N(i, j), n01 = N(i, j + 1), n10 = N(i + 1, j), n11 = N(i + 1, j + 1);
+                    Vector3 p00 = c + n00 * Rr(i, j), p01 = c + n01 * Rr(i, j + 1), p10 = c + n10 * Rr(i + 1, j), p11 = c + n11 * Rr(i + 1, j + 1);
+                    SmoothTri(p00, p01, p11, n00, n01, n11, C(i), C(i), C(i + 1));
+                    SmoothTri(p00, p11, p10, n00, n11, n10, C(i), C(i + 1), C(i + 1));
+                }
+        }
+
+        /// A coconut palm: slender trunk leaning a little, a crown of arching, drooping fronds.
+        public void CoconutPalm(Vector3 p, float h, float cr, Color leaf, int seed)
+        {
+            var bark = new Color(0.52f, 0.44f, 0.36f);
+            float lean = 0.06f + 0.08f * Rand(seed, 1), la = Rand(seed, 2) * Mathf.PI * 2;
+            var leanDir = new Vector3(Mathf.Cos(la), 0, Mathf.Sin(la));
+            const int segs = 6;
+            Vector3 prev = p;
+            for (int i = 1; i <= segs; i++)
+            {
+                float t = i / (float)segs;
+                var q = p + Vector3.up * h * t + leanDir * h * lean * t * t;
+                Beam(prev, q, Mathf.Lerp(0.36f, 0.24f, t), bark * (0.92f + 0.12f * (i % 2)));
+                prev = q;
+            }
+            var crown = prev;
+            const int fronds = 11;
+            for (int k = 0; k < fronds; k++)
+            {
+                float a = (k + Rand(seed, 60 + k) * 0.5f) * Mathf.PI * 2 / fronds;
+                var dir = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                var side = Vector3.Cross(Vector3.up, dir);
+                float len = cr * (0.9f + 0.25f * Rand(seed, 70 + k)), rise = 0.35f + 0.4f * Rand(seed, 80 + k);
+                var tint = leaf * (0.85f + 0.3f * Rand(seed, 90 + k));
+                tint.a = 1;
+                const int steps = 6;
+                Vector3 P(float t) => crown + dir * len * t + Vector3.up * len * (rise * t - (rise + 0.55f) * t * t);
+                for (int st = 0; st < steps; st++)
+                {
+                    float t0 = st / (float)steps, t1 = (st + 1) / (float)steps;
+                    float w0 = 0.45f * Mathf.Sin(Mathf.PI * Mathf.Max(t0, 0.15f)), w1 = 0.45f * Mathf.Sin(Mathf.PI * Mathf.Max(t1, 0.15f));
+                    var d0 = Vector3.down * w0 * 0.35f;
+                    var d1 = Vector3.down * w1 * 0.35f;
+                    // a frond: a V of leaflets either side of the midrib
+                    Quad(P(t0), P(t1), P(t1) + side * w1 + d1, P(t0) + side * w0 + d0, tint);
+                    var t2 = tint * 0.92f;
+                    t2.a = 1;
+                    Quad(P(t0), P(t0) - side * w0 + d0, P(t1) - side * w1 + d1, P(t1), t2);
+                }
+            }
+            LumpyCrown(crown, 0.35f, new Color(0.45f, 0.38f, 0.2f), seed);   // the nut cluster
         }
 
         /// A tapered round trunk.

@@ -204,6 +204,12 @@ def apply(project: Project, scenario_id: str, fc: Dict[str, Any], action: Option
         warnings, cut = [], 0.0
     rows = [measure(project, e) for e in elements]
     out = {"scenario": scenario_id, "elements": rows, "cut_m3": cut, **check(project, elements, rows, warnings)}
+    try:   # where water runs on the carved ground now (a second or two)
+        from ..hydrology.flowmap import analyse
+
+        out["flow_summary"] = analyse(project, scenario=scenario_id)["summary"]
+    except Exception as ex:   # the edit itself stands even if the flow map cannot be redone
+        log.warning("flow on the design ground not updated: %s", ex)
     if action:
         log_ = EditLog.model_validate(project.read_json("edit_log.json")) if project.exists("edit_log.json") else EditLog()
         log_.entries.append(EditLogEntry(scenario=scenario_id, action=action, element_id=element_id,

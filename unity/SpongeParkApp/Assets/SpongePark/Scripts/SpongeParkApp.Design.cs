@@ -51,6 +51,7 @@ namespace SpongePark
         Vector2 lastClickXY;
         bool dragging;
         Vector2 dragFrom;
+        int vertexDrag = -1;   // corner of the selected element being dragged
 
         // ------------------------------------------------------------ panels
         void BuildFlowAndDesign(VisualElement scroll)
@@ -63,6 +64,7 @@ namespace SpongePark
             flowStep.Add(flowText);
             var fr = Row();
             BuildViewSwitch(fr);
+            BuildHeightChips(fr);
             foreach (var (key, label) in new[] { (FlowView.Lines, "Flow lines"), (FlowView.Arrows, "Arrows"), (FlowView.Ponding, "Ponding"), (FlowView.Exits, "Exits") })
             {
                 var k = key;
@@ -84,7 +86,8 @@ namespace SpongePark
 
             // Step 3: design
             drawStep = Section(scroll, "Step 3", "Design");
-            drawStep.Add(Text("Choose a tool and draw on the ground. The engine carves each element into the ground and checks it.", "muted"));
+            drawStep.Add(Text("Start from a suggested layout, or choose a tool and draw on the ground. Each change is carved into the ground, the water replays on it, and SWMM checks it.", "muted"));
+            BuildSuggest(drawStep);
             toolRow = Row();
             var sel = Chip("Select", () => SetTool(null));
             toolChips[""] = sel;
@@ -137,7 +140,7 @@ namespace SpongePark
                   " above. The flow lines and hotspots need neither.";
             floodButton.SetEnabled(rain && soils && !busy);
             drawHint.text = tool == null
-                ? (selectedId != null ? $"{selectedId} selected: drag it to move, Delete to remove, or change its sizes below." : "Click an element to select it. Right-drag to orbit, scroll to zoom.")
+                ? (selectedId != null ? $"{selectedId} selected: drag a corner to change its shape, drag inside to move it, Delete to remove; depth and sizes below." : "Click an element to select it. Right-drag to orbit, scroll to zoom.")
                 : DrawOf(tool) == "point" ? $"Click on the ground to place a {ToolNames[tool].ToLower()}."
                 : DrawOf(tool) == "line" ? "Click along the swale's line; double-click or Enter to finish, Backspace removes the last point, Esc cancels."
                 : "Click the corners on the ground; double-click or Enter to finish, Backspace removes the last corner, Esc cancels.";
@@ -329,6 +332,7 @@ namespace SpongePark
                 if (pending.Count == 0) return;
                 var before = designFc.ToString();
                 foreach (var kv in pending) p[kv.Key] = kv.Value;
+                p["source"] = "designer";
                 StartCoroutine(Run(SendDesign("resize", selectedId, before), "Carving"));
             }));
             propsBox.Add(card);
@@ -374,7 +378,8 @@ namespace SpongePark
             if (selectedId != null && Feature(selectedId) == null) selectedId = null;
             yield return ShowDesignGround();
             RefreshDesign();
-            status = $"{ActionWord(action)} {elementId}".Trim() + ". Ground carved and checked.";
+            status = $"{ActionWord(action)} {elementId}".Trim() + ". Ground carved and checked; the storm replays on it.";
+            StartCoroutine(AfterDesignChange());
         }
 
         static string ActionWord(string a) => a switch
@@ -533,9 +538,41 @@ namespace SpongePark
             if (Input.GetKeyDown(KeyCode.Delete)) { DeleteSelected(); return; }
             if (onGround && Input.GetMouseButtonDown(0))
             {
-                var hitId = HitElement(xy);
-                if (hitId != null && hitId == selectedId) { dragging = true; dragFrom = xy; }
-                else Select(hitId, false);
+                vertexDrag = NearCorner(Feature(selectedId), xy);
+                if (vertexDrag >= 0) { dragFrom = xy; }
+                else
+                {
+                    var hitId = HitElement(xy);
+                    if (hitId != null && hitId == selectedId) { dragging = true; dragFrom = xy; }
+                    else Select(hitId, false);
+                }
+            }
+            if (vertexDrag >= 0 && onGround)
+            {
+                var sel = Feature(selectedId);
+                var pts = Corners(sel);
+                if (pts != null && vertexDrag < pts.Count)
+                {
+                    pts[vertexDrag] = xy;
+                    bool closed = (string)sel["geometry"]["type"] == "Polygon";
+                    right.Design.Preview(pts.Select(WorldOf).ToList(), null, closed, new Color(0.76f, 0.55f, 0.36f));
+                    status = $"Reshaping {selectedId}: corner {vertexDrag + 1}";
+                }
+            }
+            if (vertexDrag >= 0 && Input.GetMouseButtonUp(0))
+            {
+                var sel = Feature(selectedId);
+                int k = vertexDrag;
+                vertexDrag = -1;
+                right.Design.Preview(null, null, false, Color.white);
+                if (sel != null && onGround && (xy - dragFrom).magnitude > 0.2f)
+                {
+                    var before = designFc.ToString();
+                    MoveCorner(sel, k, xy);
+                    sel["properties"]["source"] = "designer";
+                    StartCoroutine(Run(SendDesign("reshape", selectedId, before), "Reshaping"));
+                }
+                return;
             }
             if (dragging && onGround)
                 status = $"Moving {selectedId} {(xy - dragFrom).magnitude:0.0} m";
@@ -548,9 +585,53 @@ namespace SpongePark
                 {
                     var before = designFc.ToString();
                     Translate(f["geometry"], d);
+                    f["properties"]["source"] = "designer";
                     StartCoroutine(Run(SendDesign("move", selectedId, before), "Moving"));
                 }
             }
+        }
+
+        /// The corners of a polygon (without the closing repeat) or the points of a line; null for points.
+        static List<Vector2> Corners(JToken f)
+        {
+            if (f == null) return null;
+            var g = f["geometry"];
+            var t = (string)g["type"];
+            if (t == "Polygon")
+            {
+                var ring = g["coordinates"][0].Select(q => new Vector2((float)q[0], (float)q[1])).ToList();
+                if (ring.Count > 1 && (ring[0] - ring[ring.Count - 1]).sqrMagnitude < 1e-6f) ring.RemoveAt(ring.Count - 1);
+                return ring;
+            }
+            if (t == "LineString") return g["coordinates"].Select(q => new Vector2((float)q[0], (float)q[1])).ToList();
+            return null;
+        }
+
+        static int NearCorner(JToken f, Vector2 p)
+        {
+            var pts = Corners(f);
+            if (pts == null) return -1;
+            int best = -1;
+            float bd = 1.2f;   // metres
+            for (int i = 0; i < pts.Count; i++)
+            {
+                float d = (pts[i] - p).magnitude;
+                if (d < bd) { bd = d; best = i; }
+            }
+            return best;
+        }
+
+        static void MoveCorner(JToken f, int k, Vector2 p)
+        {
+            var g = f["geometry"];
+            var pt = new JArray(Round(p.x), Round(p.y));
+            if ((string)g["type"] == "Polygon")
+            {
+                var ring = (JArray)g["coordinates"][0];
+                ring[k] = pt;
+                if (k == 0) ring[ring.Count - 1] = new JArray(Round(p.x), Round(p.y));   // keep the ring closed
+            }
+            else ((JArray)g["coordinates"])[k] = pt;
         }
 
         static void Translate(JToken g, Vector2 d)

@@ -65,6 +65,8 @@ namespace SpongePark
                     : (sel ? 0.5f : 0.3f);
                 if (gt == "LineString") m.Ribbon(pts, w, lift, new Color(col.r, col.g, col.b) * 0.9f);
                 m.Ribbon(pts, sel ? 0.45f : 0.25f, lift + 0.02f, col);
+                if (sel)   // corner handles to drag
+                    foreach (var q in pts) m.Box(q + Vector3.up * lift, 0.7f, 0.5f, Color.white);
             }
             elements = Make("elements", m);
         }

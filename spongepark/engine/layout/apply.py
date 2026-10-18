@@ -60,7 +60,14 @@ def regrade(project: Project, option_id: str) -> Dict[str, Any]:
                 + (float(e.permanent_pool_depth_m or P.value_or(f"nbs.{e.type}.permanent_pool_depth_m", 0.0) or 0.0)
                    if e.type in ("retention_pond", "constructed_wetland") else 0.0)
             side = None if e.type == "rain_garden" else (e.side_slope_h_v or P.value_or(f"nbs.{e.type}.side_slope_h_v", None))
-            zg, p.cut = grade(zg, region & ~blocked, g.mask, g.cell, depth or surface_depth(P, e.type), side)
+            free = region & ~blocked
+            if not free.any():   # all of it lies on trees, paths or buildings: nothing is dug
+                z0 = float(g.z[p.seed])
+                p.cut = Cut(z0, z0, 0.0, 0.0, 0.0)
+                warnings.append(f"{e.id} lies entirely on keep-out ground (trees, paths or buildings): it is not carved; "
+                                "move it to open ground.")
+            else:
+                zg, p.cut = grade(zg, free, g.mask, g.cell, depth or surface_depth(P, e.type), side)
             if e.spec.is_storage:
                 e.invert_elev_m = round(p.cut.bottom_m, 3)
         placed.append(p)

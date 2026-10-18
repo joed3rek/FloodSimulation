@@ -382,10 +382,12 @@ def optimise(pid: str, req: OptimiseRequest, wait: bool = False) -> Dict[str, An
 
 
 @app.post("/projects/{pid}/options/{oid}/sim2d/{rp}")
-def sim2d(pid: str, oid: str, rp: int, cell_m: Optional[float] = None, wait: bool = False) -> Dict[str, Any]:
+def sim2d(pid: str, oid: str, rp: int, cell_m: Optional[float] = None, engine: Optional[str] = None,
+          wait: bool = False) -> Dict[str, Any]:
+    """2D flood run of one storm; engine 'builtin' (quick, for design changes) or 'itzi' / 'auto'."""
     from spongepark.engine.sim2d.run import run2d
 
-    return _job(pid, f"sim2d {oid} rp{rp}", lambda p: run2d(p, oid, rp, cell_m), wait)
+    return _job(pid, f"sim2d {oid} rp{rp}", lambda p: run2d(p, oid, rp, cell_m, engine=engine), wait)
 
 
 # ------------------------------------------------------------------ data for viewers (Unity)
@@ -417,14 +419,14 @@ def site_layers(pid: str, rebuild: bool = False) -> Dict[str, Any]:
 
 
 @app.get("/projects/{pid}/flow")
-def flow_analysis(pid: str, rebuild: bool = False) -> Dict[str, Any]:
-    """Where water runs and collects on the existing ground: flow lines, arrows, ponding hotspots, exits."""
+def flow_analysis(pid: str, rebuild: bool = False, scenario: Optional[str] = None) -> Dict[str, Any]:
+    """Where water runs and collects: on the existing ground, or on a scenario's carved ground."""
     from spongepark.engine.hydrology import flowmap
 
     p = _project(pid)
     with _locks[pid]:
-        fresh = rebuild or not p.exists(flowmap.REL)
-        out = flowmap.load(p, rebuild)
+        fresh = rebuild or not p.exists(flowmap.rel_for(scenario))
+        out = flowmap.load(p, rebuild, scenario)
         if fresh:
             p.save()
     return out
