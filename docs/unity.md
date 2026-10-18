@@ -11,16 +11,21 @@ It is a thin front end: every computation is done by the Python engine through t
 ## Running it
 
 1. Install the engine (`pip install -e .` in the repository) and start it: `spongepark serve`
-   (the app can also start it: "Start engine", using `python` on the PATH).
+   (the app also starts it on its own from the landing page, using `python` on the PATH).
 2. Open `unity/SpongeParkApp` with Unity 6 (6000.3) and press Play, or build the player:
    `Unity -batchmode -quit -projectPath unity/SpongeParkApp -executeMethod SpongePark.EditorTools.BuildApp.Windows`
    (`BuildApp.MacOS` and `BuildApp.WebGL` need those build modules installed).
 3. The app builds itself in any scene; no scene setup is needed.
 
-The app opens on the same landing page as the web app: **New project** (the Windows file dialog
+The app opens on a landing page in two columns. On the left (the wider one): **New project** (the Windows file dialog
 asks for the site survey DXF; on other systems an in-app browser does, answer the layer questions with the highlighted-layer pictures, Clean and
-build) or **Open a project** (the file dialog, filtered to `.sponge` files). A `.sponge` passed on the command line (Windows
-"Open with") opens directly. After that, the left panel walks through the steps:
+build) or **Open a project** (the file dialog, filtered to `.sponge` files). On the right, **Recently opened** lists
+the last 20 projects (newest first, the list scrolls) with their folder and when they were opened; one click reopens
+a project, a file that has moved or been deleted is marked "file not found", × removes an entry (the file is not
+touched) and "Clear list" empties it. Every successful open or create is added, from the landing or the sidebar.
+The landing starts the engine itself if it is not running; a click that needs it waits for it (up to 30 s) and says
+why if it does not come up. A `.sponge` passed on the command line (Windows "Open with") opens directly. **Home** at
+the top of the sidebar returns to the landing. After that, the left panel walks through the steps:
 
 | Step | Does |
 |---|---|
