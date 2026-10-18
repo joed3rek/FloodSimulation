@@ -86,6 +86,9 @@ namespace SpongePark
             m.RecalculateNormals();
             m.RecalculateBounds();
             mf.sharedMesh = m;
+            var collider = GetComponent<MeshCollider>();
+            if (collider == null) collider = gameObject.AddComponent<MeshCollider>();
+            collider.sharedMesh = m;   // the design tools pick points on the ground
         }
 
         public static Color TypeColour(string type) => type switch

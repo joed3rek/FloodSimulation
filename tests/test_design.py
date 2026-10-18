@@ -66,3 +66,24 @@ def test_place_carve_check_undo_through_the_api(site):
     assert t.status_code == 200
     assert c.get(f"/projects/{pid}/design/design").json()["elements"] == []
     c.post(f"/projects/{pid}/close")
+
+
+def test_flow_analysis_needs_only_the_ground(site):
+    """Flow lines, arrows and ponding hotspots from the ground model, before any rainfall or soil data."""
+    from spongepark.engine.project.jsonschema import validate_package
+
+    c = TestClient(app)
+    pid = c.post("/projects/open", json={"path": site}).json()["project"]
+    a = c.get(f"/projects/{pid}/flow").json()
+    assert a["flow_lines"] and a["arrows"] and a["exits"]
+    for x, y, z, dx, dy, s in a["arrows"][:50]:
+        assert abs(np.hypot(dx, dy) - 1) < 0.01 and s > 0
+    for f in a["flow_lines"]:
+        assert len(f["xyz"]) == 3 * len(f["area_m2"]) and max(f["area_m2"]) >= a["min_line_area_m2"]
+    assert sum(e["draining_area_m2"] for e in a["exits"]) > 0
+    for h in a["hotspots"]:
+        assert h["max_depth_m"] > 0 and h["volume_m3"] > 0 and len(h["outline"]) >= 6
+    c.post(f"/projects/{pid}/close")
+    with Project.open(site) as p:
+        assert p.exists("site/flow_analysis.json")
+        assert {k: v for k, v in validate_package(p.root).items() if v} == {}

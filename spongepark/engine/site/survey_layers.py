@@ -95,12 +95,14 @@ def _original_names(project: Project) -> Dict[str, List[str]]:
 
 
 def park_boundary(project: Project):
-    """The park's boundary polygon (site/boundary.geojson), or None."""
+    """The park's boundary polygon as surveyed, or None. (Delineation replaces site/boundary.geojson with the
+    part of the park the ground model covers and keeps the survey's boundary in terrain/survey_boundary.geojson.)"""
     from shapely.geometry import shape
 
-    if not project.exists("site/boundary.geojson"):
+    rel = "terrain/survey_boundary.geojson" if project.exists("terrain/survey_boundary.geojson") else "site/boundary.geojson"
+    if not project.exists(rel):
         return None
-    polys = [shape(f["geometry"]) for f in project.read_geojson("site/boundary.geojson").get("features", [])
+    polys = [shape(f["geometry"]) for f in project.read_geojson(rel).get("features", [])
              if f.get("geometry") and f["geometry"]["type"] in ("Polygon", "MultiPolygon")]
     return max(polys, key=lambda g: g.area) if polys else None
 

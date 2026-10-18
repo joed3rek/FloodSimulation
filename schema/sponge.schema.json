@@ -529,6 +529,89 @@
       "title": "ElementsFile",
       "type": "object"
     },
+    "FlowAnalysis": {
+      "additionalProperties": true,
+      "description": "site/flow_analysis.json: where water runs and collects on the existing ground (no rainfall needed).",
+      "properties": {
+        "arrows": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "title": "Arrows",
+          "type": "array"
+        },
+        "cell_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cell M"
+        },
+        "exits": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Exits",
+          "type": "array"
+        },
+        "flow_lines": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Flow Lines",
+          "type": "array"
+        },
+        "hotspots": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Hotspots",
+          "type": "array"
+        },
+        "min_line_area_m2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Line Area M2"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
+        "summary": {
+          "additionalProperties": true,
+          "title": "Summary",
+          "type": "object"
+        },
+        "version": {
+          "default": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "title": "FlowAnalysis",
+      "type": "object"
+    },
     "Geometry": {
       "additionalProperties": true,
       "description": "GeoJSON geometry in project metres: Point (well), LineString (spline: swale, edge), Polygon (basins).",
@@ -1373,6 +1456,10 @@
     },
     "scenarios/<id>/scenario.json": {
       "$ref": "#/$defs/Scenario",
+      "map_of": false
+    },
+    "site/flow_analysis.json": {
+      "$ref": "#/$defs/FlowAnalysis",
       "map_of": false
     },
     "site/survey_layers.json": {

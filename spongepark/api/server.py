@@ -88,7 +88,7 @@ class OpenRequest(BaseModel):
 @app.get("/health")
 def health() -> Dict[str, Any]:
     # features let a client tell an engine started before an update from a current one
-    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan", "site_layers"],
+    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan", "site_layers", "flow", "design"],
             "open_projects": list(_projects)}
 
 
@@ -363,6 +363,20 @@ def site_layers(pid: str, rebuild: bool = False) -> Dict[str, Any]:
         return out
     except FileNotFoundError as ex:
         raise HTTPException(404, str(ex))
+
+
+@app.get("/projects/{pid}/flow")
+def flow_analysis(pid: str, rebuild: bool = False) -> Dict[str, Any]:
+    """Where water runs and collects on the existing ground: flow lines, arrows, ponding hotspots, exits."""
+    from spongepark.engine.hydrology import flowmap
+
+    p = _project(pid)
+    with _locks[pid]:
+        fresh = rebuild or not p.exists(flowmap.REL)
+        out = flowmap.load(p, rebuild)
+        if fresh:
+            p.save()
+    return out
 
 
 @app.post("/projects/{pid}/site/confirm")

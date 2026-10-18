@@ -292,6 +292,20 @@ namespace SpongePark
             }
         }
 
+        /// A flat arrow lying on the ground at p, pointing along d (plan), `len` long and `w` wide.
+        public void Arrow(Vector3 p, Vector3 d, float len, float w, Color col)
+        {
+            d.y = 0;
+            if (d.sqrMagnitude < 1e-8f) return;
+            d.Normalize();
+            var s = Vector3.Cross(Vector3.up, d);
+            var tail = p - d * (len / 2);
+            var neck = p + d * (len * 0.1f);
+            var tip = p + d * (len / 2);
+            Quad(tail - s * (w * 0.18f), tail + s * (w * 0.18f), neck + s * (w * 0.18f), neck - s * (w * 0.18f), col);
+            Tri(neck - s * (w / 2), neck + s * (w / 2), tip, col);
+        }
+
         /// A tapered round trunk.
         public void Trunk(Vector3 p, float r0, float r1, float h, Color col)
         {

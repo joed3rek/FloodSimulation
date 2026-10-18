@@ -266,6 +266,21 @@ class SurveyLayers(SpongeModel):
     layers: List[SurveyLayer] = Field(default_factory=list)
 
 
+# ------------------------------------------------------------------ site/flow_analysis.json
+class FlowAnalysis(SpongeModel):
+    """site/flow_analysis.json: where water runs and collects on the existing ground (no rainfall needed)."""
+
+    version: int = 1
+    cell_m: Optional[float] = None
+    min_line_area_m2: Optional[float] = None
+    flow_lines: List[Dict[str, Any]] = Field(default_factory=list)  # {"xyz": [...], "area_m2": [...]}
+    arrows: List[List[float]] = Field(default_factory=list)  # [x, y, z, dx, dy, slope_pct]
+    hotspots: List[Dict[str, Any]] = Field(default_factory=list)  # ponding: id, outline, depth, volume, level
+    exits: List[Dict[str, Any]] = Field(default_factory=list)  # where flow leaves the surveyed park
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    notes: List[str] = Field(default_factory=list)
+
+
 # the files and the model that describes each (used for the schema and for validation)
 FILES: Dict[str, type] = {
     "manifest.json": Manifest,
@@ -278,4 +293,5 @@ FILES: Dict[str, type] = {
     "scenarios/<id>/elements.json": ElementsFile,
     "proposals/<id>.json": Proposal,
     "site/survey_layers.json": SurveyLayers,
+    "site/flow_analysis.json": FlowAnalysis,
 }

@@ -100,6 +100,22 @@ namespace SpongePark.Data
         [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
     }
 
+    /// site/flow_analysis.json: where water runs and collects on the existing ground (no rainfall needed).
+    public partial class FlowAnalysis
+    {
+        [JsonProperty("arrows")] public List<List<double>> Arrows { get; set; }
+        [JsonProperty("cell_m")] public double? CellM { get; set; }
+        [JsonProperty("exits")] public List<Dictionary<string, JToken>> Exits { get; set; }
+        [JsonProperty("flow_lines")] public List<Dictionary<string, JToken>> FlowLines { get; set; }
+        [JsonProperty("hotspots")] public List<Dictionary<string, JToken>> Hotspots { get; set; }
+        [JsonProperty("min_line_area_m2")] public double? MinLineAreaM2 { get; set; }
+        [JsonProperty("notes")] public List<string> Notes { get; set; }
+        [JsonProperty("summary")] public Dictionary<string, JToken> Summary { get; set; }
+        [JsonProperty("version")] public long? Version { get; set; }
+        /// Fields this version does not know about, kept as they are.
+        [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
+    }
+
     /// GeoJSON geometry in project metres: Point (well), LineString (spline: swale, edge), Polygon (basins).
     public partial class Geometry
     {
