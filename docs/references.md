@@ -71,4 +71,4 @@ grass, bare soil) and condition (well maintained > 75 % cover, fair 50-75 %, not
 barren) gives a TR-55 cover (tables 2-2a to 2-2c); the open park's curve number is the area-weighted mean.
 "Not sure" about the soil uses group C, marked as assumed until a percolation test. Paved footpaths (from
 the survey layers) are added to the impervious share. Infiltration becomes CURVE_NUMBER in SWMM and the 2D
-model; SWMM's drying time is `soil.cn_dry_time_days` (7 days, SWMM manual).
+model; SWMM's drying time is `swmm.cn_dry_time_days` (7 days, SWMM manual).

@@ -184,7 +184,7 @@ def apply(project: Project, answers: Dict[str, Any]) -> Dict[str, Any]:
         project.write_geojson("site/soil_zones.geojson", {"type": "FeatureCollection", "features": [{
             "type": "Feature", "geometry": park.__geo_interface__,
             "properties": {"id": "PARK", "hsg": out["hsg"], "source": "ground questionnaire",
-                           "dry_time_days": float(project.parameters.value_or("soil.cn_dry_time_days", 7.0)),
+                           "dry_time_days": float(project.parameters.value_or("swmm.cn_dry_time_days", 7.0)),
                            "note": ("soil group assumed (C) until a percolation test" if out["soil_assumed"]
                                     else "soil group from the designer's answer")}}]})
     n = apply_to_subcatchments(project)
