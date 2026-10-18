@@ -337,3 +337,21 @@ TextField.input, DropdownField.input { height: 40px; min-height: 40px; margin: 0
 .recent-remove:hover:enabled { background-color: rgba(168, 84, 72, 0.5); }
 .recent-list { background-color: rgba(27, 28, 22, 0.88); }
 .recent-empty { color: rgba(243, 244, 241, 0.45); font-size: 13px; -unity-text-align: middle-center; white-space: normal; padding: 22px 16px; }
+
+/* site model step: one row per survey layer; click to show or hide it */
+.layer-list { margin: 6px 0 12px 0; }
+.layer-row {
+    flex-direction: row; align-items: center; height: 46px; margin: 2px 0; padding: 0 12px 0 10px;
+    border-width: 1px; border-color: rgba(222, 216, 207, 0.6); border-radius: 16px; background-color: rgba(255, 255, 255, 0.6);
+}
+.layer-row:hover:enabled { background-color: rgba(230, 220, 205, 0.6); }
+.layer-swatch { width: 16px; height: 16px; border-radius: 8px; margin-right: 12px; flex-shrink: 0; }
+.layer-words { flex-grow: 1; flex-shrink: 1; overflow: hidden; }
+.layer-title { font-size: 13px; -unity-font: resource("UI/Fonts/Nunito-Bold"); color: var(--foreground); margin: 0; padding: 0; -unity-text-align: middle-left; }
+.layer-source { font-size: 11px; color: var(--muted-foreground); margin: 0; padding: 0; -unity-text-align: middle-left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-count { font-size: 12px; color: var(--muted-foreground); margin-left: 8px; flex-shrink: 0; }
+.layer-row--off { background-color: rgba(0, 0, 0, 0); border-color: rgba(222, 216, 207, 0.35); }
+.layer-row--off .layer-swatch { opacity: 0.25; }
+.layer-row--off .layer-title, .layer-row--off .layer-count { color: var(--muted-foreground); }
+.layer-row--check { border-color: var(--secondary); border-width: 1px; }
+.layer-row--check .layer-count { color: var(--clay-ink); }

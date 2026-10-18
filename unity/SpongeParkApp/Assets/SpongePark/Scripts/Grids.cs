@@ -11,6 +11,7 @@ namespace SpongePark
         public float Cell, ZMin, ZMax;
         public Vector2 Origin;      // x_min, y_max in survey metres
         public float[] Z;           // NaN = no data
+        public byte[] Surveyed;     // 1 = surveyed ground, 0 = widened for display (null: all surveyed)
 
         public static HeightGrid FromPayload(JToken t)
         {
@@ -21,6 +22,7 @@ namespace SpongePark
                 Origin = new Vector2((float)t["origin"][0], (float)t["origin"][1])
             };
             g.Z = Decode.F32((string)t["z"]);
+            if (t["surveyed"] != null && t["surveyed"].Type == JTokenType.String) g.Surveyed = System.Convert.FromBase64String((string)t["surveyed"]);
             return g;
         }
 

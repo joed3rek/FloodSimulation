@@ -235,9 +235,13 @@ def finish(survey: Path, links: Dict[str, str], project_path: Optional[Path] = N
         q = import_survey(p, cleaned, m, park_area_m2)
         p.history.log("survey_intake", survey=str(survey), cleaned=str(cleaned), links=links,
                       duplicates_removed=report["duplicates_removed_total"])
+        from ..site import survey_layers
+
+        layers = survey_layers.build(p)   # walls, gates, trees, paths ... on the ground, layer by layer
         p.save()
     return {"project": str(project_path), "cleaned_drawing": str(cleaned), "cleaning": report, "layer_map": m,
-            "qc": {k: q.get(k) for k in ("spot_cross_validation", "issues", "elevation_range_m")}}
+            "qc": {k: q.get(k) for k in ("spot_cross_validation", "issues", "elevation_range_m")},
+            "survey_layers": [{"name": L["name"], "title": L["title"], "count": L["count"]} for L in layers["layers"]]}
 
 
 def save_upload(filename: str, data: bytes) -> Path:

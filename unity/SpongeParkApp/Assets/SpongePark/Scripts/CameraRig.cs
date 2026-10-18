@@ -13,10 +13,10 @@ namespace SpongePark
         public CameraRig Follow;   // side-by-side: the second camera mirrors the first
         public static System.Func<bool> BlockInput;   // true while the pointer is over the interface
 
-        public void Frame(Bounds b)
+        public void Frame(Bounds b, bool narrow = true)
         {
             Target = b.center;
-            Distance = Mathf.Max(b.size.x, b.size.z) * 1.7f + 10;   // side-by-side views are narrow
+            Distance = Mathf.Max(b.size.x, b.size.z) * (narrow ? 1.7f : 1.05f) + 10;   // side-by-side views are narrow
         }
 
         void LateUpdate()

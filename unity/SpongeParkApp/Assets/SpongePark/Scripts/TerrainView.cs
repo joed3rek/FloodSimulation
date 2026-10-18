@@ -39,6 +39,8 @@ namespace SpongePark
                 verts.Add(frame.World(x, y, g.Z[k]));
                 float t = Mathf.InverseLerp(g.ZMin, g.ZMax, g.Z[k]);
                 var col = Color.Lerp(new Color(0.42f, 0.55f, 0.32f), new Color(0.72f, 0.68f, 0.52f), t);
+                // ground beyond the survey levels (widened for display): pale, so it reads as not surveyed
+                if (g.Surveyed != null && g.Surveyed[k] == 0) col = Color.Lerp(col, new Color(0.86f, 0.84f, 0.78f), 0.75f);
                 foreach (var (type, ring) in polys)
                     if (Inside(ring, x, y)) { col = Color.Lerp(col, TypeColour(type), 0.7f); break; }
                 cols.Add(col);

@@ -221,6 +221,45 @@ class Proposal(SpongeModel):
     settings: Dict[str, Any] = Field(default_factory=dict)
 
 
+# ------------------------------------------------------------------ site/survey_layers.json
+class SurveyFeature(SpongeModel):
+    """One drawn object, draped on the ground: a line (x, y, z triples) or a point (x, y, z)."""
+
+    g: Literal["line", "point"]
+    xyz: List[float]
+    closed: Optional[bool] = None
+    radius_m: Optional[float] = None  # tree canopy or symbol size
+    on_ground: Optional[bool] = None  # draw flat on the ground although the layer is upright (e.g. a long "gate")
+    block: Optional[str] = None
+
+
+class SurveyLayer(SpongeModel):
+    """A layer of the cleaned survey drawing (SP-* standard) as the 3D view draws it."""
+
+    name: str
+    title: str = ""
+    source_layers: List[str] = Field(default_factory=list)  # the surveyor's layer names linked to it
+    kind: str  # wall | fence | gate | building | tree | palm | path | road | drain | water | manhole | pole | ...
+    color: str = "#9A9A90"
+    visible: bool = True
+    height_m: Optional[float] = None  # display height only
+    width_m: Optional[float] = None  # display width of lines on the ground
+    count: int = 0
+    sized: Optional[int] = None  # trees with a canopy size from the drawing
+    note: Optional[str] = None  # something about this layer the designer should check
+    features: List[SurveyFeature] = Field(default_factory=list)
+
+
+class SurveyLayers(SpongeModel):
+    """site/survey_layers.json: what the survey drawing shows, layer by layer, on the ground model."""
+
+    schema_version: str = SCHEMA_VERSION
+    drawing: str = ""
+    extent: Optional[List[float]] = None  # x_min, y_min, x_max, y_max of what the drawing shows (m)
+    note: str = ""
+    layers: List[SurveyLayer] = Field(default_factory=list)
+
+
 # the files and the model that describes each (used for the schema and for validation)
 FILES: Dict[str, type] = {
     "manifest.json": Manifest,
@@ -232,4 +271,5 @@ FILES: Dict[str, type] = {
     "scenarios/<id>/scenario.json": Scenario,
     "scenarios/<id>/elements.json": ElementsFile,
     "proposals/<id>.json": Proposal,
+    "site/survey_layers.json": SurveyLayers,
 }

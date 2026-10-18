@@ -29,15 +29,13 @@ the top of the sidebar returns to the landing. After that, the left panel walks 
 
 | Step | Does |
 |---|---|
-| 1. Engine | Connects to (or starts) the engine |
-| 2. Project | Opens or creates a `.sponge` project |
-| 3. Survey | Reads the drawing's layers, shows the suggested layer map to check, imports it |
-| 4. Targets | Area budget, sizing storm, maximum drawdown, inverse-mode storm (saved as your decisions) |
-| 5. Analyse and design | Existing-site analysis; generate a layout; optimise (best retention, or least area) |
-| 6. Compare | Choose option and storm; retention and peak reduction against the existing site |
-| 7. Simulate | Runs the 2D model for existing and proposed; play, restart, speed; live GPU mode; GPU verification |
-| 8. View | Side by side or one view, existing/proposed toggle, vertical exaggeration, camera tour |
-| 9. Export | Drawings + Rhino file + report; web viewer bundle; video of the storm |
+| 1. Site model | Shown as soon as a project opens: the ground model with everything the survey drawing shows on it (compound wall, fences, gates, buildings, trees and palms, paths, roads, drains, manholes, poles, steps), one row per drawing layer with the surveyor's own layer names; click a row to show or hide that layer. Confirm the model to go on |
+| 2. Targets | Area budget, sizing storm, maximum drawdown, inverse-mode storm (saved as your decisions); shown once the site model is confirmed |
+| 3. Analyse and design | Existing-site analysis; generate a layout; optimise (best retention, or least area) |
+| 4. Compare | Choose option and storm; retention and peak reduction against the existing site |
+| 5. Simulate | Runs the 2D model for existing and proposed; play, restart, speed; live GPU mode; GPU verification |
+| 6. View | Side by side or one view, existing/proposed toggle, vertical exaggeration, camera tour |
+| 7. Export | Drawings + Rhino file + report; web viewer bundle; video of the storm |
 
 The view shows the storm clock, the rainfall at that moment and a running count of litres kept on
 site for each side (from the SWMM time series: rainfall so far minus water that has left).
@@ -75,3 +73,14 @@ results without an engine (no computation, no editing).
 - The macOS build and the WebGL build were not produced here (their build modules are not installed
   on this machine); the Windows build was built and run.
 - The interface is Unity's immediate-mode GUI: functional, not yet designed.
+
+## The site model
+
+The survey intake builds the ground model and then `site/survey_layers.json`: every physical layer
+of the cleaned drawing, draped on the ground (`spongepark site layers park.sponge` rebuilds it). The
+ground model only covers where the survey has levels, usually the park; for display it is widened to
+cover the wall, roads and drains around it, filled from the nearest surveyed ground and drawn paler.
+The analysis uses the surveyed ground only. Heights of walls (1.8 m), fences, gates, buildings and
+trees are display heights: the survey gives plan positions, not heights. A layer that needs a look is
+outlined in clay; its tooltip says why (for example lines on the gate layer too long to be gates,
+which are drawn on the ground instead).

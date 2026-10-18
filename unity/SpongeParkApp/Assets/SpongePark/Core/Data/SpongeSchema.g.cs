@@ -201,6 +201,50 @@ namespace SpongePark.Data
         [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
     }
 
+    /// One drawn object, draped on the ground: a line (x, y, z triples) or a point (x, y, z).
+    public partial class SurveyFeature
+    {
+        [JsonProperty("block")] public string Block { get; set; }
+        [JsonProperty("closed")] public bool? Closed { get; set; }
+        [JsonProperty("g")] public string G { get; set; }
+        [JsonProperty("on_ground")] public bool? OnGround { get; set; }
+        [JsonProperty("radius_m")] public double? RadiusM { get; set; }
+        [JsonProperty("xyz")] public List<double> Xyz { get; set; }
+        /// Fields this version does not know about, kept as they are.
+        [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    /// A layer of the cleaned survey drawing (SP-* standard) as the 3D view draws it.
+    public partial class SurveyLayer
+    {
+        [JsonProperty("color")] public string Color { get; set; }
+        [JsonProperty("count")] public long? Count { get; set; }
+        [JsonProperty("features")] public List<SurveyFeature> Features { get; set; }
+        [JsonProperty("height_m")] public double? HeightM { get; set; }
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("note")] public string Note { get; set; }
+        [JsonProperty("sized")] public long? Sized { get; set; }
+        [JsonProperty("source_layers")] public List<string> SourceLayers { get; set; }
+        [JsonProperty("title")] public string Title { get; set; }
+        [JsonProperty("visible")] public bool? Visible { get; set; }
+        [JsonProperty("width_m")] public double? WidthM { get; set; }
+        /// Fields this version does not know about, kept as they are.
+        [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    /// site/survey_layers.json: what the survey drawing shows, layer by layer, on the ground model.
+    public partial class SurveyLayers
+    {
+        [JsonProperty("drawing")] public string Drawing { get; set; }
+        [JsonProperty("extent")] public List<double> Extent { get; set; }
+        [JsonProperty("layers")] public List<SurveyLayer> Layers { get; set; }
+        [JsonProperty("note")] public string Note { get; set; }
+        [JsonProperty("schema_version")] public string SchemaVersion { get; set; }
+        /// Fields this version does not know about, kept as they are.
+        [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
+    }
+
     /// A terrain shaping operation; the working terrain = existing ground + edits + NbS carving.
     public partial class TerrainEdit
     {

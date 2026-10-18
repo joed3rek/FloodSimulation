@@ -16,6 +16,8 @@ def drawing(tmp_path):
     p = make_dxf(tmp_path / "park survey.dxf")
     doc = ezdxf.readfile(p)
     doc.modelspace().add_line((5, 5), (8, 8), dxfattribs={"layer": "MYSTERY 7"})
+    doc.modelspace().add_lwpolyline([(0, 0), (100, 0), (100, 60)], dxfattribs={"layer": "COMPOUND WALL"})
+    doc.modelspace().add_line((40, 0), (44, 0), dxfattribs={"layer": "GATE"})
     doc.saveas(p)
     return p
 
@@ -86,3 +88,31 @@ def test_upload_through_the_api(drawing, tmp_path, monkeypatch):
     assert c.get("/intake/preview", params={"path": data["survey"], "layer": "ESMajor"}).headers["content-type"] == "image/png"
     bad = c.post("/intake/upload", params={"filename": "notes.txt"}, content=b"hello")
     assert bad.status_code == 400
+
+
+def test_finish_puts_the_survey_layers_on_the_ground(drawing, tmp_path):
+    """Walls, gates, trees, boundary ... become 3D-ready layers on the ground model, one per SP layer."""
+    import numpy as np
+
+    from spongepark.engine.project.jsonschema import validate_package
+    from spongepark.engine.terrain.raster import read_geotiff
+
+    r = intake.start(drawing)
+    links = {l["layer"]: l["proposed"] for l in r["layers"]}
+    links["BE-LEVEL"] = ""
+    links["MYSTERY 7"] = ""
+    out = intake.finish(drawing, links, tmp_path / "park.sponge")
+    assert {L["name"] for L in out["survey_layers"]} >= {"SP-WALL", "SP-GATE", "SP-TREE", "SP-SITE-BOUNDARY"}
+    with Project.open(out["project"]) as p:
+        layers = {L["name"]: L for L in p.read_json("site/survey_layers.json")["layers"]}
+        assert {k: v for k, v in validate_package(p.root).items() if v} == {}
+        wall = layers["SP-WALL"]
+        assert wall["kind"] == "wall" and wall["source_layers"] == ["COMPOUND WALL"] and wall["height_m"] > 0
+        xyz = np.array(wall["features"][0]["xyz"]).reshape(-1, 3)
+        assert len(xyz) > 3                      # densified so it follows the ground
+        dem = read_geotiff(p.path("terrain/existing.tif"))
+        z = dem.z[dem.z != dem.nodata]
+        assert z.min() - 0.01 <= xyz[:, 2].min() and xyz[:, 2].max() <= z.max() + 0.01   # on the ground
+        tree = layers["SP-TREE"]["features"][0]
+        assert tree["g"] == "point" and abs(tree["radius_m"] - 3) < 1e-6
+        assert not any(n.startswith(("SP-LVL", "SP-ANNO", "SP-CONT-LABEL")) for n in layers)   # no annotation

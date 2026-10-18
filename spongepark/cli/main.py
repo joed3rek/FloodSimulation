@@ -480,6 +480,18 @@ def rain_storms(path: Path, user_csv: Optional[Path] = None) -> None:
 
 
 # ------------------------------------------------------------------ site
+@site_app.command("layers")
+def site_layers_cmd(path: Path) -> None:
+    """Rebuild site/survey_layers.json: the survey's walls, gates, trees, paths ... on the ground model."""
+    from spongepark.engine.site import survey_layers
+
+    with _open(path) as p:
+        out = survey_layers.build(p)
+        p.save()
+    for L in out["layers"]:
+        typer.echo(f"{L['name']:24} {L['kind']:10} {L['count']:5}  {', '.join(L['source_layers'])}")
+
+
 @site_app.command("import")
 def site_import(path: Path, layer: str, geojson: Path, source_crs: Optional[str] = None) -> None:
     """Import a site layer: boundary, subcatchments, external, soils, outfalls, context."""

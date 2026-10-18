@@ -13,9 +13,10 @@ namespace SpongePark
     {
         UIDocument doc;
         Label statusLabel, infoLabel, verifyLabel, videoLabel, stormTitle, stormText, litresLeft, litresRight, leftName, rightName;
-        VisualElement compareBox, layerBox, litresLeftCard, litresRightCard, engineSection, projectSection, surveySection,
-            targetsSection, designSection, simulateGpuRow, exportSection;
-        TextField layerMapField;
+        VisualElement compareBox, litresLeftCard, litresRightCard, siteSection, siteLayerList, targetsSection, designSection,
+            simulateGpuRow, exportSection;
+        Label siteText;
+        Button confirmSiteButton;
         VisualElement optionChips, rpChips;
         Button playButton, liveButton, sideButton, tourButton;
         string shownComparison;
@@ -89,34 +90,19 @@ namespace SpongePark
 
             if (!bundle)
             {
-                engineSection = Section(scroll, "Engine", "Connection");
-                var r = Row();
-                r.Add(Btn("Start engine", () => { launcher.Launch(); StartCoroutine(Later(4, CheckEngine())); }));
-                r.Add(Btn("Check", () => StartCoroutine(CheckEngine()), "btn--ghost"));
-                r.Add(Btn("Results bundle", () => StartCoroutine(OpenBundle()), "btn--outline"));
-                engineSection.Add(r);
-
-                projectSection = Section(scroll, "Project", "Open a park");
-                projectSection.Add(TextInput("Project file (.sponge)", projectPath, v => projectPath = v));
-                var pr = Row();
-                pr.Add(Btn("Open", () => StartCoroutine(Run(OpenProject(false), "Opening"))));
-                pr.Add(Btn("Create", () => StartCoroutine(Run(OpenProject(true), "Creating")), "btn--clay"));
-                projectSection.Add(pr);
-                infoLabel = Text("", "muted");
-                projectSection.Add(infoLabel);
-
-                surveySection = Section(scroll, "Step 1", "Survey");
-                surveySection.Add(TextInput("Survey drawing (.dxf / .dwg)", drawingPath, v => drawingPath = v));
-                surveySection.Add(Btn("Read layers", () => StartCoroutine(Run(InspectSurvey(), "Reading layers")), "btn--outline"));
-                layerBox = new VisualElement();
-                layerBox.style.display = DisplayStyle.None;
-                layerBox.Add(Text("Check each layer's role, set \"confirmed\": true, then import. (The web app shows this as a table.)", "muted"));
-                layerMapField = new TextField { multiline = true };
-                layerMapField.AddToClassList("textarea");
-                layerMapField.RegisterValueChangedCallback(e => layerMapJson = e.newValue);
-                layerBox.Add(layerMapField);
-                layerBox.Add(Btn("Import survey", () => StartCoroutine(Run(ImportSurvey(), "Importing"))));
-                surveySection.Add(layerBox);
+                // Step 1: the site model the survey produced (ground plus the drawing's layers), checked in 3D
+                siteSection = Section(scroll, "Step 1", "Site model");
+                siteText = Text("Open a project to see its site model.", "muted");
+                siteSection.Add(siteText);
+                var lr = Row();
+                lr.Add(Btn("All on", () => SetAllLayers(true), "btn--ghost"));
+                lr.Add(Btn("All off", () => SetAllLayers(false), "btn--ghost"));
+                siteSection.Add(lr);
+                siteLayerList = new VisualElement();
+                siteLayerList.AddToClassList("layer-list");
+                siteSection.Add(siteLayerList);
+                confirmSiteButton = Btn("The site model is right: continue", () => StartCoroutine(Run(ConfirmSite(!siteConfirmed), "Saving")), "btn--wide");
+                siteSection.Add(confirmSiteButton);
 
                 targetsSection = Section(scroll, "Step 2", "Targets");
                 var card = Card("card--stone");
@@ -235,6 +221,78 @@ namespace SpongePark
             return card;
         }
 
+        // ------------------------------------------------------------ site model step
+        readonly System.Collections.Generic.Dictionary<string, bool> layerVisible = new System.Collections.Generic.Dictionary<string, bool>();
+        readonly System.Collections.Generic.Dictionary<string, Button> layerChips = new System.Collections.Generic.Dictionary<string, Button>();
+
+        /// One row per drawing layer: colour, title, how many objects, the surveyor's layer names; click to show or hide.
+        void FillSiteLayers()
+        {
+            if (siteLayerList == null) return;
+            siteLayerList.Clear();
+            layerChips.Clear();
+            if (surveyLayers == null) return;
+            foreach (var L in surveyLayers["layers"])
+            {
+                var name = (string)L["name"];
+                if (!layerVisible.ContainsKey(name)) layerVisible[name] = (bool?)L["visible"] ?? true;
+                var b = new Button(() => SetLayer(name, !layerVisible[name]));
+                b.AddToClassList("layer-row");
+                var sw = new VisualElement { pickingMode = PickingMode.Ignore };
+                sw.AddToClassList("layer-swatch");
+                if (ColorUtility.TryParseHtmlString((string)L["color"], out var col)) sw.style.backgroundColor = col;
+                b.Add(sw);
+                var words = new VisualElement { pickingMode = PickingMode.Ignore };
+                words.AddToClassList("layer-words");
+                words.Add(Text((string)L["title"] ?? name, "layer-title"));
+                var src = L["source_layers"]?.Values<string>().ToList() ?? new System.Collections.Generic.List<string>();
+                words.Add(Text(src.Count > 0 ? string.Join(", ", src) : name, "layer-source"));
+                b.Add(words);
+                b.Add(Text($"{(int)L["count"]}", "layer-count"));
+                var note = (string)L["note"];
+                b.tooltip = $"{name}: {(int)L["count"]} objects" + (string.IsNullOrEmpty(note) ? "" : " · " + note);
+                if (!string.IsNullOrEmpty(note)) b.AddToClassList("layer-row--check");
+                siteLayerList.Add(b);
+                layerChips[name] = b;
+            }
+            SyncLayerRows();
+        }
+
+        void SetLayer(string name, bool on)
+        {
+            layerVisible[name] = on;
+            left.Survey.SetVisible(name, on);
+            right.Survey.SetVisible(name, on);
+            SyncLayerRows();
+        }
+
+        void SetAllLayers(bool on)
+        {
+            foreach (var name in layerChips.Keys.ToList()) SetLayer(name, on);
+        }
+
+        void SyncLayerRows()
+        {
+            foreach (var kv in layerChips) kv.Value.EnableInClassList("layer-row--off", !layerVisible[kv.Key]);
+        }
+
+        void SyncSiteStep()
+        {
+            if (siteSection == null) return;
+            bool hasProject = info != null, ground = hasProject && (bool?)info["has_terrain"] == true;
+            siteText.text = !hasProject ? "Open a project to see its site model."
+                : !ground ? "This project has no ground model yet: start a new project from its survey."
+                : surveyLayers == null ? "The ground model is shown. This project has no survey layers (it was not made from a survey drawing)."
+                : siteConfirmed ? "Confirmed. Switch layers on and off to look around; change your mind with the button below."
+                : "Look over the ground and what the survey shows. Click a layer to show or hide it. When it matches the site, confirm it to set the targets.";
+            confirmSiteButton.text = siteConfirmed ? "Reopen the site model" : "The site model is right: continue";
+            confirmSiteButton.EnableInClassList("btn--ghost", siteConfirmed);
+            confirmSiteButton.style.display = ground ? DisplayStyle.Flex : DisplayStyle.None;
+            var next = siteConfirmed ? DisplayStyle.Flex : DisplayStyle.None;
+            targetsSection.style.display = next;
+            designSection.style.display = next;
+        }
+
         // ------------------------------------------------------------ every frame
         void LateUpdate()
         {
@@ -247,14 +305,7 @@ namespace SpongePark
                 lastBusy = busy;
                 doc.rootVisualElement.Query<Button>().ForEach(b => { if (b != playButton) b.SetEnabled(!busy); });
             }
-            if (infoLabel != null)
-                infoLabel.text = info == null ? "" :
-                    $"{info["name"]}: ground model {Yes(info["has_terrain"])}, existing site analysed {Yes(info["has_baseline"])}, {info["unconfirmed_parameters"]} defaults to confirm.";
-            if (layerBox != null && !string.IsNullOrEmpty(layerMapJson) && layerBox.style.display == DisplayStyle.None)
-            {
-                layerBox.style.display = DisplayStyle.Flex;
-                layerMapField.SetValueWithoutNotify(layerMapJson);
-            }
+            SyncSiteStep();
             SyncChips();
             SyncComparison();
             if (verifyLabel != null && !string.IsNullOrEmpty(verify))

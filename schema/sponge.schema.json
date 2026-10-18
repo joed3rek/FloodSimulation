@@ -881,6 +881,228 @@
       "title": "Scenario",
       "type": "object"
     },
+    "SurveyFeature": {
+      "additionalProperties": true,
+      "description": "One drawn object, draped on the ground: a line (x, y, z triples) or a point (x, y, z).",
+      "properties": {
+        "block": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Block"
+        },
+        "closed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Closed"
+        },
+        "g": {
+          "enum": [
+            "line",
+            "point"
+          ],
+          "title": "G",
+          "type": "string"
+        },
+        "on_ground": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Ground"
+        },
+        "radius_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Radius M"
+        },
+        "xyz": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Xyz",
+          "type": "array"
+        }
+      },
+      "required": [
+        "g",
+        "xyz"
+      ],
+      "title": "SurveyFeature",
+      "type": "object"
+    },
+    "SurveyLayer": {
+      "additionalProperties": true,
+      "description": "A layer of the cleaned survey drawing (SP-* standard) as the 3D view draws it.",
+      "properties": {
+        "color": {
+          "default": "#9A9A90",
+          "title": "Color",
+          "type": "string"
+        },
+        "count": {
+          "default": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "features": {
+          "items": {
+            "$ref": "#/$defs/SurveyFeature"
+          },
+          "title": "Features",
+          "type": "array"
+        },
+        "height_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height M"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "sized": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sized"
+        },
+        "source_layers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Layers",
+          "type": "array"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "visible": {
+          "default": true,
+          "title": "Visible",
+          "type": "boolean"
+        },
+        "width_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width M"
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "title": "SurveyLayer",
+      "type": "object"
+    },
+    "SurveyLayers": {
+      "additionalProperties": true,
+      "description": "site/survey_layers.json: what the survey drawing shows, layer by layer, on the ground model.",
+      "properties": {
+        "drawing": {
+          "default": "",
+          "title": "Drawing",
+          "type": "string"
+        },
+        "extent": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extent"
+        },
+        "layers": {
+          "items": {
+            "$ref": "#/$defs/SurveyLayer"
+          },
+          "title": "Layers",
+          "type": "array"
+        },
+        "note": {
+          "default": "",
+          "title": "Note",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "SurveyLayers",
+      "type": "object"
+    },
     "TerrainEdit": {
       "additionalProperties": true,
       "description": "A terrain shaping operation; the working terrain = existing ground + edits + NbS carving.",
@@ -1075,6 +1297,10 @@
     },
     "scenarios/<id>/scenario.json": {
       "$ref": "#/$defs/Scenario",
+      "map_of": false
+    },
+    "site/survey_layers.json": {
+      "$ref": "#/$defs/SurveyLayers",
       "map_of": false
     },
     "terrain/edits.json": {

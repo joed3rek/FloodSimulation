@@ -23,14 +23,28 @@ def b64(a: np.ndarray, dtype: str = "<f4") -> str:
     return base64.b64encode(np.ascontiguousarray(a, dtype=dtype).tobytes()).decode()
 
 
-def terrain_payload(project: Project, option: Optional[str] = None, max_cells: int = 250_000) -> Dict[str, Any]:
+def terrain_payload(project: Project, option: Optional[str] = None, max_cells: int = 250_000,
+                    extend: bool = True) -> Dict[str, Any]:
+    """Height grid for viewers. With ``extend``, widened over the survey layers' extent (display only);
+    "surveyed" (uint8, 1 = surveyed) then marks the ground the survey levels actually cover."""
     rel = f"scenarios/{option}/terrain/graded.tif" if option and option != "baseline" else "terrain/existing.tif"
     d = read_geotiff(project.path(rel))
+    surveyed = None
+    if extend and project.exists("site/survey_layers.json"):
+        # widen the ground (display only) so the wall, roads and drains around the park sit on it
+        from ..terrain.extend import extend_dem
+
+        ext = project.read_json("site/survey_layers.json").get("extent")
+        if ext:
+            d, surveyed = extend_dem(d, ext)
     z = np.where(d.z == d.nodata, np.nan, d.z)
     step = max(1, int(np.ceil(np.sqrt(z.size / max_cells))))
     z = z[::step, ::step]
-    return {"option": option or "existing", "rows": z.shape[0], "cols": z.shape[1], "cell_m": d.cell_size * step,
-            "origin": list(d.origin), "z_min": float(np.nanmin(z)), "z_max": float(np.nanmax(z)), "z": b64(z)}
+    out = {"option": option or "existing", "rows": z.shape[0], "cols": z.shape[1], "cell_m": d.cell_size * step,
+           "origin": list(d.origin), "z_min": float(np.nanmin(z)), "z_max": float(np.nanmax(z)), "z": b64(z)}
+    if surveyed is not None:
+        out["surveyed"] = b64(surveyed[::step, ::step].astype("uint8"), "u1")
+    return out
 
 
 def frames_payload(project: Project, option: str, rp: int, start: int = 0, count: int = 100000) -> Dict[str, Any]:

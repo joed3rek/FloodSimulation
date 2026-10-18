@@ -13,6 +13,7 @@ namespace SpongePark
         public WaterView Water;
         public DepthFrames Frames;
         public GpuWaterSim Gpu;
+        public SurveyLayersView Survey;
         public float[] RetainedTime, RetainedLitres, RainLitres;
         float siteArea;
         public string Status = "";
@@ -25,6 +26,7 @@ namespace SpongePark
             var v = go.AddComponent<SiteView>();
             v.Terrain = TerrainView.Create("terrain", go.transform, layer);
             v.Water = WaterView.Create("water", go.transform, layer);
+            v.Survey = SurveyLayersView.Create("survey layers", go.transform, layer);
             return v;
         }
 

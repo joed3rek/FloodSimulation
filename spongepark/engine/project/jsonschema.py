@@ -63,7 +63,8 @@ def validator_for(path_in_package: str):
 def validate_package(root: Path) -> Dict[str, list]:
     """Validate every JSON file of an unpacked project folder. Returns {file: [errors]} (empty when valid)."""
     out: Dict[str, list] = {}
-    files = ["manifest.json", "parameters.json", "history.json", "locks.json", "edit_log.json", "terrain/edits.json"]
+    files = ["manifest.json", "parameters.json", "history.json", "locks.json", "edit_log.json", "terrain/edits.json",
+             "site/survey_layers.json"]
     files += [str(p.relative_to(root)).replace("\\", "/") for p in sorted((root / "scenarios").glob("*/*.json"))
               if p.name in ("elements.json", "scenario.json")]
     files += [str(p.relative_to(root)).replace("\\", "/") for p in sorted((root / "proposals").glob("*.json"))]

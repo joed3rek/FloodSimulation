@@ -88,7 +88,7 @@ class OpenRequest(BaseModel):
 @app.get("/health")
 def health() -> Dict[str, Any]:
     # features let a client tell an engine started before an update from a current one
-    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan"],
+    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan", "site_layers"],
             "open_projects": list(_projects)}
 
 
@@ -110,7 +110,9 @@ def info(pid: str) -> Dict[str, Any]:
             "path": str(p.package_path or p.root),
             "return_periods": p.parameters.value("project.return_periods"),
             "has_soils": bool(p.read_geojson("site/soil_zones.geojson")["features"]),
-            "has_rainfall": p.exists("rainfall/return_periods.csv")}
+            "has_rainfall": p.exists("rainfall/return_periods.csv"),
+            "has_survey": any(p.path("survey").glob("*_SP.dxf")),
+            "site_confirmed": bool(p.parameters.value_or("site.model_confirmed", False))}
 
 
 @app.post("/projects/{pid}/save")
@@ -309,6 +311,35 @@ def terrain(pid: str, option: Optional[str] = None, max_cells: int = 250_000) ->
         return terrain_payload(_project(pid), option, max_cells)
     except Exception as ex:
         raise HTTPException(404, str(ex))
+
+
+@app.get("/projects/{pid}/site/layers")
+def site_layers(pid: str, rebuild: bool = False) -> Dict[str, Any]:
+    """What the survey drawing shows (walls, gates, trees, paths ...), layer by layer, draped on the ground."""
+    from spongepark.engine.site import survey_layers
+
+    p = _project(pid)
+    try:
+        fresh = rebuild or not p.exists(survey_layers.REL)
+        out = survey_layers.load(p, rebuild)
+        if fresh:
+            p.save()
+        return out
+    except FileNotFoundError as ex:
+        raise HTTPException(404, str(ex))
+
+
+@app.post("/projects/{pid}/site/confirm")
+def site_confirm(pid: str, confirmed: bool = Body(True, embed=True)) -> Dict[str, Any]:
+    """The designer has looked at the 3D site model (ground and survey layers) and accepts it; targets come next."""
+    p = _project(pid)
+    with _locks[pid]:
+        p.parameters.set("site.model_confirmed", bool(confirmed), "-", Source.DESIGNER,
+                         "The designer checked the ground model and the survey layers in 3D.")
+        p.parameters.confirm("site.model_confirmed")
+        p.history.log("site_model_confirmed" if confirmed else "site_model_reopened")
+        p.save()
+    return {"site_confirmed": bool(confirmed)}
 
 
 @app.get("/projects/{pid}/options/{oid}/sim2d/{rp}/frames")

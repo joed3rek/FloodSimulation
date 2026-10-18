@@ -23,7 +23,8 @@ namespace SpongePark
         SiteFrame frame;
 
         // state
-        bool engineUp, busy, bundle;
+        bool engineUp, busy, bundle, siteConfirmed;
+        JToken surveyLayers;   // what the survey drawing shows, layer by layer (/site/layers)
         string status = "Start the engine or open a results bundle.";
         string projectPath = "", drawingPath = "", layerMapJson = "", exportDir = "";
         float budgetPct = 10, maxDrawdownHr = 48, exaggeration = 5;
@@ -146,10 +147,13 @@ namespace SpongePark
             if (Arg("-spEngineUrl") != null) api.baseUrl = Arg("-spEngineUrl");
             yield return CheckEngine();
             if (Arg("-spSurvey") != null) yield return StartIntake(Arg("-spSurvey"));
-            yield return new WaitForSecondsRealtime(6);
+            yield return new WaitForSecondsRealtime(float.TryParse(Arg("-spWait"), out var wait) ? wait : 6);   // -spWait s
             // intake plan checks: -spZoomLayer <layer> highlights and zooms to it; -spPanelClosed hides the questions
             if (plan != null && Arg("-spZoomLayer") != null) { Focus(Arg("-spZoomLayer")); plan.ZoomToLayer(Arg("-spZoomLayer")); }
             if (plan != null && System.Environment.GetCommandLineArgs().Contains("-spPanelClosed")) SetPanel(false);
+            // site model checks: -spOnly <layer> shows just that survey layer; -spPitch <deg> looks from higher up
+            if (Arg("-spOnly") != null) { SetAllLayers(false); SetLayer(Arg("-spOnly"), true); }
+            if (float.TryParse(Arg("-spPitch"), out var pitch)) rigLeft.Pitch = pitch;
             yield return new WaitForSecondsRealtime(1);
             if (plan != null) Debug.Log($"plan zoom {plan.Zoom:0.000} offset {plan.Offset} size {plan.contentRect.size}");
             ScreenCapture.CaptureScreenshot(Arg("-spShot"));
@@ -227,9 +231,22 @@ namespace SpongePark
             JToken r = null;
             yield return api.Open(projectPath, create, x => r = x);
             if (r == null) yield break;
+            surveyLayers = null;
+            layerVisible.Clear();
             yield return Refresh();
             Remember((string)r["path"] ?? projectPath, (string)r["name"]);   // the engine's resolved path
             status = $"Opened {(string)r["name"]}.";
+            // show the site straight away: the ground model and what the survey drawing shows
+            if (info != null && (bool?)info["has_terrain"] == true) StartCoroutine(Run(LoadViews(), "Loading the site model"));
+        }
+
+        IEnumerator ConfirmSite(bool confirmed)
+        {
+            JToken r = null;
+            yield return api.Send("POST", api.P("/site/confirm"), new { confirmed }, x => r = x);
+            if (r == null) yield break;
+            siteConfirmed = confirmed;
+            status = confirmed ? "Site model confirmed. Next: the targets." : "Site model reopened.";
         }
 
         IEnumerator Refresh()
@@ -242,6 +259,7 @@ namespace SpongePark
             JToken ps = null;
             yield return api.Get(api.P("/parameters?prefix=project.return_periods"), x => ps = x);
             if (ps != null && ps.Any()) returnPeriods = ps[0]["value"].ToObject<List<int>>();
+            siteConfirmed = (bool?)r["site_confirmed"] == true;
             calibration = (string)r["calibration"] == "uncalibrated"
                 ? "uncalibrated: suitable for scenario comparison, not absolute prediction" : (string)r["calibration"];
         }
@@ -320,11 +338,21 @@ namespace SpongePark
             right.Option = CurrentOption ?? "baseline";
             yield return left.Load(api, frame, rp, bundle);
             yield return right.Load(api, frame, rp, bundle);
+            if (!bundle && surveyLayers == null && (bool?)info?["has_survey"] == true)
+            {
+                yield return api.Get(api.P("/site/layers"), x => surveyLayers = x, 300);
+                FillSiteLayers();
+            }
+            left.Survey.Build(surveyLayers, frame, layerVisible);
+            right.Survey.Build(surveyLayers, frame, layerVisible);
             yield return LoadComparison();
+            // with nothing to compare yet (only the existing site), one full view of it
+            if (right.Option == "baseline" && !bundle) { sideBySide = false; showProposed = false; ApplyViewports(); }
             var b = left.Terrain.GetComponent<MeshFilter>().sharedMesh.bounds;
-            rigLeft.Frame(b); rigRight.Frame(b);
+            rigLeft.Frame(b, sideBySide); rigRight.Frame(b, sideBySide);
             simT = 0;
-            status = $"{CurrentRp}-yr storm loaded. Press Play.";
+            status = left.Frames != null ? $"{CurrentRp}-yr storm loaded. Press Play."
+                : "Site model loaded: drag to orbit, scroll to zoom. Check the layers in Step 1.";
         }
 
         IEnumerator StartLive()
