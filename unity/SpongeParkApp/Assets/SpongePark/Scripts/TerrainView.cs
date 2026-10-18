@@ -17,8 +17,23 @@ namespace SpongePark
             go.transform.SetParent(parent, false);
             var t = go.AddComponent<TerrainView>();
             t.mf = go.AddComponent<MeshFilter>();
-            go.AddComponent<MeshRenderer>().sharedMaterial = new Material(Shader.Find("SpongePark/VertexLit"));
+            t.material = new Material(Shader.Find("SpongePark/Terrain"));
+            go.AddComponent<MeshRenderer>().sharedMaterial = t.material;
             return t;
+        }
+
+        Material material;
+        /// Contour interval (m) chosen from the park's relief; lines drawn by the terrain shader.
+        public float ContourInterval { get; private set; } = 0.5f;
+
+        public void SetContours(bool on) => material.SetFloat("_Opacity", on ? 0.55f : 0f);
+
+        /// A round interval giving about ten contours over the park's relief.
+        static float NiceInterval(float relief)
+        {
+            foreach (var s in new[] { 0.05f, 0.1f, 0.2f, 0.25f, 0.5f, 1f, 2f, 5f, 10f })
+                if (relief / s <= 12) return s;
+            return 20f;
         }
 
         /// components: GeoJSON FeatureCollection of the option's elements (may be null).
@@ -28,6 +43,12 @@ namespace SpongePark
             var polys = Footprints(components);
             var verts = new List<Vector3>();
             var cols = new List<Color>();
+            var levels = new List<Vector2>();   // true ground level for the contour shader
+            float lo = float.MaxValue, hi = float.MinValue;
+            for (int k = 0; k < g.Z.Length; k++)
+                if (!float.IsNaN(g.Z[k]) && (g.Surveyed == null || g.Surveyed[k] == 1)) { lo = Mathf.Min(lo, g.Z[k]); hi = Mathf.Max(hi, g.Z[k]); }
+            ContourInterval = lo < hi ? NiceInterval(hi - lo) : 0.5f;
+            material.SetFloat("_Interval", ContourInterval);
             var index = new int[g.Rows * g.Cols];
             for (int r = 0; r < g.Rows; r++)
             for (int c = 0; c < g.Cols; c++)
@@ -37,6 +58,7 @@ namespace SpongePark
                 float x = g.Origin.x + (c + 0.5f) * g.Cell, y = g.Origin.y - (r + 0.5f) * g.Cell;
                 index[k] = verts.Count;
                 verts.Add(frame.World(x, y, g.Z[k]));
+                levels.Add(new Vector2(g.Z[k], g.Surveyed == null || g.Surveyed[k] == 1 ? 1 : 0));   // contours on park ground only
                 float t = Mathf.InverseLerp(g.ZMin, g.ZMax, g.Z[k]);
                 var col = Color.Lerp(new Color(0.42f, 0.55f, 0.32f), new Color(0.72f, 0.68f, 0.52f), t);
                 // ground beyond the survey levels (widened for display): pale, so it reads as not surveyed
@@ -59,6 +81,7 @@ namespace SpongePark
             var m = new Mesh { indexFormat = IndexFormat.UInt32 };
             m.SetVertices(verts);
             m.SetColors(cols);
+            m.SetUVs(1, levels);
             m.SetTriangles(tris, 0);
             m.RecalculateNormals();
             m.RecalculateBounds();

@@ -32,11 +32,12 @@ def terrain_payload(project: Project, option: Optional[str] = None, max_cells: i
     surveyed = None
     if extend and project.exists("site/survey_layers.json"):
         # widen the ground (display only) so the wall, roads and drains around the park sit on it
+        from ..site.survey_layers import park_boundary
         from ..terrain.extend import extend_dem
 
         ext = project.read_json("site/survey_layers.json").get("extent")
         if ext:
-            d, surveyed = extend_dem(d, ext)
+            d, surveyed = extend_dem(d, ext, boundary=park_boundary(project))
     z = np.where(d.z == d.nodata, np.nan, d.z)
     step = max(1, int(np.ceil(np.sqrt(z.size / max_cells))))
     z = z[::step, ::step]

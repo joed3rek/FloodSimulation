@@ -231,7 +231,24 @@ namespace SpongePark
             if (siteLayerList == null) return;
             siteLayerList.Clear();
             layerChips.Clear();
-            if (surveyLayers == null) return;
+            // contours drawn by the terrain from the ground model itself
+            const string Contours = ContoursLayer;
+            if (!layerVisible.ContainsKey(Contours)) layerVisible[Contours] = true;
+            var cb = new Button(() => SetLayer(Contours, !layerVisible[Contours]));
+            cb.AddToClassList("layer-row");
+            var csw = new VisualElement { pickingMode = PickingMode.Ignore };
+            csw.AddToClassList("layer-swatch");
+            csw.style.backgroundColor = new Color(0.55f, 0.38f, 0.22f);
+            cb.Add(csw);
+            var cw = new VisualElement { pickingMode = PickingMode.Ignore };
+            cw.AddToClassList("layer-words");
+            cw.Add(Text("Contours of the ground model", "layer-title"));
+            cw.Add(Text($"every {left.Terrain.ContourInterval:0.##} m, stronger every {left.Terrain.ContourInterval * 5:0.##} m", "layer-source"));
+            cb.Add(cw);
+            cb.tooltip = "Drawn from the ground model the engine built (not the surveyor's contour lines).";
+            siteLayerList.Add(cb);
+            layerChips[Contours] = cb;
+            if (surveyLayers == null) { SyncLayerRows(); return; }
             foreach (var L in surveyLayers["layers"])
             {
                 var name = (string)L["name"];
@@ -258,9 +275,12 @@ namespace SpongePark
             SyncLayerRows();
         }
 
+        const string ContoursLayer = "__contours";
+
         void SetLayer(string name, bool on)
         {
             layerVisible[name] = on;
+            if (name == ContoursLayer) { left.Terrain.SetContours(on); right.Terrain.SetContours(on); }
             left.Survey.SetVisible(name, on);
             right.Survey.SetVisible(name, on);
             SyncLayerRows();

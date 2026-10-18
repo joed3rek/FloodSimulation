@@ -64,6 +64,47 @@ def cross_validate_spots(spots: np.ndarray, others: np.ndarray, folds: int = 10,
     return res
 
 
+def contours_decision(survey, min_spots: int = 30) -> Dict[str, Any]:
+    """Should the drawn contours shape the ground, or only check it?
+
+    With enough spot levels, contours are left out of the surface when one of them disagrees with the
+    spot levels around it by more than a quarter of the contour interval (it would put a false step,
+    spike or pit in the ground), or when they all follow the spot levels closely (they were generated
+    from them and add nothing but interpolation artefacts). Returns {"use": bool, "reason": str}.
+    """
+    spots = np.array([(s.x, s.y, s.z) for s in survey.spots]).reshape(-1, 3)
+    lab = [c for c in survey.contours if c.z is not None]
+    if not lab:
+        return {"use": False, "reason": "no contours with levels in the drawing."}
+    if len(spots) < min_spots:
+        return {"use": True, "reason": f"only {len(spots)} spot levels: the contours are needed to shape the ground."}
+    f = LinearNDInterpolator(spots[:, :2], spots[:, 2])
+    zc = sorted({c.z for c in lab})
+    d = np.diff(zc)
+    interval = float(np.min(d[d > 1e-6])) if len(zc) >= 2 and (d > 1e-6).any() else 0.5
+    off, checked = [], 0
+    for c in lab:
+        n = max(2, int(c.line.length))
+        pp = np.array([c.line.interpolate(t).coords[0] for t in np.linspace(0, c.line.length, n)])
+        zz = f(pp[:, 0], pp[:, 1])
+        ok = ~np.isnan(zz)
+        if ok.sum() < 2:
+            continue
+        checked += 1
+        diff = float(np.mean(c.z - zz[ok]))
+        if abs(diff) > interval / 4:
+            x0, y0 = c.line.coords[0]
+            off.append(f"{c.z:g} m near ({x0:.0f}, {y0:.0f}) is {diff:+.2f} m from the spot levels")
+    if off:
+        return {"use": False, "reason": f"{len(off)} of {checked} contours disagree with the spot levels "
+                                        f"({'; '.join(off[:3])}): the ground is built from the {len(spots)} spot "
+                                        "levels and the contours only check it."}
+    if checked:
+        return {"use": False, "reason": f"the contours follow the {len(spots)} spot levels closely (they look "
+                                        "generated from them): the ground is built from the spot levels."}
+    return {"use": True, "reason": "the contours lie outside the spot levels: they extend the ground."}
+
+
 def quality(survey, dem: DEM, points: np.ndarray, spot_tol_m: float = 0.15, max_gap_m: float = 15.0,
             stated_park_area_m2: Optional[float] = None, contours_in_surface: bool = True) -> Dict[str, Any]:
     """Checks a designer should see before trusting the surface."""

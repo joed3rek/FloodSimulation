@@ -33,7 +33,15 @@ def import_survey(project: Project, drawing: Path, layer_map: Dict[str, Any],
     lr = layer_map.get("level_range_m")
     survey = cad.extract(doc, layer_map, label_search_m=float(P.value("terrain.label_search_m")),
                          level_range=tuple(lr) if lr else None)
-    use_contours = bool(layer_map.get("contours_in_surface", True))
+    setting = layer_map.get("contours_in_surface", "auto")
+    decision = None
+    if setting == "auto":   # the engine decides, and says why (see tin.contours_decision)
+        from .tin import contours_decision
+
+        decision = contours_decision(survey)
+        use_contours = decision["use"]
+    else:
+        use_contours = bool(setting)
     if not survey.spots:
         use_contours = True
     pts = survey.points(spacing_m=float(P.value("terrain.contour_point_spacing_m")), include_contours=use_contours)
@@ -41,6 +49,11 @@ def import_survey(project: Project, drawing: Path, layer_map: Dict[str, Any],
     q = quality(survey, dem, pts, spot_tol_m=float(P.value("terrain.spot_tolerance_m")),
                 max_gap_m=float(P.value("terrain.max_gap_m")), stated_park_area_m2=stated_park_area_m2,
                 contours_in_surface=use_contours)
+    if decision is not None:
+        q["contours_decision"] = decision
+        q["issues"] = [i for i in q["issues"] if "consider contours_in_surface" not in i]
+        q["issues"].insert(0, ("Contours used in the ground: " if use_contours else "Contours not used in the ground: ")
+                           + decision["reason"])
 
     project.write_json("terrain/layer_map.json", layer_map)
     write_geotiff(dem, project.path("terrain/existing.tif"))

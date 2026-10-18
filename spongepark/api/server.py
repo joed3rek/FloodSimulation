@@ -16,7 +16,7 @@ import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from fastapi import Body, FastAPI, HTTPException, Query
 from pydantic import BaseModel
@@ -556,7 +556,7 @@ class IntakeFinish(BaseModel):
     links: Dict[str, str]
     project_path: Optional[str] = None
     park_area_m2: Optional[float] = None
-    contours_in_surface: bool = True
+    contours_in_surface: Union[bool, str] = "auto"   # "auto": the engine decides from the spot levels
     units_scale_to_m: float = 1.0
 
 

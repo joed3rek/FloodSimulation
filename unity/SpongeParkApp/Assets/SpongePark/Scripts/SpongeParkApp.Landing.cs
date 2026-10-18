@@ -23,7 +23,7 @@ namespace SpongePark
         Label focusCaption, answeredLabel, intakeStatus;
         Button buildButton;
         string intakeProjectPath = "", intakeArea = "";
-        bool intakeContours = true;
+        bool intakeContours;   // false: the engine decides whether the drawn contours shape the ground
         const string RecentKey = "spongepark.recent";          // before: paths joined with '|' (read once, then replaced)
         const string RecentListKey = "spongepark.recent.v2";   // JSON [{path, name, opened (unix seconds)}]
         const int RecentKeep = 20;
@@ -499,9 +499,9 @@ namespace SpongePark
             fin.Add(Text("Clean the drawing and build the ground", "h2"));
             fin.Add(TextInput("Save the project as", intakeProjectPath, v => intakeProjectPath = v));
             fin.Add(TextInput("Park area (m²), optional", "", v => intakeArea = v));
-            var contours = Chip("Use contours in the ground model", null);
+            var contours = Chip("Always use the drawn contours", null);
+            contours.tooltip = "Off: the engine builds the ground from the spot levels when the contours disagree with them or were generated from them, and says so.";
             contours.clicked += () => { intakeContours = !intakeContours; contours.EnableInClassList("chip--on", intakeContours); };
-            contours.EnableInClassList("chip--on", true);
             fin.Add(contours);
             buildButton = Btn("Clean and build", () => StartCoroutine(FinishIntake()), "btn--wide");
             fin.Add(buildButton);
@@ -661,7 +661,7 @@ namespace SpongePark
             var body = new Dictionary<string, object>
             {
                 ["survey"] = (string)intake["survey"], ["links"] = links, ["project_path"] = intakeProjectPath,
-                ["contours_in_surface"] = intakeContours,
+                ["contours_in_surface"] = intakeContours ? (object)true : "auto",
             };
             if (area > 0) body["park_area_m2"] = area;
             JToken r = null;

@@ -45,7 +45,7 @@ export function Intake() {
   const [projectPath, setProjectPath] = useState("");
   const [area, setArea] = useState("");
   const [scale, setScale] = useState("1");
-  const [contoursIn, setContoursIn] = useState(true);
+  const [contoursIn, setContoursIn] = useState(false);   // false: the engine decides
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Json | null>(null);
@@ -72,7 +72,7 @@ export function Intake() {
     try {
       const r = await api.job("POST", "/intake/finish", {
         survey: data.survey, links, project_path: projectPath, park_area_m2: area ? Number(area) : null,
-        contours_in_surface: contoursIn, units_scale_to_m: Number(scale) || 1,
+        contours_in_surface: contoursIn ? true : "auto", units_scale_to_m: Number(scale) || 1,
       }, (s) => setRunning(`Cleaning the drawing and building the ground · ${s}`));
       setDone(r);
       await open(r.project);
@@ -165,7 +165,7 @@ export function Intake() {
             <Field label="Park area (m²), optional" hint="Checked against the boundary.">{(id) => <Input id={id} value={area} onChange={(e) => setArea(e.target.value)} inputMode="decimal" />}</Field>
           </div>
           <div className="mt-5">
-            <Chip checked={contoursIn} onChange={setContoursIn}>Use contours in the ground model</Chip>
+            <Chip checked={contoursIn} onChange={setContoursIn}>Always use the drawn contours</Chip>
             <p className="mt-2 pl-1 text-xs text-muted-foreground">Turn off when the surveyor drew the contours from the spot levels; the quality check will tell you.</p>
           </div>
         </Card>

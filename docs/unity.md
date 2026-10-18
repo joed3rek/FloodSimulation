@@ -77,10 +77,27 @@ results without an engine (no computation, no editing).
 ## The site model
 
 The survey intake builds the ground model and then `site/survey_layers.json`: every physical layer
-of the cleaned drawing, draped on the ground (`spongepark site layers park.sponge` rebuilds it). The
-ground model only covers where the survey has levels, usually the park; for display it is widened to
-cover the wall, roads and drains around it, filled from the nearest surveyed ground and drawn paler.
-The analysis uses the surveyed ground only. Heights of walls (1.8 m), fences, gates, buildings and
-trees are display heights: the survey gives plan positions, not heights. A layer that needs a look is
-outlined in clay; its tooltip says why (for example lines on the gate layer too long to be gates,
-which are drawn on the ground instead).
+of the cleaned drawing, placed on the ground (`spongepark site layers park.sponge` rebuilds it).
+
+How things are drawn (display only; the survey gives positions, not heights):
+
+| In the drawing | In the model |
+|---|---|
+| Compound walls, boundary walls, fences | Metal park fencing, 2 m, on a low stone plinth, with an opening at each gate. A park boundary with no wall or fence drawn along it is fenced the same way |
+| Gate symbols (the X or block on plan) | One metal gate per symbol: stone pillars and two barred leaves, as wide as the symbol, set in line with the fence. A "gate" longer than 15 m is not a gate: it is drawn as a faint line and the layer is flagged |
+| Buildings | 3 m blocks with flat roofs; outlines drawn as loose lines are joined into footprints |
+| Trees and palms | Round crowns; canopy size from the drawn symbol where there is one |
+| Roads | Dark grey surface between the kerb lines (loose kerb ends at the survey's break lines are joined across the road) |
+| Footpaths | Sand-coloured surface: the narrow bands between path lines |
+| Contours | Drawn by the terrain itself from the ground model (interval chosen from the relief), on the park only. The surveyor's contour layers are kept, hidden |
+
+The ground model only covers where the survey has levels. For display, the park's own ground fills the
+park boundary; outside it a smooth base (the roads and verges) is kept just below the park edge so it
+never shows through the park. The analysis uses the surveyed ground only. Heights are shown true to
+scale by default (View: height exaggeration).
+
+**Contours in the ground.** By default the engine decides: with enough spot levels, drawn contours
+are left out of the ground when one disagrees with the spot levels around it by more than a quarter
+of the contour interval, or when they follow the spot levels closely (generated from them). The
+reason is the first line of the survey's quality report. "Always use the drawn contours" in the
+intake overrides this.

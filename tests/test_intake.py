@@ -107,7 +107,15 @@ def test_finish_puts_the_survey_layers_on_the_ground(drawing, tmp_path):
         layers = {L["name"]: L for L in p.read_json("site/survey_layers.json")["layers"]}
         assert {k: v for k, v in validate_package(p.root).items() if v} == {}
         wall = layers["SP-WALL"]
-        assert wall["kind"] == "wall" and wall["source_layers"] == ["COMPOUND WALL"] and wall["height_m"] > 0
+        # boundary walls are shown as 2 m fencing
+        assert wall["kind"] == "fence" and wall["source_layers"] == ["COMPOUND WALL"] and wall["height_m"] == 2.0
+        # the 4 m gate line becomes one gate on the wall, facing along it, with an opening cut in the wall
+        gates = layers["SP-GATE"]["features"]
+        assert len(gates) == 1 and gates[0]["g"] == "point"
+        assert abs(gates[0]["width_m"] - 4.0) < 0.1 and abs(gates[0]["angle_deg"] % 180) < 1
+        assert abs(gates[0]["xyz"][0] - 42) < 0.2 and abs(gates[0]["xyz"][1]) < 0.2
+        bottom = [np.array(f["xyz"]).reshape(-1, 3) for f in wall["features"]]
+        assert not any(((40.5 < a[:, 0]) & (a[:, 0] < 43.5) & (np.abs(a[:, 1]) < 0.1)).any() for a in bottom)
         xyz = np.array(wall["features"][0]["xyz"]).reshape(-1, 3)
         assert len(xyz) > 3                      # densified so it follows the ground
         dem = read_geotiff(p.path("terrain/existing.tif"))

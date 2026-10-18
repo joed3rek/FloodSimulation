@@ -883,8 +883,20 @@
     },
     "SurveyFeature": {
       "additionalProperties": true,
-      "description": "One drawn object, draped on the ground: a line (x, y, z triples) or a point (x, y, z).",
+      "description": "One drawn object on the ground: a line (x, y, z triples), a point (x, y, z), or a mesh (a surface).",
       "properties": {
+        "angle_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Angle Deg"
+        },
         "block": {
           "anyOf": [
             {
@@ -909,10 +921,23 @@
           "default": null,
           "title": "Closed"
         },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
         "g": {
           "enum": [
             "line",
-            "point"
+            "point",
+            "mesh"
           ],
           "title": "G",
           "type": "string"
@@ -940,6 +965,33 @@
           ],
           "default": null,
           "title": "Radius M"
+        },
+        "tri": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tri"
+        },
+        "width_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width M"
         },
         "xyz": {
           "items": {
@@ -976,6 +1028,18 @@
           },
           "title": "Features",
           "type": "array"
+        },
+        "fenced": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fenced"
         },
         "height_m": {
           "anyOf": [

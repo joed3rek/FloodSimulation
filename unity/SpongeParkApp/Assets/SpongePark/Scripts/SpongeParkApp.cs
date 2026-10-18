@@ -27,7 +27,7 @@ namespace SpongePark
         JToken surveyLayers;   // what the survey drawing shows, layer by layer (/site/layers)
         string status = "Start the engine or open a results bundle.";
         string projectPath = "", drawingPath = "", layerMapJson = "", exportDir = "";
-        float budgetPct = 10, maxDrawdownHr = 48, exaggeration = 5;
+        float budgetPct = 10, maxDrawdownHr = 48, exaggeration = 1;   // true heights by default; the View slider exaggerates
         int designRp = 5, targetRp = 10;
         List<string> options = new List<string>();
         List<int> returnPeriods = new List<int>();
@@ -154,6 +154,11 @@ namespace SpongePark
             // site model checks: -spOnly <layer> shows just that survey layer; -spPitch <deg> looks from higher up
             if (Arg("-spOnly") != null) { SetAllLayers(false); SetLayer(Arg("-spOnly"), true); }
             if (float.TryParse(Arg("-spPitch"), out var pitch)) rigLeft.Pitch = pitch;
+            if (float.TryParse(Arg("-spZoom"), out var zoomBy)) rigLeft.Distance /= zoomBy;
+            if (float.TryParse(Arg("-spYaw"), out var yaw)) rigLeft.Yaw = yaw;
+            var look = Arg("-spLookAt")?.Split(',');   // -spLookAt x,y (survey metres)
+            if (look != null && look.Length == 2 && frame != null && float.TryParse(look[0], out var lx) && float.TryParse(look[1], out var ly))
+                rigLeft.Target = frame.World(lx, ly, left.Terrain.GroundAt(lx, ly) is var gz && !float.IsNaN(gz) ? gz : frame.ZRef);
             yield return new WaitForSecondsRealtime(1);
             if (plan != null) Debug.Log($"plan zoom {plan.Zoom:0.000} offset {plan.Offset} size {plan.contentRect.size}");
             ScreenCapture.CaptureScreenshot(Arg("-spShot"));
@@ -339,10 +344,11 @@ namespace SpongePark
             yield return left.Load(api, frame, rp, bundle);
             yield return right.Load(api, frame, rp, bundle);
             if (!bundle && surveyLayers == null && (bool?)info?["has_survey"] == true)
-            {
                 yield return api.Get(api.P("/site/layers"), x => surveyLayers = x, 300);
-                FillSiteLayers();
-            }
+            FillSiteLayers();
+            bool contours = !layerVisible.TryGetValue(ContoursLayer, out var con) || con;
+            left.Terrain.SetContours(contours);
+            right.Terrain.SetContours(contours);
             left.Survey.Build(surveyLayers, frame, layerVisible);
             right.Survey.Build(surveyLayers, frame, layerVisible);
             yield return LoadComparison();

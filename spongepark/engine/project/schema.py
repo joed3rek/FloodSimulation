@@ -223,10 +223,14 @@ class Proposal(SpongeModel):
 
 # ------------------------------------------------------------------ site/survey_layers.json
 class SurveyFeature(SpongeModel):
-    """One drawn object, draped on the ground: a line (x, y, z triples) or a point (x, y, z)."""
+    """One drawn object on the ground: a line (x, y, z triples), a point (x, y, z), or a mesh (a surface)."""
 
-    g: Literal["line", "point"]
+    g: Literal["line", "point", "mesh"]
     xyz: List[float]
+    tri: Optional[List[int]] = None  # mesh: vertex indices, three per triangle (a surface lying on the ground)
+    width_m: Optional[float] = None  # gate: opening width
+    angle_deg: Optional[float] = None  # gate: direction along the fence, degrees from east, anticlockwise
+    color: Optional[str] = None  # this feature's colour where it differs from the layer's (kerbs, path edges)
     closed: Optional[bool] = None
     radius_m: Optional[float] = None  # tree canopy or symbol size
     on_ground: Optional[bool] = None  # draw flat on the ground although the layer is upright (e.g. a long "gate")
@@ -247,6 +251,7 @@ class SurveyLayer(SpongeModel):
     count: int = 0
     sized: Optional[int] = None  # trees with a canopy size from the drawing
     note: Optional[str] = None  # something about this layer the designer should check
+    fenced: Optional[bool] = None  # boundary: drawn as fencing (no wall or fence along it in the drawing)
     features: List[SurveyFeature] = Field(default_factory=list)
 
 

@@ -148,3 +148,23 @@ def test_standardise_renames_merges_and_dedupes(tmp_path):
     s = cad.extract(sp, {**m, "confirmed": True})
     assert sorted(c.z for c in s.contours) == [100.5, 101.0, 101.5] and s.stats["spots"] == 21 * 13
     assert s.stats["spots_duplicates_removed"] == 0
+
+
+def test_contours_that_disagree_with_the_spot_levels_only_check_the_ground():
+    """A contour put at the wrong level would make a false mound or pit: with enough spot levels the
+    ground is built from them, and the reason is given."""
+    from shapely.geometry import LineString
+
+    from spongepark.engine.io.cad import Contour, Spot, Survey
+    from spongepark.engine.terrain.tin import contours_decision
+
+    rng = np.random.default_rng(0)
+    spots = [Spot(x, y, 100 + 0.01 * x, "S") for x in range(0, 60, 6) for y in range(0, 60, 6)]
+    good = Contour(LineString([(20, 0), (20, 54)]), 100.2, "label", "C")
+    wrong = Contour(LineString([(30, 5), (30, 50)]), 101.0, "label", "C")   # the ground there is ~100.3
+    d = contours_decision(Survey([good, wrong], spots, {}, [], {}))
+    assert d["use"] is False and "disagree" in d["reason"]
+    d = contours_decision(Survey([good], spots, {}, [], {}))
+    assert d["use"] is False and "generated" in d["reason"]          # adds nothing to 100 spot levels
+    d = contours_decision(Survey([good, wrong], spots[:10], {}, [], {}))
+    assert d["use"] is True                                          # too few spot levels: contours needed

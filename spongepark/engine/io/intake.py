@@ -208,7 +208,7 @@ def preview(path: Path, layer: Optional[str] = None, size_px: int = 560) -> byte
 
 
 def finish(survey: Path, links: Dict[str, str], project_path: Optional[Path] = None,
-           park_area_m2: Optional[float] = None, contours_in_surface: bool = True, units_scale_to_m: float = 1.0) -> Dict[str, Any]:
+           park_area_m2: Optional[float] = None, contours_in_surface: Any = "auto", units_scale_to_m: float = 1.0) -> Dict[str, Any]:
     """Clean the drawing with the confirmed links, create the project and build the ground model.
 
     ``links``: drawing layer -> standard layer name ("" = not needed)."""

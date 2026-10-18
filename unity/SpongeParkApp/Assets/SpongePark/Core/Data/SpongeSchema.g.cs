@@ -201,14 +201,18 @@ namespace SpongePark.Data
         [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
     }
 
-    /// One drawn object, draped on the ground: a line (x, y, z triples) or a point (x, y, z).
+    /// One drawn object on the ground: a line (x, y, z triples), a point (x, y, z), or a mesh (a surface).
     public partial class SurveyFeature
     {
+        [JsonProperty("angle_deg")] public double? AngleDeg { get; set; }
         [JsonProperty("block")] public string Block { get; set; }
         [JsonProperty("closed")] public bool? Closed { get; set; }
+        [JsonProperty("color")] public string Color { get; set; }
         [JsonProperty("g")] public string G { get; set; }
         [JsonProperty("on_ground")] public bool? OnGround { get; set; }
         [JsonProperty("radius_m")] public double? RadiusM { get; set; }
+        [JsonProperty("tri")] public List<long> Tri { get; set; }
+        [JsonProperty("width_m")] public double? WidthM { get; set; }
         [JsonProperty("xyz")] public List<double> Xyz { get; set; }
         /// Fields this version does not know about, kept as they are.
         [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
@@ -220,6 +224,7 @@ namespace SpongePark.Data
         [JsonProperty("color")] public string Color { get; set; }
         [JsonProperty("count")] public long? Count { get; set; }
         [JsonProperty("features")] public List<SurveyFeature> Features { get; set; }
+        [JsonProperty("fenced")] public bool? Fenced { get; set; }
         [JsonProperty("height_m")] public double? HeightM { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; }
         [JsonProperty("name")] public string Name { get; set; }

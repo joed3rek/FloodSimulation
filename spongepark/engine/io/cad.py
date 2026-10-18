@@ -191,7 +191,7 @@ def suggest_layer_map(inv: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "confirmed": False,
         "units_scale_to_m": 1.0,
-        "contours_in_surface": True,
+        "contours_in_surface": "auto",
         "roles": dict(roles),
         "needs_decision": ask,
         "note": "Suggested from layer names. Check every role, set units_scale_to_m if the drawing is not in "
