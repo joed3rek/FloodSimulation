@@ -1162,6 +1162,18 @@
           "default": "1.1",
           "title": "Schema Version",
           "type": "string"
+        },
+        "style": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Style"
         }
       },
       "title": "SurveyLayers",

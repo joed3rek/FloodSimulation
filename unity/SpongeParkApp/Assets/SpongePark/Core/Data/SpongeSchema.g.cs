@@ -246,6 +246,7 @@ namespace SpongePark.Data
         [JsonProperty("layers")] public List<SurveyLayer> Layers { get; set; }
         [JsonProperty("note")] public string Note { get; set; }
         [JsonProperty("schema_version")] public string SchemaVersion { get; set; }
+        [JsonProperty("style")] public long? Style { get; set; }
         /// Fields this version does not know about, kept as they are.
         [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
     }

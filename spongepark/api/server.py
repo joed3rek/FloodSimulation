@@ -320,9 +320,9 @@ def site_layers(pid: str, rebuild: bool = False) -> Dict[str, Any]:
 
     p = _project(pid)
     try:
-        fresh = rebuild or not p.exists(survey_layers.REL)
+        before = p.read_json(survey_layers.REL).get("style") if p.exists(survey_layers.REL) else None
         out = survey_layers.load(p, rebuild)
-        if fresh:
+        if rebuild or before != out.get("style"):
             p.save()
         return out
     except FileNotFoundError as ex:

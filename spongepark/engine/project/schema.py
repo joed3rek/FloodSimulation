@@ -259,6 +259,7 @@ class SurveyLayers(SpongeModel):
     """site/survey_layers.json: what the survey drawing shows, layer by layer, on the ground model."""
 
     schema_version: str = SCHEMA_VERSION
+    style: Optional[int] = None  # modelling style version; older files are rebuilt
     drawing: str = ""
     extent: Optional[List[float]] = None  # x_min, y_min, x_max, y_max of what the drawing shows (m)
     note: str = ""

@@ -25,6 +25,7 @@ from ..terrain.raster import read_geotiff
 log = logging.getLogger(__name__)
 
 REL = "site/survey_layers.json"
+STYLE = 2   # how the layers are modelled; a file made with an older style is rebuilt on load
 
 # SP layer (or prefix) -> how the viewer draws it. height_m: display height above the ground (m).
 KINDS: List[Tuple[str, Dict[str, Any]]] = [
@@ -302,7 +303,7 @@ def build(project: Project) -> Dict[str, Any]:
             **style, "count": len(feats), **({"sized": sized} if kind in ("tree", "palm") else {}),
             "features": feats,
         })
-    out = {"schema_version": "1.1", "drawing": f"survey/{drawing.name}", "extent": extent,
+    out = {"schema_version": "1.1", "style": STYLE, "drawing": f"survey/{drawing.name}", "extent": extent,
            "note": "Plan positions from the survey, heights from the ground model. Wall, building and tree "
                    "heights are display heights only.",
            "layers": layers}
@@ -548,4 +549,5 @@ def load(project: Project, rebuild: bool = False) -> Dict[str, Any]:
     """The survey layers, built on first use (projects made before this file existed)."""
     if rebuild or not project.exists(REL):
         return build(project)
-    return project.read_json(REL)
+    out = project.read_json(REL)
+    return out if out.get("style") == STYLE else build(project)
