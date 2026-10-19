@@ -3,7 +3,7 @@
 // - the design's flow lines are redone on the carved ground;
 // - SWMM checks the design for every storm in the background (results card);
 // - Suggest a layout: the layout generator or the optimiser, each option with its SWMM results, to start from;
-// - heights x1 / x3 / x5, sky, haze and soft sun shadows for the 3D view.
+// - heights x1 / x3 / x5 (the sky, haze and weather are in SpongeParkApp.Weather.cs).
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,7 +17,6 @@ namespace SpongePark
     {
         VisualElement suggestList, resultsBox;
         Label suggestText, resultsText;
-        readonly Dictionary<float, Button> heightChips = new Dictionary<float, Button>();
         bool verifying;
         int liveToken;
 
@@ -31,18 +30,6 @@ namespace SpongePark
         bool ReadyToSimulate => (bool?)info?["has_rainfall"] == true && ((bool?)info?["has_ground"] == true || (bool?)info?["has_soils"] == true);
 
         // ------------------------------------------------------------ view: heights and atmosphere
-        void BuildHeightChips(VisualElement row)
-        {
-            foreach (var x in new[] { 1f, 3f, 5f })
-            {
-                var v = x;
-                var b = Chip($"Heights ×{v:0}", () => SetHeights(v));
-                b.tooltip = v == 1 ? "True heights" : $"Heights shown {v:0} times (display only; the analysis uses true heights)";
-                heightChips[v] = b;
-                row.Add(b);
-            }
-        }
-
         void SetHeights(float v)
         {
             if (Mathf.Approximately(v, exaggeration) || busy) return;
@@ -50,33 +37,16 @@ namespace SpongePark
             StartCoroutine(Run(LoadViews(), "Redrawing the heights"));
         }
 
-        void SetupAtmosphere(Light sun)
-        {
-            sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.72f;
-            sun.color = new Color(1f, 0.96f, 0.88f);
-            sun.intensity = 1.05f;
-            QualitySettings.shadowDistance = 700;
-            QualitySettings.shadowResolution = ShadowResolution.VeryHigh;
-            QualitySettings.shadowCascades = 4;
-            QualitySettings.shadowProjection = ShadowProjection.StableFit;
-            RenderSettings.fogMode = FogMode.Linear;
-        }
+        void SetupAtmosphere(Light light) => SetupEnvironment(light);   // sky, textures, post-processing, weather
 
-        /// Haze and sky in 3D; a clean paper background in the 2D plan.
+        /// Sky, haze and weather in 3D; a clean paper background in the 2D plan.
         void SyncAtmosphere()
         {
             if (rigLeft == null) return;
             bool plan = rigLeft.Plan;
-            RenderSettings.fog = !plan;
-            var haze = new Color(0.86f, 0.89f, 0.90f);
-            RenderSettings.fogColor = haze;
-            RenderSettings.fogStartDistance = rigLeft.Distance * 1.4f;
-            RenderSettings.fogEndDistance = rigLeft.Distance * 5f;
-            var bgc = plan ? new Color(0.992f, 0.988f, 0.973f) : haze;
-            camLeft.backgroundColor = bgc;
-            camRight.backgroundColor = bgc;
-            foreach (var kv in heightChips) kv.Value.EnableInClassList("chip--on", Mathf.Approximately(kv.Key, exaggeration));
+            camLeft.backgroundColor = PlanBackground;   // the dark workspace's plan (3D sets its sky below)
+            camRight.backgroundColor = PlanBackground;
+            SyncEnvironment(plan);
         }
 
         // ------------------------------------------------------------ after each design change
@@ -116,6 +86,8 @@ namespace SpongePark
             verifying = false;
             if (r == null) { resultsText.text = "SWMM could not check the design: " + api.LastError; yield break; }
             ShowResults(r);
+            designVerified = true;
+            MarkStage("verify");
         }
 
         void ShowResults(JToken r)
@@ -146,31 +118,28 @@ namespace SpongePark
                 resultsBox.Add(Text($"Largest storm fully kept on site: {storm}-year.", "muted"));
         }
 
-        // ------------------------------------------------------------ suggest a layout
-        void BuildSuggest(VisualElement step)
+        // ------------------------------------------------------------ suggest a layout, design results
+        /// The suggestions list and the design's SWMM results (Properties > Results); their buttons are on the Design tab.
+        VisualElement suggestCard, resultsCard;
+
+        void BuildSuggestParts()
         {
-            var card = Card("card--stone");
-            card.Add(Text("SUGGEST A LAYOUT", "eyebrow"));
-            suggestText = Text("Let the engine place and size NbS from the flow and the ground, checked in SWMM. Start from one and change shapes and depths.", "muted");
-            card.Add(suggestText);
-            var r = Row();
-            r.Add(Btn("Quick layout", () => StartCoroutine(Run(Suggest("quick"), "Placing NbS")), "btn--outline"));
-            r.Add(Btn("Optimise (about a minute)", () => StartCoroutine(Run(Suggest("optimise"), "Optimising (SWMM-checked)")), "btn--clay"));
-            card.Add(r);
+            suggestCard = new VisualElement();
+            suggestText = Text("Design > Quick layout or Optimise: the engine places and sizes NbS from the flow and the ground, checked in SWMM. Start from one and change shapes and depths.", "muted");
+            suggestCard.Add(suggestText);
             suggestList = new VisualElement();
             suggestList.AddToClassList("layer-list");
-            card.Add(suggestList);
-            step.Add(card);
+            suggestCard.Add(suggestList);
 
-            var res = Card("card--sand");
-            res.Add(Text("DESIGN RESULTS", "eyebrow"));
+            resultsCard = new VisualElement();
             resultsText = Text("Add NbS to see how much more of each storm the park keeps.", "muted");
-            res.Add(resultsText);
+            resultsCard.Add(resultsText);
             resultsBox = new VisualElement();
-            res.Add(resultsBox);
-            res.Add(Btn("Check again in SWMM", () => StartCoroutine(VerifyQuietly(liveToken)), "btn--ghost"));
-            step.Add(res);
+            resultsCard.Add(resultsBox);
         }
+
+        void CheckAgain() => StartCoroutine(VerifyQuietly(liveToken));
+        bool designVerified;
 
         IEnumerator Suggest(string method)
         {

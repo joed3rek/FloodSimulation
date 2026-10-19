@@ -35,11 +35,12 @@ optimise_app = typer.Typer(help="Optimisation with NSGA-II and a surrogate, SWMM
                            no_args_is_help=True)
 nbs_app = typer.Typer(help="Component catalogue and design guidelines.", no_args_is_help=True)
 itzi_app = typer.Typer(help="Itzi, the 2D flood model (run as a separate program).", no_args_is_help=True)
+unity_app = typer.Typer(help="Assets for the Unity app.", no_args_is_help=True)
 schema_app = typer.Typer(help="The shared .sponge JSON Schema and the generated Unity classes.", no_args_is_help=True)
 for sub, name in [(project_app, "project"), (params_app, "params"), (rain_app, "rainfall"), (site_app, "site"),
                   (option_app, "option"), (terrain_app, "terrain"), (layout_app, "layout"), (optimise_app, "optimise"),
                   (rhino_app, "rhino"), (sim2d_app, "sim2d"),
-                  (nbs_app, "nbs"), (schema_app, "schema"), (itzi_app, "itzi")]:
+                  (nbs_app, "nbs"), (schema_app, "schema"), (itzi_app, "itzi"), (unity_app, "unity")]:
     app.add_typer(sub, name=name)
 
 SITE_LAYERS = {
@@ -70,6 +71,16 @@ def version() -> None:
     import swmm.toolkit
 
     typer.echo(f"spongepark {__version__}; pyswmm {pyswmm.__version__}; swmm-toolkit {swmm.toolkit.__version__}")
+
+
+@unity_app.command("lowpoly-assets")
+def unity_lowpoly_assets() -> None:
+    """The low-poly art (Synty POLYGON Starter, Simple Nature Pack, Low Poly Tree Pack) from Unity's download folder
+    into the app project (not committed: Asset Store EULA)."""
+    from spongepark.cli.lowpoly_assets import extract
+    for r in extract():
+        typer.echo(f"{r['package']}: not downloaded yet" if r.get("missing")
+                   else f"{r['package']}: {r['files']} files into Assets/{', Assets/'.join(r['folders'])}")
 
 
 @itzi_app.command("setup")

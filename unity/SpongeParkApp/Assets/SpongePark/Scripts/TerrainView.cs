@@ -47,6 +47,7 @@ namespace SpongePark
             var verts = new List<Vector3>();
             var cols = new List<Color>();
             var levels = new List<Vector2>();   // true ground level for the contour shader
+            var cover = new List<Vector2>();    // what covers it, for the 3D textures (see Terrain.shader)
             float lo = float.MaxValue, hi = float.MinValue;
             for (int k = 0; k < g.Z.Length; k++)
                 if (!float.IsNaN(g.Z[k]) && (g.Surveyed == null || g.Surveyed[k] == 1)) { lo = Mathf.Min(lo, g.Z[k]); hi = Mathf.Max(hi, g.Z[k]); }
@@ -71,9 +72,11 @@ namespace SpongePark
                     : Color.Lerp(new Color(0.50f, 0.62f, 0.34f), new Color(0.80f, 0.70f, 0.47f), (t - 0.5f) * 2);
                 // ground beyond the survey levels (widened for display): pale, so it reads as not surveyed
                 if (g.Surveyed != null && g.Surveyed[k] == 0) col = Color.Lerp(col, new Color(0.86f, 0.84f, 0.78f), 0.75f);
+                float kind = 0;
                 foreach (var (type, ring) in polys)
-                    if (Inside(ring, x, y)) { col = Color.Lerp(col, TypeColour(type), 0.7f); break; }
+                    if (Inside(ring, x, y)) { col = Color.Lerp(col, TypeColour(type), 0.7f); kind = CoverOf(type); break; }
                 cols.Add(col);
+                cover.Add(new Vector2(kind, 0));
             }
             var tris = new List<int>();
             for (int r = 0; r < g.Rows - 1; r++)
@@ -90,6 +93,7 @@ namespace SpongePark
             m.SetVertices(verts);
             m.SetColors(cols);
             m.SetUVs(1, levels);
+            m.SetUVs(2, cover);
             m.SetTriangles(tris, 0);
             m.RecalculateNormals();
             m.RecalculateBounds();
@@ -98,6 +102,14 @@ namespace SpongePark
             if (collider == null) collider = gameObject.AddComponent<MeshCollider>();
             collider.sharedMesh = m;   // the design tools pick points on the ground
         }
+
+        /// 1 planted (rain garden, bioswale), 2 bare basin or pond, 3 gravel round a well.
+        static float CoverOf(string type) => type switch
+        {
+            "rain_garden" or "bioswale" => 1,
+            "recharge_well" => 3,
+            _ => 2
+        };
 
         public static Color TypeColour(string type) => type switch
         {
@@ -164,6 +176,15 @@ namespace SpongePark
             int c = Mathf.FloorToInt((x - Grid.Origin.x) / Grid.Cell), r = Mathf.FloorToInt((Grid.Origin.y - y) / Grid.Cell);
             if (r < 0 || c < 0 || r >= Grid.Rows || c >= Grid.Cols) return float.NaN;
             return Grid.Z[r * Grid.Cols + c];
+        }
+
+        /// Whether a survey point is on the park's own (surveyed) ground.
+        public bool InPark(float x, float y)
+        {
+            if (Grid == null) return false;
+            int c = Mathf.FloorToInt((x - Grid.Origin.x) / Grid.Cell), r = Mathf.FloorToInt((Grid.Origin.y - y) / Grid.Cell);
+            if (r < 0 || c < 0 || r >= Grid.Rows || c >= Grid.Cols || !Grid.Valid(r, c)) return false;
+            return Grid.Surveyed == null || Grid.Surveyed[r * Grid.Cols + c] == 1;
         }
     }
 }

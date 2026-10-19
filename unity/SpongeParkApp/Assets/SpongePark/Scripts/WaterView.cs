@@ -14,6 +14,7 @@ namespace SpongePark
         float[] ground;   // survey m per cell, NaN outside
         Vector3[] verts;
         Color[] colours;
+        Vector2[] depths;   // water depth (m) per vertex, for the shader
         Mesh mesh;
         SiteFrame frame;
         float originX, originY, cell;
@@ -24,7 +25,9 @@ namespace SpongePark
             go.transform.SetParent(parent, false);
             var w = go.AddComponent<WaterView>();
             go.AddComponent<MeshFilter>();
-            go.AddComponent<MeshRenderer>().sharedMaterial = new Material(Shader.Find("SpongePark/Water"));
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = new Material(Shader.Find("SpongePark/Water"));
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             return w;
         }
 
@@ -35,6 +38,7 @@ namespace SpongePark
             ground = new float[rows * cols];
             verts = new Vector3[rows * cols];
             colours = new Color[rows * cols];
+            depths = new Vector2[rows * cols];
             var tris = new System.Collections.Generic.List<int>();
             for (int r = 0; r < rows; r++)
             for (int c = 0; c < cols; c++)
@@ -59,9 +63,21 @@ namespace SpongePark
             GetComponent<MeshFilter>().sharedMesh = mesh;
         }
 
+        float[] shown;   // the depths last shown (m)
+
+        /// Water depth (m) at a survey point, as last shown; NaN outside the grid or before any water.
+        public float DepthAt(float x, float y)
+        {
+            if (shown == null) return float.NaN;
+            int c = Mathf.FloorToInt((x - originX) / cell), r = Mathf.FloorToInt((originY - y) / cell);
+            if (r < 0 || c < 0 || r >= rows || c >= cols) return float.NaN;
+            return shown[r * cols + c];
+        }
+
         public void Show(float[] depth)
         {
             if (mesh == null) return;
+            shown = depth;
             var shallow = new Color(0.55f, 0.78f, 0.95f, 0f);
             var deep = new Color(0.08f, 0.32f, 0.72f, 0.85f);
             for (int k = 0; k < verts.Length; k++)
@@ -71,6 +87,7 @@ namespace SpongePark
                 if (float.IsNaN(g) || d < showFromDepth)
                 {
                     colours[k] = shallow;
+                    depths[k] = Vector2.zero;
                     verts[k].y = float.IsNaN(g) ? 0f : (g - frame.ZRef) * frame.Exaggeration - 0.02f;
                     continue;
                 }
@@ -78,9 +95,11 @@ namespace SpongePark
                 var t = Mathf.Clamp01(d / fullColourDepth);
                 var col = Color.Lerp(new Color(0.55f, 0.78f, 0.95f, 0.45f), deep, t);
                 colours[k] = col;
+                depths[k] = new Vector2(d, 0);
             }
             mesh.vertices = verts;
             mesh.colors = colours;
+            mesh.uv = depths;
             mesh.RecalculateNormals();
         }
     }

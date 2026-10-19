@@ -26,15 +26,22 @@ namespace SpongePark
             return v;
         }
 
-        public void Build(JToken payload, SiteFrame frame, IDictionary<string, bool> visible)
+        /// ground: level (m) at a survey point; inPark: whether a survey point is on the park's own ground. With both,
+        /// and the low-poly packs, the lawns are planted (grass, flowers, bushes, rocks; bushes along the fence).
+        public void Build(JToken payload, SiteFrame frame, IDictionary<string, bool> visible,
+                          System.Func<float, float, float> ground = null, System.Func<float, float, bool> inPark = null)
         {
             foreach (var go in layers.Values) Destroy(go);
             layers.Clear();
+            if (planting != null) Destroy(planting);
             if (payload == null) return;
+            var kit = LowPolyKit.Kit;
+            var dressing = kit != null && ground != null && inPark != null ? new LowPolyDressing(frame, ground, inPark) : null;
             foreach (var L in payload["layers"])
             {
                 var name = (string)L["name"];
                 var mesh = new MeshBuilder();
+                var placed = new List<(GameObject[] set, Vector3 p, float size, int seed, bool vary, float height)>();   // pack pieces
                 var kind = (string)L["kind"];
                 bool fenced = kind == "boundary" && L["fenced"] != null && (bool)L["fenced"];
                 if (fenced) kind = "fence";   // the park is fenced
@@ -54,21 +61,31 @@ namespace SpongePark
                     {
                         var vs = new List<Vector3>(a.Length / 3);
                         for (int i = 0; i + 2 < a.Length; i += 3) vs.Add(frame.World(a[i], a[i + 1], a[i + 2]) + Vector3.up * lift);
-                        mesh.Surface(vs, f["tri"].Values<int>().ToArray(), fc);
+                        var tri = f["tri"].Values<int>().ToArray();
+                        mesh.Surface(vs, tri, fc);
+                        dressing?.KeepClear(a, tri, f["water"] != null && (bool)f["water"]);
                     }
                     else if (g == "point")
                     {
                         var p = frame.World(a[0], a[1], a[2]);
-                        if (kind == "gate" && f["width_m"] != null)
+                        float r = f["radius_m"] != null ? (float)f["radius_m"] : 0;
+                        if (kind == "tree" || kind == "palm") dressing?.Tree(a[0], a[1]);
+                        if (kind == "palm" && kit != null && LowPolyKit.Has(kit.palms))   // a coconut palm, fronds about 7 m across
+                            placed.Add((kit.palms, p, 7f, Seed(p), true, 0));
+                        else if (kind == "manhole" && kit != null && kit.manhole != null)
+                            placed.Add((new[] { kit.manhole }, p + Vector3.up * 0.02f, 0.9f, Seed(p), false, 0));
+                        else if (kind == "gate" && f["width_m"] != null)
                             mesh.Gate(p, (float)f["width_m"], f["angle_deg"] != null ? (float)f["angle_deg"] : 0, h > 0 ? h : 2.1f, fc);
                         else
-                            AddPoint(mesh, kind, p, f["radius_m"] != null ? (float)f["radius_m"] : 0, h, fc);
+                            AddPoint(mesh, kind, p, r, h, fc);
                     }
                     else
                     {
                         var pts = new List<Vector3>(a.Length / 3);
                         for (int i = 0; i + 2 < a.Length; i += 3) pts.Add(frame.World(a[i], a[i + 1], a[i + 2]));
                         bool closed = f["closed"] != null && (bool)f["closed"];
+                        if (kind == "building" || kind == "water") dressing?.KeepClear(a, null, false);
+                        if (kind == "fence" || kind == "boundary") dressing?.Fence(a);
                         if (f["on_ground"] != null && (bool)f["on_ground"]) mesh.Ribbon(pts, 0.12f, lift + 0.02f, new Color(0.6f, 0.58f, 0.52f));
                         else AddLine(mesh, kind, pts, closed, h, w, fc, lift + 0.02f);
                     }
@@ -77,10 +94,19 @@ namespace SpongePark
                 go.transform.SetParent(transform, false);
                 go.AddComponent<MeshFilter>().sharedMesh = mesh.ToMesh();
                 go.AddComponent<MeshRenderer>().sharedMaterial = material;
+                foreach (var (set, p, size, seed, vary, height) in placed) LowPolyKit.Place(set, p, size, seed, go.transform, unityLayer, vary, height);
                 go.SetActive(!visible.TryGetValue(name, out var on) || on);
                 layers[name] = go;
             }
+            if (dressing != null)   // the lawns planted, once every layer has said where not to
+            {
+                planting = new GameObject("planting") { layer = unityLayer };
+                planting.transform.SetParent(transform, false);
+                dressing.Plant(kit, planting.transform, unityLayer);
+            }
         }
+
+        GameObject planting;
 
         public void SetVisible(string name, bool on)
         {
@@ -89,6 +115,8 @@ namespace SpongePark
 
         // ------------------------------------------------------------ shapes
         static readonly Color Trunk = new Color(0.42f, 0.31f, 0.23f);
+        // every tree's crown (half its width, half its height) and the tree's height (m), display only
+        const float TreeCrownM = 2.5f, TreeCrownHalfHeightM = 3.5f, TreeHeightM = 11f;
         static int Seed(Vector3 p) => Mathf.Abs((int)(p.x * 73.1f) * 31 + (int)(p.z * 19.7f));
 
         static void AddLine(MeshBuilder m, string kind, List<Vector3> pts, bool closed, float h, float w, Color col, float lift)
@@ -124,8 +152,8 @@ namespace SpongePark
             {
                 case "tree":
                 {
-                    float cr = r > 0 ? Mathf.Clamp(r, 1.5f, 6f) : 2.8f;
-                    m.BroadleafTree(p, cr, Mathf.Max(h, cr * 2.2f), SpongeParkApp.Vary(col, p), Seed(p));
+                    // every tree the same: a lollipop with an upright oval crown (display only)
+                    m.LollipopTree(p, TreeCrownM, TreeCrownHalfHeightM, TreeHeightM, SpongeParkApp.Vary(col, p));
                     break;
                 }
                 case "palm":
@@ -312,41 +340,40 @@ namespace SpongePark
 
         static float Rand(int seed, int k) => Mathf.Abs(Mathf.Sin(seed * 12.9898f + k * 78.233f) * 43758.5453f) % 1f;
 
-        /// A broadleaf tree: tapered trunk splitting into branches, an irregular crown of clumps.
-        public void BroadleafTree(Vector3 p, float cr, float h, Color leaf, int seed)
+        /// A lollipop tree: a straight bare trunk under one smooth, upright oval crown.
+        public void LollipopTree(Vector3 p, float crownRadius, float crownHalfHeight, float h, Color leaf)
         {
             var bark = new Color(0.36f, 0.27f, 0.20f);
-            float trunkH = Mathf.Max(1.6f, h - 1.6f * cr);
-            float r0 = Mathf.Clamp(cr * 0.09f, 0.14f, 0.4f);
-            Trunk(p, r0, r0 * 0.7f, trunkH, bark);
-            var top = p + Vector3.up * trunkH;
-            var centre = top + Vector3.up * cr * 0.75f;
-            const int branches = 3;
-            for (int i = 0; i < branches; i++)
-            {
-                float a = (i + Rand(seed, i)) * Mathf.PI * 2 / branches;
-                var tip = centre + new Vector3(Mathf.Cos(a) * cr * 0.45f, cr * 0.1f, Mathf.Sin(a) * cr * 0.45f);
-                Beam(top, tip, r0 * 0.9f, bark);
-            }
-            // clumps: one large in the middle, more around it, each a little lumpy
-            LumpyCrown(centre, cr * 0.72f, leaf, seed);
-            const int clumps = 6;
-            for (int i = 0; i < clumps; i++)
-            {
-                float a = (i + Rand(seed, 10 + i) * 0.6f) * Mathf.PI * 2 / clumps;
-                float d = cr * (0.45f + 0.2f * Rand(seed, 20 + i));
-                float y = cr * (Rand(seed, 30 + i) - 0.45f) * 0.6f;
-                var c = centre + new Vector3(Mathf.Cos(a) * d, y, Mathf.Sin(a) * d);
-                var tint = leaf * (0.82f + 0.3f * Rand(seed, 40 + i));
-                tint.a = 1;
-                LumpyCrown(c, cr * (0.42f + 0.14f * Rand(seed, 50 + i)), tint, seed + i * 7);
-            }
+            float trunkTop = h - crownHalfHeight;   // the trunk runs up into the crown's middle
+            Trunk(p, 0.22f, 0.16f, trunkTop, bark);
+            OvalCrown(p + Vector3.up * (h - crownHalfHeight), crownRadius, crownHalfHeight, leaf);
         }
 
-        /// A crown clump: a sphere pushed in and out a little so it does not look like a ball.
-        public void LumpyCrown(Vector3 c, float r, Color col, int seed)
+        /// A smooth ellipsoid crown, rx across and ry up, lighter on top and shaded underneath.
+        public void OvalCrown(Vector3 c, float rx, float ry, Color col)
         {
-            const int seg = 10, rings = 7;
+            const int seg = 16, rings = 12;
+            var top = Color.Lerp(col, Color.white, 0.12f);
+            var bottom = col * 0.7f;
+            top.a = bottom.a = 1;
+            Vector3 U(int i, int j) => new Vector3(Mathf.Sin(Mathf.PI * i / rings) * Mathf.Cos(2 * Mathf.PI * j / seg),
+                                                   Mathf.Cos(Mathf.PI * i / rings),
+                                                   Mathf.Sin(Mathf.PI * i / rings) * Mathf.Sin(2 * Mathf.PI * j / seg));
+            Vector3 P(Vector3 u) => c + new Vector3(u.x * rx, u.y * ry, u.z * rx);
+            Vector3 N(Vector3 u) => new Vector3(u.x / rx, u.y / ry, u.z / rx).normalized;   // the ellipsoid's own normal
+            Color C(int i) => Color.Lerp(top, bottom, i / (float)rings);
+            for (int i = 0; i < rings; i++)
+                for (int j = 0; j < seg; j++)
+                {
+                    Vector3 u00 = U(i, j), u01 = U(i, j + 1), u10 = U(i + 1, j), u11 = U(i + 1, j + 1);
+                    SmoothTri(P(u00), P(u01), P(u11), N(u00), N(u01), N(u11), C(i), C(i), C(i + 1));
+                    SmoothTri(P(u00), P(u11), P(u10), N(u00), N(u11), N(u10), C(i), C(i + 1), C(i + 1));
+                }
+        }
+
+        /// A crown clump: a sphere pushed in and out a little so it does not look like a ball; squash < 1 flattens it.
+        public void LumpyCrown(Vector3 c, float r, Color col, int seed, float squash = 1f, int seg = 10, int rings = 7)
+        {
             var top = Color.Lerp(col, Color.white, 0.1f);
             var bottom = col * 0.62f;
             top.a = bottom.a = 1;
@@ -362,11 +389,13 @@ namespace SpongePark
                 return r * (1 + 0.13f * Mathf.Sin(3 * f + ph) * Mathf.Sin(2 * t + ph * 1.7f) + 0.07f * Mathf.Sin(5 * f - ph));
             }
             Color C(int i) => Color.Lerp(top, bottom, i / (float)rings);
+            var sq = new Vector3(1, squash, 1);
             for (int i = 0; i < rings; i++)
                 for (int j = 0; j < seg; j++)
                 {
                     Vector3 n00 = N(i, j), n01 = N(i, j + 1), n10 = N(i + 1, j), n11 = N(i + 1, j + 1);
-                    Vector3 p00 = c + n00 * Rr(i, j), p01 = c + n01 * Rr(i, j + 1), p10 = c + n10 * Rr(i + 1, j), p11 = c + n11 * Rr(i + 1, j + 1);
+                    Vector3 p00 = c + Vector3.Scale(n00 * Rr(i, j), sq), p01 = c + Vector3.Scale(n01 * Rr(i, j + 1), sq),
+                            p10 = c + Vector3.Scale(n10 * Rr(i + 1, j), sq), p11 = c + Vector3.Scale(n11 * Rr(i + 1, j + 1), sq);
                     SmoothTri(p00, p01, p11, n00, n01, n11, C(i), C(i), C(i + 1));
                     SmoothTri(p00, p11, p10, n00, n11, n10, C(i), C(i + 1), C(i + 1));
                 }

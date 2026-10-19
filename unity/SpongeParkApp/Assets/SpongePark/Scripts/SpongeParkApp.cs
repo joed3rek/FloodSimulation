@@ -55,15 +55,17 @@ namespace SpongePark
             light.type = LightType.Directional;
             light.transform.rotation = Quaternion.Euler(50, -30, 0);
             SetupAtmosphere(light);
-            // paper behind everything (the sidebar area is outside the scene cameras' viewports)
+            // the workspace's background behind everything (the panels are outside the scene cameras' viewport)
             var bg = new GameObject("background").AddComponent<Camera>();
             bg.cullingMask = 0;
             bg.depth = -10;
             bg.clearFlags = CameraClearFlags.SolidColor;
-            bg.backgroundColor = new Color(0.992f, 0.988f, 0.973f);
+            bg.backgroundColor = new Color32(0x16, 0x18, 0x1B, 0xFF);
             camLeft = MakeCamera("camera left", LayerLeft, out rigLeft);
             camRight = MakeCamera("camera right", LayerRight, out rigRight);
             rigRight.Follow = rigLeft;
+            MakeRain();
+            MakeSky();
             if (Camera.main != null && Camera.main != camLeft && Camera.main != camRight) Camera.main.enabled = false;
             video = camLeft.gameObject.AddComponent<VideoCapture>();
             left = SiteView.Create("existing", transform, LayerLeft);
@@ -163,9 +165,14 @@ namespace SpongePark
                 rigLeft.Target = frame.World(lx, ly, left.Terrain.GroundAt(lx, ly) is var gz && !float.IsNaN(gz) ? gz : frame.ZRef);
             yield return new WaitForSecondsRealtime(1);
             if (Arg("-spDraw") != null) { yield return DrawForTest(Arg("-spDraw")); yield return new WaitForSecondsRealtime(2); }
-            if (float.TryParse(Arg("-spScroll"), out var sc) && sidebarScroll != null) sidebarScroll.scrollOffset = new Vector2(0, sc);
+            if (float.TryParse(Arg("-spAfter"), out var after)) yield return new WaitForSecondsRealtime(after);   // -spAfter s: let the storm play
+            // workspace checks: -spPanel <name> opens a panel, tab or dialog (several: -spPanel tab:design,checks);
+            // -spScroll <px> scrolls the open Properties tab
+            if (Arg("-spPanel") != null) foreach (var name in Arg("-spPanel").Split(',')) OpenPanel(name.Trim());
+            if (float.TryParse(Arg("-spScroll"), out var sc) && props != null) props.Page(ui.PropsTab).scrollOffset = new Vector2(0, sc);
             yield return new WaitForSecondsRealtime(0.5f);
             Debug.Log($"camera: plan {rigLeft.Plan} pitch {rigLeft.Pitch} yaw {rigLeft.Yaw} distance {rigLeft.Distance} ortho {camLeft.orthographic}");
+            Debug.Log($"frame rate: {1f / Mathf.Max(1e-4f, Time.smoothDeltaTime):0} fps");
             if (plan != null) Debug.Log($"plan zoom {plan.Zoom:0.000} offset {plan.Offset} size {plan.contentRect.size}");
             ScreenCapture.CaptureScreenshot(Arg("-spShot"));
             yield return new WaitForSecondsRealtime(2);
@@ -188,16 +195,18 @@ namespace SpongePark
             var cam = go.AddComponent<Camera>();
             cam.cullingMask = 1 << layer;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.992f, 0.988f, 0.973f);   // rice paper, as the web app
+            cam.backgroundColor = new Color32(0x1A, 0x1D, 0x21, 0xFF);   // the dark workspace's plan
             cam.farClipPlane = 5000;
             rig = go.AddComponent<CameraRig>();
             return cam;
         }
 
+        /// The cameras fill the workspace's viewport (viewRect, set from its layout); split view halves it.
         void ApplyViewports()
         {
-            camLeft.rect = sideBySide ? new Rect(0.3f, 0, 0.35f, 1) : new Rect(0.3f, 0, 0.7f, 1);
-            camRight.rect = new Rect(0.65f, 0, 0.35f, 1);
+            var r = viewRect;
+            camLeft.rect = sideBySide ? new Rect(r.x, r.y, r.width / 2, r.height) : r;
+            camRight.rect = new Rect(r.x + r.width / 2, r.y, r.width / 2, r.height);
             camRight.enabled = sideBySide;
             if (!sideBySide)
                 camLeft.cullingMask = 1 << (showProposed ? LayerRight : LayerLeft);
@@ -255,6 +264,8 @@ namespace SpongePark
             selectedId = null;
             tool = null;
             yield return Refresh();
+            yield return LoadOnboarding();
+            designVerified = false;
             Remember((string)r["path"] ?? projectPath, (string)r["name"]);   // the engine's resolved path
             status = $"Opened {(string)r["name"]}.";
             // show the site straight away: the ground model and what the survey drawing shows
@@ -267,7 +278,7 @@ namespace SpongePark
             yield return api.Send("POST", api.P("/site/confirm"), new { confirmed }, x => r = x);
             if (r == null) yield break;
             siteConfirmed = confirmed;
-            status = confirmed ? "Site model confirmed. Step 2 shows where water runs and collects." : "Site model reopened.";
+            status = confirmed ? "Site model confirmed. The Analyse tab shows where water runs and collects." : "Site model reopened.";
             if (confirmed) yield return LoadFlow();
         }
 
@@ -370,8 +381,8 @@ namespace SpongePark
             bool contours = !layerVisible.TryGetValue(ContoursLayer, out var con) || con;
             left.Terrain.SetContours(contours);
             right.Terrain.SetContours(contours);
-            left.Survey.Build(surveyLayers, frame, layerVisible);
-            right.Survey.Build(surveyLayers, frame, layerVisible);
+            left.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
+            right.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
             if (siteConfirmed && !bundle) yield return LoadFlow();
             yield return LoadComparison();
             if (designFor == projectPath && designFc != null && siteConfirmed) { yield return ShowDesignGround(); RefreshDesign(); }
@@ -381,7 +392,7 @@ namespace SpongePark
             rigLeft.Frame(b, sideBySide); rigRight.Frame(b, sideBySide);
             simT = 0;
             status = left.Frames != null ? $"{CurrentRp}-yr storm loaded. Press Play."
-                : "Site model loaded: drag to orbit, scroll to zoom. Check the layers in Step 1.";
+                : "Site model loaded: drag to orbit, scroll to zoom. Check the layers in Contents.";
         }
 
         IEnumerator StartLive()
@@ -425,6 +436,7 @@ namespace SpongePark
         void Update()
         {
             DesignInput();
+            UpdateWeather();
             if (!playing) return;
             float dtSim = Time.deltaTime * speed;
             simT += dtSim;

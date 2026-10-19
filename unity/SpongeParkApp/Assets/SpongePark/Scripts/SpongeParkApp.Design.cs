@@ -1,4 +1,4 @@
-// Step 2 (flow and flooding) and Step 3 (design) of the main view.
+// Flow and flooding (Analyse and Simulate tabs) and design (Design tab) of the workspace.
 // Step 2 shows where water runs and collects on the existing ground (engine /flow), in 3D or as a plan,
 // and runs the flood simulation once rainfall and infiltration are in the project.
 // Step 3 places NbS by hand: draw on the ground (polygon: rain garden, ponds; line: bioswale; click:
@@ -35,11 +35,8 @@ namespace SpongePark
             ["safety_bench_width_m"] = "Safety bench width (m)", ["well_diameter_m"] = "Well diameter (m)", ["well_depth_m"] = "Well depth (m)",
         };
 
-        VisualElement flowStep, drawStep, hotspotList, toolRow, elementList, propsBox, warnBox, budgetFill;
+        VisualElement hotspotList, propsBox, warnBox, budgetFill, budgetBar;
         Label flowText, floodText, drawHint, budgetLabel;
-        Button floodButton;
-        readonly Dictionary<string, Button> toolChips = new Dictionary<string, Button>();
-        readonly Dictionary<string, Button> flowChips = new Dictionary<string, Button>();
         JToken flowData, designTools, designResult;
         JObject designFc;
         string designFor;                     // project the design state belongs to
@@ -47,100 +44,44 @@ namespace SpongePark
         string selectedId;
         readonly List<Vector2> drawPts = new List<Vector2>();
         readonly Stack<string> undoStack = new Stack<string>(), redoStack = new Stack<string>();
-        float lastClick;
+        float lastClick, budgetUsed, budgetLimit = 10;
         Vector2 lastClickXY;
         bool dragging;
         Vector2 dragFrom;
         int vertexDrag = -1;   // corner of the selected element being dragged
 
-        // ------------------------------------------------------------ panels
-        void BuildFlowAndDesign(VisualElement scroll)
+        // ------------------------------------------------------------ parts placed in the workspace
+        /// The controls of the flow and design steps, placed by the workspace (Properties, Checks, Results, viewport).
+        void BuildFlowAndDesignParts()
         {
-            // Step 2: flow and flooding
-            flowStep = Section(scroll, "Step 2", "Flow and flooding");
-            BuildGroundAndRain(flowStep);
-            flowStep.Add(Text("WHERE WATER RUNS AND COLLECTS", "eyebrow"));
             flowText = Text("Confirm the site model to see where water runs.", "muted");
-            flowStep.Add(flowText);
-            var fr = Row();
-            BuildViewSwitch(fr);
-            BuildHeightChips(fr);
-            foreach (var (key, label) in new[] { (FlowView.Lines, "Flow lines"), (FlowView.Arrows, "Arrows"), (FlowView.Ponding, "Ponding"), (FlowView.Exits, "Exits") })
-            {
-                var k = key;
-                var c = Chip(label, () => SetFlow(k, !FlowOn(k)));
-                flowChips[k] = c;
-                fr.Add(c);
-            }
-            flowStep.Add(fr);
             hotspotList = new VisualElement();
             hotspotList.AddToClassList("layer-list");
-            flowStep.Add(hotspotList);
-            var flood = Card("card--stone");
-            flood.Add(Text("FLOOD SIMULATION", "eyebrow"));
             floodText = Text("", "muted");
-            flood.Add(floodText);
-            floodButton = Btn("Run the flood simulation", () => StartCoroutine(Run(RunFlood(), "Running the flood simulation")), "btn--wide");
-            flood.Add(floodButton);
-            flowStep.Add(flood);
-
-            // Step 3: design
-            drawStep = Section(scroll, "Step 3", "Design");
-            drawStep.Add(Text("Start from a suggested layout, or choose a tool and draw on the ground. Each change is carved into the ground, the water replays on it, and SWMM checks it.", "muted"));
-            BuildSuggest(drawStep);
-            toolRow = Row();
-            var sel = Chip("Select", () => SetTool(null));
-            toolChips[""] = sel;
-            toolRow.Add(sel);
-            foreach (var t in ToolTypes)
-            {
-                var tt = t;
-                var c = Chip(ToolNames[t], () => SetTool(tt));
-                toolChips[t] = c;
-                toolRow.Add(c);
-            }
-            drawStep.Add(toolRow);
-            drawHint = Text("", "hint");
-            drawStep.Add(drawHint);
-            var ur = Row();
-            ur.Add(Btn("Undo", () => Undo(), "btn--ghost"));
-            ur.Add(Btn("Redo", () => Redo(), "btn--ghost"));
-            ur.Add(Btn("Delete", () => DeleteSelected(), "btn--ghost"));
-            drawStep.Add(ur);
+            drawHint = Text("", "vp-hint");
             budgetLabel = Text("", "muted");
-            drawStep.Add(budgetLabel);
-            var bar = new VisualElement();
-            bar.AddToClassList("budget-bar");
+            budgetBar = new VisualElement();
+            budgetBar.AddToClassList("budget-bar");
             budgetFill = new VisualElement();
             budgetFill.AddToClassList("budget-fill");
-            bar.Add(budgetFill);
-            drawStep.Add(bar);
+            budgetBar.Add(budgetFill);
             warnBox = new VisualElement();
-            drawStep.Add(warnBox);
-            elementList = new VisualElement();
-            elementList.AddToClassList("layer-list");
-            drawStep.Add(elementList);
             propsBox = new VisualElement();
-            drawStep.Add(propsBox);
         }
+
+        bool FloodReady => (bool?)info?["has_rainfall"] == true && ((bool?)info?["has_ground"] == true || (bool?)info?["has_soils"] == true);
 
         void SyncFlowAndDesign()
         {
-            if (flowStep == null) return;
-            var show = siteConfirmed ? DisplayStyle.Flex : DisplayStyle.None;
-            flowStep.style.display = show;
-            drawStep.style.display = show;
+            if (flowText == null) return;
             SyncGroundAndRain();
-            foreach (var kv in flowChips) kv.Value.EnableInClassList("chip--on", FlowOn(kv.Key));
-            foreach (var kv in toolChips) kv.Value.EnableInClassList("chip--on", (tool ?? "") == kv.Key);
             bool rain = (bool?)info?["has_rainfall"] == true, soils = (bool?)info?["has_ground"] == true || (bool?)info?["has_soils"] == true;
             floodText.text = rain && soils
                 ? $"Runs the {CurrentRp}-year storm over the existing ground: depths, flooded area and the water animation."
                 : "First " + (rain ? "" : "use the design rainfall") + (!rain && !soils ? " and " : "") + (soils ? "" : "answer the ground questions") +
-                  " above. The flow lines and hotspots need neither.";
-            floodButton.SetEnabled(rain && soils && !busy);
+                  " (Site > Site setup). The flow lines and hotspots need neither.";
             drawHint.text = tool == null
-                ? (selectedId != null ? $"{selectedId} selected: drag a corner to change its shape, drag inside to move it, Delete to remove; depth and sizes below." : "Click an element to select it. Right-drag to orbit, scroll to zoom.")
+                ? (selectedId != null ? $"{selectedId} selected: drag a corner to change its shape, drag inside to move it, Delete to remove; sizes in Properties." : "")
                 : DrawOf(tool) == "point" ? $"Click on the ground to place a {ToolNames[tool].ToLower()}."
                 : DrawOf(tool) == "line" ? "Click along the swale's line; double-click or Enter to finish, Backspace removes the last point, Esc cancels."
                 : "Click the corners on the ground; double-click or Enter to finish, Backspace removes the last corner, Esc cancels.";
@@ -254,7 +195,7 @@ namespace SpongePark
             showProposed = true;
             ApplyViewports();
             yield return right.Load(api, frame, CurrentRp, false);
-            right.Survey.Build(surveyLayers, frame, layerVisible);
+            right.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
             right.Terrain.SetContours(!layerVisible.TryGetValue(ContoursLayer, out var con) || con);
             if (flowData != null) right.Flow.Build(flowData, frame, layerVisible);
         }
@@ -277,33 +218,15 @@ namespace SpongePark
             budgetLabel.text = $"Area used: {used:0.0} % of the park ({m2:0} m²); budget {limit:0.#} %";
             budgetFill.style.width = Length.Percent(Mathf.Clamp01(limit > 0 ? used / limit : 0) * 100);
             budgetFill.EnableInClassList("budget-fill--over", used > limit);
+            budgetUsed = used;
+            budgetLimit = limit;
             warnBox.Clear();
             foreach (var w in designResult["warnings"] ?? new JArray())
             {
                 var l = Text("Check: " + (string)w["text"], "warn-item");
                 warnBox.Add(l);
             }
-            elementList.Clear();
-            foreach (var e in designResult["elements"] ?? new JArray())
-            {
-                var id = (string)e["id"];
-                var type = (string)e["type"];
-                var b = new Button(() => Select(id, true));
-                b.AddToClassList("layer-row");
-                b.EnableInClassList("layer-row--selected", id == selectedId);
-                var sw = new VisualElement { pickingMode = PickingMode.Ignore };
-                sw.AddToClassList("layer-swatch");
-                sw.style.backgroundColor = DesignOverlay.TypeColour(type);
-                b.Add(sw);
-                var w = new VisualElement { pickingMode = PickingMode.Ignore };
-                w.AddToClassList("layer-words");
-                w.Add(Text($"{id} · {(ToolNames.TryGetValue(type, out var n) ? n : type)}", "layer-title"));
-                var size = e["length_m"] != null ? $"{(float)e["length_m"]:0} m long" : $"{(float)e["area_m2"]:0.#} m²";
-                w.Add(Text($"{size} · stores about {(float)e["storage_m3"]:0.#} m³", "layer-source"));
-                b.Add(w);
-                elementList.Add(b);
-            }
-            if (!(designResult["elements"] ?? new JArray()).Any()) elementList.Add(Text("No elements yet: choose a tool above.", "muted"));
+            contentsDirty = true;   // the Design group of Contents lists the elements
             BuildProps();
         }
 
@@ -314,7 +237,7 @@ namespace SpongePark
             if (f == null || designTools == null) return;
             var p = (JObject)f["properties"];
             var type = (string)p["type"];
-            var card = Card("card--sand");
+            var card = new VisualElement();
             card.Add(Text($"{selectedId} · {ToolNames[type].ToUpper()}", "eyebrow"));
             var pending = new Dictionary<string, float>();
             foreach (var kv in ((JObject)designTools[type]["defaults"]).Properties())
@@ -384,7 +307,7 @@ namespace SpongePark
 
         static string ActionWord(string a) => a switch
         {
-            "create" => "Placed", "move" => "Moved", "resize" => "Resized", "delete" => "Deleted",
+            "create" => "Placed", "move" => "Moved", "resize" => "Resized", "delete" => "Deleted", "reshape" => "Reshaped",
             "undo" => "Undone", "redo" => "Redone", _ => "Changed"
         };
 
@@ -476,7 +399,9 @@ namespace SpongePark
             }
             else FinishShape();
             yield return null;
-            while (busy) yield return null;
+            float until = Time.realtimeSinceStartup + 120;
+            while (busy && Time.realtimeSinceStartup < until) yield return null;
+            if (busy) Debug.Log($"draw test: still busy after 2 minutes; status: {status}");
             SetTool(null);
             var centre = new Vector3(camLeft.pixelRect.center.x, camLeft.pixelRect.center.y, 0);
             Debug.Log(PickAt(centre, out var xy, out _) ? $"pick at screen centre: {xy.x:0.0}, {xy.y:0.0}" : "pick at screen centre: nothing");
@@ -502,7 +427,7 @@ namespace SpongePark
 
         void DesignInput()
         {
-            if (drawStep == null || drawStep.style.display == DisplayStyle.None || designFc == null || busy || frame == null) return;
+            if (!siteConfirmed || designFc == null || busy || frame == null) return;
             if (CameraRig.BlockInput != null && CameraRig.BlockInput()) return;
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             if (ctrl && Input.GetKeyDown(KeyCode.Z)) { Undo(); return; }

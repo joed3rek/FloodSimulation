@@ -1,7 +1,10 @@
-// Step 2, before the flood simulation: the design rainfall and the ground questionnaire.
+// Site setup (a dialog from the Site tab, pages Rainfall, Ground and Ponds): the design rainfall and the ground
+// questionnaire, before the flood simulation.
 // Rainfall: the IMD 24-hour design depths (a preset kept with its source) become the design storms.
 // Ground: soil type, what covers the open park and in what condition, and the footpaths; the engine looks up
 // the TR-55 curve numbers (with their table and page) and shows a runoff check per storm.
+// Ponds: each pond in the park needs its depth and how deep the water usually stands; the room between is cut
+// into the ground model, so the flow analysis, the 2D flood model and SWMM store water in it.
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,9 +16,13 @@ namespace SpongePark
 {
     public partial class SpongeParkApp
     {
-        VisualElement rainCard, groundCard, coverRows;
+        VisualElement rainCard, groundCard, coverRows, pondCard, pondRows;
+        Label pondText;
+        Button pondSave;
+        class PondRow { public string Id; public TextField Depth, Water; }
+        readonly List<PondRow> pondFields = new List<PondRow>();
         Label rainText, groundResult;
-        Button rainButton, view2d, view3d;
+        Button rainButton;
         DropdownField soilField, pathsField;
         JToken groundQuestions, rainPresets, groundSaved, rainSaved;
         string groundFor;
@@ -24,18 +31,18 @@ namespace SpongePark
         class CoverRow { public DropdownField Cover, Condition; public TextField Share; public VisualElement Root; }
         readonly List<CoverRow> covers = new List<CoverRow>();
 
-        void BuildGroundAndRain(VisualElement step)
+        /// The three pages of Site setup.
+        void BuildGroundAndRain(VisualElement rainPage, VisualElement groundPage, VisualElement pondPage)
         {
-            step.Add(Text("FIRST, THE RAIN AND THE GROUND", "eyebrow"));
-            rainCard = Card("card--stone");
+            rainCard = new VisualElement();
             rainCard.Add(Text("DESIGN RAINFALL", "eyebrow"));
             rainText = Text("", "muted");
             rainCard.Add(rainText);
             rainButton = Btn("Use this rainfall", () => StartCoroutine(Run(UsePresetRain(), "Making the design storms")), "btn--wide");
             rainCard.Add(rainButton);
-            step.Add(rainCard);
+            rainPage.Add(rainCard);
 
-            groundCard = Card("card--sand");
+            groundCard = new VisualElement();
             groundCard.Add(Text("THE GROUND (TR-55 QUESTIONNAIRE)", "eyebrow"));
             groundCard.Add(Text("How much rain soaks in depends on the soil and what covers it. Answer for the open park; buildings and paved paths are counted as hard surfaces.", "muted"));
             soilField = new DropdownField("What is the soil like?", new List<string> { "…" }, 0);
@@ -55,22 +62,22 @@ namespace SpongePark
             groundCard.Add(Btn("Save the answers", () => StartCoroutine(Run(SaveGround(), "Looking up the curve numbers")), "btn--wide"));
             groundResult = Text("", "muted");
             groundCard.Add(groundResult);
-            step.Add(groundCard);
-        }
+            groundPage.Add(groundCard);
 
-        void BuildViewSwitch(VisualElement row)
-        {
-            view2d = Chip("2D plan", () => rigLeft.Plan = true);
-            view3d = Chip("3D", () => rigLeft.Plan = false);
-            row.Add(view2d);
-            row.Add(view3d);
+            pondCard = new VisualElement();
+            pondCard.Add(Text("PONDS", "eyebrow"));
+            pondText = Text("", "muted");
+            pondCard.Add(pondText);
+            pondRows = new VisualElement();
+            pondCard.Add(pondRows);
+            pondSave = Btn("Save the ponds", () => StartCoroutine(Run(SavePonds(), "Cutting the ponds into the ground model")), "btn--wide");
+            pondCard.Add(pondSave);
+            pondPage.Add(pondCard);
         }
 
         void SyncGroundAndRain()
         {
-            if (view2d == null) return;
-            view2d.EnableInClassList("chip--on", rigLeft.Plan);
-            view3d.EnableInClassList("chip--on", !rigLeft.Plan);
+            if (rainCard == null) return;
             if (siteConfirmed && info != null && groundFor != projectPath && !busy) StartCoroutine(LoadGroundAndRain());
         }
 
@@ -87,6 +94,58 @@ namespace SpongePark
             rainSaved = r != null && r.HasValues ? r : null;
             FillGround();
             FillRain();
+            JToken ponds = null;
+            yield return api.Get(api.P("/site/ponds"), x => ponds = x);
+            FillPonds(ponds?["ponds"]);
+        }
+
+        // ------------------------------------------------------------ ponds
+        void FillPonds(JToken ponds)
+        {
+            pondRows.Clear();
+            pondFields.Clear();
+            bool any = ponds is JArray a && a.Count > 0;
+            pondSave.style.display = any ? DisplayStyle.Flex : DisplayStyle.None;
+            if (!any)
+            {
+                pondText.text = "The survey shows no ponds in this park (closed outlines on its water layer). Nothing to answer here.";
+                return;
+            }
+            int missing = ponds.Count(x => (bool?)x["in_model"] != true);
+            pondText.text = "A pond holds rain until it overflows. The survey has its outline but not its bottom, so give, for each pond, " +
+                            "how deep it is from its edge to the bottom and how deep the water usually stands (0 if dry). " +
+                            "The room between them is its storage in the flood model." +
+                            (missing > 0 ? $"\nCheck: {missing} pond{(missing == 1 ? " is" : "s are")} not in the flood model until answered." : "");
+            foreach (var p in ponds)
+            {
+                var row = new PondRow { Id = (string)p["id"] };
+                row.Depth = new TextField("Depth (m)") { value = p["depth_m"]?.Type == JTokenType.Null || p["depth_m"] == null ? "" : ((float)p["depth_m"]).ToString("0.##") };
+                row.Water = new TextField("Water usually (m)") { value = p["water_m"]?.Type == JTokenType.Null || p["water_m"] == null ? "" : ((float)p["water_m"]).ToString("0.##") };
+                row.Depth.AddToClassList("input");
+                row.Water.AddToClassList("input");
+                var box = new VisualElement();
+                box.AddToClassList("cover-row");
+                var storage = (bool?)p["in_model"] == true ? $": stores {(float)p["storage_m3"]:0} m³ in a storm" : ": not in the flood model yet";
+                box.Add(Text($"{row.Id}, {(float)p["area_m2"]:0} m², edge at {(float)p["edge_level_m"]:0.00} m{storage}", "field-label"));
+                var line = Row();
+                line.Add(row.Depth);
+                line.Add(row.Water);
+                box.Add(line);
+                pondRows.Add(box);
+                pondFields.Add(row);
+            }
+        }
+
+        IEnumerator SavePonds()
+        {
+            float? Num(TextField f) => float.TryParse(f.value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (float?)null;
+            var answers = new JArray(pondFields.Select(r => new JObject { ["id"] = r.Id, ["depth_m"] = Num(r.Depth), ["water_m"] = Num(r.Water) }));
+            JToken r2 = null;
+            yield return api.Send("PUT", api.P("/site/ponds"), new JObject { ["answers"] = answers }, x => r2 = x);
+            if (r2 == null) yield break;
+            FillPonds(r2["ponds"]);
+            status = $"Ponds saved: {(float)r2["room_m3"]:0} m³ of room cut into the ground model; the flow lines are redone on it.";
+            yield return LoadViews();
         }
 
         // ------------------------------------------------------------ rainfall

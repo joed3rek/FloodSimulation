@@ -199,7 +199,7 @@ class EditLogEntry(SpongeModel):
 
     time: str = Field(default_factory=utcnow)
     scenario: str
-    action: Literal["accept", "accept_and_edit", "reject", "create", "edit", "move", "resize", "delete", "lock", "unlock"]
+    action: Literal["accept", "accept_and_edit", "reject", "create", "edit", "move", "resize", "reshape", "delete", "undo", "redo", "lock", "unlock"]
     element_id: Optional[str] = None
     proposal_id: Optional[str] = None
     before: Optional[Dict[str, Any]] = None
@@ -282,6 +282,22 @@ class FlowAnalysis(SpongeModel):
 
 
 # the files and the model that describes each (used for the schema and for validation)
+OnboardingStage = Literal["import_survey", "confirm_site", "site_setup", "analyse_flow", "flood_simulation",
+                          "design_nbs", "verify", "export"]
+
+
+class Onboarding(SpongeModel):
+    """onboarding.json: the guided first project (the app's checklist), so it resumes when the project is reopened.
+
+    Most stages are done when the project says so (a survey, a confirmed site, rainfall and ground answers ...);
+    ``done`` records the ones only the app sees (the flow looked at, the design verified, the deliverables exported)."""
+
+    guided: bool = True                         # show the checklist for this project
+    done: List[OnboardingStage] = Field(default_factory=list)
+    coach_seen: List[OnboardingStage] = Field(default_factory=list)   # stages whose coach marks were shown
+    modified: str = Field(default_factory=utcnow)
+
+
 FILES: Dict[str, type] = {
     "manifest.json": Manifest,
     "parameters.json": ParameterRecord,  # a map of name -> ParameterRecord
@@ -294,4 +310,5 @@ FILES: Dict[str, type] = {
     "proposals/<id>.json": Proposal,
     "site/survey_layers.json": SurveyLayers,
     "site/flow_analysis.json": FlowAnalysis,
+    "onboarding.json": Onboarding,
 }

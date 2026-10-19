@@ -65,7 +65,10 @@
             "edit",
             "move",
             "resize",
+            "reshape",
             "delete",
+            "undo",
+            "redo",
             "lock",
             "unlock"
           ],
@@ -773,6 +776,57 @@
       "title": "Manifest",
       "type": "object"
     },
+    "Onboarding": {
+      "additionalProperties": true,
+      "description": "onboarding.json: the guided first project (the app's checklist), so it resumes when the project is reopened.\n\nMost stages are done when the project says so (a survey, a confirmed site, rainfall and ground answers ...);\n``done`` records the ones only the app sees (the flow looked at, the design verified, the deliverables exported).",
+      "properties": {
+        "coach_seen": {
+          "items": {
+            "enum": [
+              "import_survey",
+              "confirm_site",
+              "site_setup",
+              "analyse_flow",
+              "flood_simulation",
+              "design_nbs",
+              "verify",
+              "export"
+            ],
+            "type": "string"
+          },
+          "title": "Coach Seen",
+          "type": "array"
+        },
+        "done": {
+          "items": {
+            "enum": [
+              "import_survey",
+              "confirm_site",
+              "site_setup",
+              "analyse_flow",
+              "flood_simulation",
+              "design_nbs",
+              "verify",
+              "export"
+            ],
+            "type": "string"
+          },
+          "title": "Done",
+          "type": "array"
+        },
+        "guided": {
+          "default": true,
+          "title": "Guided",
+          "type": "boolean"
+        },
+        "modified": {
+          "title": "Modified",
+          "type": "string"
+        }
+      },
+      "title": "Onboarding",
+      "type": "object"
+    },
     "Outlet": {
       "additionalProperties": true,
       "properties": {
@@ -1440,6 +1494,10 @@
     },
     "manifest.json": {
       "$ref": "#/$defs/Manifest",
+      "map_of": false
+    },
+    "onboarding.json": {
+      "$ref": "#/$defs/Onboarding",
       "map_of": false
     },
     "parameters.json": {

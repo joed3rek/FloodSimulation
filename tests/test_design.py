@@ -112,3 +112,46 @@ def test_an_element_wholly_on_keep_out_ground_is_kept_but_not_carved(site):
     texts = [w["text"] for w in r["result"]["warnings"]]
     assert any("RG5" in t and ("not carved" in t or "keep-out" in t) for t in texts), texts
     c.post(f"/projects/{pid}/close")
+
+
+def test_every_edit_the_app_sends_is_logged(site):
+    """The app sends create, move, resize, reshape (corner drag), delete, undo and redo; each must be accepted."""
+    import re
+    from pathlib import Path
+
+    src = (Path(__file__).parents[1] / "unity/SpongeParkApp/Assets/SpongePark/Scripts/SpongeParkApp.Design.cs").read_text(encoding="utf-8")
+    sent = set(re.findall(r'SendDesign\("([a-z_]+)"', src))
+    assert {"create", "move", "reshape", "undo"} <= sent
+
+    c = TestClient(app)
+    pid = c.post("/projects/open", json={"path": site}).json()["project"]
+    square = [[30, 20], [40, 20], [40, 28], [30, 28], [30, 20]]
+    for action in sorted(sent):
+        ring = [list(q) for q in square]
+        if action == "reshape":
+            ring[2] = [42, 30]          # one corner dragged out
+        rg = ({"type": "Polygon", "coordinates": [ring]}, {"id": "RG1", "type": "rain_garden"})
+        r = c.put(f"/projects/{pid}/design/design?wait=true",
+                  json={"features": _fc(rg), "action": action, "element_id": "RG1"}).json()
+        assert r["status"] == "done", (action, r.get("error"))
+    with Project.open(site) as p:
+        assert {e["action"] for e in p.read_json("edit_log.json")["entries"]} >= sent
+    c.post(f"/projects/{pid}/close")
+
+
+def test_the_guided_checklist_is_kept_in_the_project(site):
+    """The app's checklist for a new project: saved in onboarding.json (shared schema), back when reopened."""
+    from spongepark.engine.project.jsonschema import validate_package
+
+    c = TestClient(app)
+    pid = c.post("/projects/open", json={"path": site}).json()["project"]
+    assert c.get(f"/projects/{pid}/onboarding").json() == {}            # opened, never guided
+    r = c.put(f"/projects/{pid}/onboarding", json={"guided": True, "done": ["analyse_flow"], "coach_seen": ["confirm_site"]})
+    assert r.status_code == 200 and r.json()["done"] == ["analyse_flow"]
+    assert c.put(f"/projects/{pid}/onboarding", json={"done": ["fly_to_moon"]}).status_code == 400
+    c.post(f"/projects/{pid}/close")
+    pid = c.post("/projects/open", json={"path": site}).json()["project"]
+    assert c.get(f"/projects/{pid}/onboarding").json()["coach_seen"] == ["confirm_site"]
+    c.post(f"/projects/{pid}/close")
+    with Project.open(site) as p:
+        assert validate_package(p.root).get("onboarding.json") == []

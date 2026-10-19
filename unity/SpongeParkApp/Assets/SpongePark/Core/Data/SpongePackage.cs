@@ -26,6 +26,7 @@ namespace SpongePark.Data
         public Locks Locks;
         public EditLog EditLog;
         public TerrainEdits TerrainEdits;
+        public Onboarding Onboarding;   // the guided first project (null when not guided)
         public readonly Dictionary<string, ScenarioData> Scenarios = new Dictionary<string, ScenarioData>();
         public readonly Dictionary<string, Proposal> Proposals = new Dictionary<string, Proposal>();
 
@@ -57,6 +58,7 @@ namespace SpongePark.Data
             p.Locks = p.Read<Locks>("locks.json");
             p.EditLog = p.Read<EditLog>("edit_log.json");
             p.TerrainEdits = p.Read<TerrainEdits>("terrain/edits.json");
+            p.Onboarding = p.Read<Onboarding>("onboarding.json");
             var sc = Path.Combine(p.Root, "scenarios");
             if (Directory.Exists(sc))
                 foreach (var d in Directory.GetDirectories(sc).OrderBy(x => x))
@@ -103,6 +105,7 @@ namespace SpongePark.Data
             Write("locks.json", Locks);
             Write("edit_log.json", EditLog);
             Write("terrain/edits.json", TerrainEdits);
+            Write("onboarding.json", Onboarding);
             foreach (var kv in Scenarios)
             {
                 Write($"scenarios/{kv.Key}/scenario.json", kv.Value.Info);

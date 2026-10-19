@@ -23,6 +23,42 @@ from . import cad
 log = logging.getLogger(__name__)
 
 WORKSPACE = Path.home() / "SpongePark"
+SYMBOL = "0/"              # a symbol on layer 0 is linked on its own: "0/<block name>"
+SYMBOL_MIN_COPIES = 3      # a block placed this often on layer 0 is asked about by itself
+TREE_SYMBOL_M = (1.5, 15.0)   # a symbol this size, placed 10 times or more, looks like a tree
+
+
+def _symbols(doc) -> List[Dict[str, Any]]:
+    """Blocks placed again and again on layer 0 (often trees or furniture drawn without a layer): one row each,
+    so the designer can link them like layers."""
+    from collections import Counter
+
+    from ezdxf import bbox
+
+    found: Dict[str, List[Any]] = {}
+    for e in doc.modelspace().query("INSERT"):
+        if e.dxf.layer == "0":
+            found.setdefault(e.dxf.name, []).append(e)
+    rows = []
+    for name, ins in sorted(found.items(), key=lambda kv: -len(kv[1])):
+        if len(ins) < SYMBOL_MIN_COPIES:
+            continue
+        try:
+            ext = bbox.extents([ins[0]])
+            size = max(ext.size.x, ext.size.y) if ext.has_data else 0.0
+        except Exception:
+            size = 0.0
+        tree = len(ins) >= 10 and TREE_SYMBOL_M[0] <= size <= TREE_SYMBOL_M[1]
+        what = f"{len(ins)} copies of one symbol, about {size:.1f} across"
+        rows.append({
+            "layer": SYMBOL + name, "proposed": "SP-TREE" if tree else "", "title": f"Symbol on layer 0 ({name})",
+            "role": "trees" if tree else None, "confidence": "partial" if tree else "none",
+            "entities": dict(Counter({"INSERT": len(ins)})), "count": len(ins), "numbers": 0, "level_range": None,
+            "z_values": 0.0, "symbol": {"block": name, "size": round(size, 2)},
+            "question": {"kind": "confirm", "ask": f"Looks like trees: {what}. Are they?"} if tree
+            else {"kind": "unknown", "ask": f"Layer 0 holds {what}. What are they?"},
+        })
+    return rows
 
 
 def _standard() -> Dict[str, Any]:
@@ -71,6 +107,7 @@ def start(path: Path) -> Dict[str, Any]:
             "count": int(sum(li["entities"].values())), "numbers": li["numeric_texts"], "level_range": li["level_range"],
             "z_values": li["z_nonzero_share"], "question": q,
         })
+    layers += _symbols(doc)
     order = {"unclear": 0, "unknown": 1, "confirm": 2, None: 3}
     layers.sort(key=lambda x: (order[(x["question"] or {}).get("kind")], -x["count"]))
     return {"survey": str(path), "name": path.stem, "dxf_version": inv["dxf_version"], "units": inv["insunits"],
@@ -92,6 +129,8 @@ def _segments(path: str, mtime: float) -> Tuple[Dict[str, Any], Tuple[float, flo
                 x, y = cad._text_xy(e)
                 pts.setdefault(L, []).append((x, y))
             elif t == "INSERT":
+                if L == "0":   # symbols on layer 0 are shown (and linked) on their own
+                    L = SYMBOL + e.dxf.name
                 p = e.dxf.insert
                 pts.setdefault(L, []).append((p.x, p.y))
                 # draw what the block contains (a boundary or building drawn as a block shows as itself)
@@ -216,9 +255,12 @@ def finish(survey: Path, links: Dict[str, str], project_path: Optional[Path] = N
     from ..terrain.survey import import_survey
 
     survey = Path(survey)
-    renames = {old: (new or f"SP-X-{old}") for old, new in links.items() if old != "0"}
+    renames = {old: (new or f"SP-X-{old}") for old, new in links.items() if old != "0" and not old.startswith(SYMBOL)}
     cleaned = survey.with_name(survey.stem + "_SP.dxf")
-    report = cad.standardise(survey, renames, cleaned)
+    source = _place_symbols(survey, {k[len(SYMBOL):]: v for k, v in links.items() if k.startswith(SYMBOL) and v})
+    report = cad.standardise(source, renames, cleaned)
+    if source != survey:
+        source.unlink(missing_ok=True)
     m = cad.suggest_layer_map(cad.inventory(cad.read(cleaned)))
     if not m["roles"].get("spot_levels") and not m["roles"].get("contours"):
         raise cad.CadError("no layer holds levels: link at least the spot levels or contours.")
@@ -242,6 +284,22 @@ def finish(survey: Path, links: Dict[str, str], project_path: Optional[Path] = N
     return {"project": str(project_path), "cleaned_drawing": str(cleaned), "cleaning": report, "layer_map": m,
             "qc": {k: q.get(k) for k in ("spot_cross_validation", "issues", "elevation_range_m")},
             "survey_layers": [{"name": L["name"], "title": L["title"], "count": L["count"]} for L in layers["layers"]]}
+
+
+def _place_symbols(survey: Path, targets: Dict[str, str]) -> Path:
+    """Move the linked symbols on layer 0 to their standard layers, in a working copy (the original stays as is)."""
+    if not targets:
+        return survey
+    doc = cad.read(survey)
+    for e in doc.modelspace().query("INSERT"):
+        if e.dxf.layer == "0" and e.dxf.name in targets:
+            e.dxf.layer = targets[e.dxf.name]
+    for new in set(targets.values()):
+        if not doc.layers.has_entry(new):
+            doc.layers.add(new)
+    out = survey.with_name(survey.stem + "_symbols.dxf")
+    doc.saveas(out)
+    return out
 
 
 def save_upload(filename: str, data: bytes) -> Path:

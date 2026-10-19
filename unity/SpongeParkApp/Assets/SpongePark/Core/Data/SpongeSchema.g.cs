@@ -169,6 +169,20 @@ namespace SpongePark.Data
         [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
     }
 
+    /// onboarding.json: the guided first project (the app's checklist), so it resumes when the project is reopened.
+    /// 
+    /// Most stages are done when the project says so (a survey, a confirmed site, rainfall and ground answers ...);
+    /// ``done`` records the ones only the app sees (the flow looked at, the design verified, the deliverables exported).
+    public partial class Onboarding
+    {
+        [JsonProperty("coach_seen")] public List<string> CoachSeen { get; set; }
+        [JsonProperty("done")] public List<string> Done { get; set; }
+        [JsonProperty("guided")] public bool? Guided { get; set; }
+        [JsonProperty("modified")] public string Modified { get; set; }
+        /// Fields this version does not know about, kept as they are.
+        [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
+    }
+
     public partial class Outlet
     {
         [JsonProperty("coefficient")] public double? Coefficient { get; set; }

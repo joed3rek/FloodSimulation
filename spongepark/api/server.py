@@ -447,6 +447,55 @@ def ground_get(pid: str) -> Dict[str, Any]:
     return load(_project(pid)) or {}
 
 
+@app.get("/projects/{pid}/onboarding")
+def onboarding_get(pid: str) -> Dict[str, Any]:
+    """The guided-project checklist state; {} when the project is not guided (opened, not created, in the app)."""
+    p = _project(pid)
+    return p.read_json("onboarding.json") if p.exists("onboarding.json") else {}
+
+
+@app.put("/projects/{pid}/onboarding")
+def onboarding_put(pid: str, state: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """Save the checklist state (validated against the shared schema)."""
+    from pydantic import ValidationError
+
+    from spongepark.engine.project.schema import Onboarding, utcnow
+
+    p = _project(pid)
+    try:
+        ob = Onboarding.model_validate({**state, "modified": utcnow()})
+    except ValidationError as ex:
+        raise HTTPException(400, str(ex))
+    with _locks[pid]:
+        p.write_json("onboarding.json", ob.model_dump(mode="json"))
+        p.save()
+    return ob.model_dump(mode="json")
+
+
+@app.get("/projects/{pid}/site/ponds")
+def ponds_get(pid: str) -> Dict[str, Any]:
+    """The ponds in the park and whether each is in the flood model (needs its depth and usual water depth)."""
+    from spongepark.engine.site import ponds
+
+    return {"ponds": ponds.status(_project(pid))}
+
+
+@app.put("/projects/{pid}/site/ponds")
+def ponds_put(pid: str, answers: List[Dict[str, Any]] = Body(..., embed=True)) -> Dict[str, Any]:
+    """Each pond's depth (edge to bottom) and usual water depth: its room for a storm is cut into the ground model,
+    and the drainage, flow lines and the design's ground are redone on it."""
+    from spongepark.engine.site import ponds
+
+    p = _project(pid)
+    with _locks[pid]:
+        try:
+            out = ponds.apply(p, answers)
+        except ValueError as ex:
+            raise HTTPException(400, str(ex))
+        p.save()
+    return out
+
+
 @app.put("/projects/{pid}/site/ground")
 def ground_put(pid: str, answers: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     """Save the ground questionnaire: TR-55 curve numbers, the park's soil zone, CURVE_NUMBER infiltration."""

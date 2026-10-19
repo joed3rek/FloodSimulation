@@ -21,11 +21,12 @@ import numpy as np
 from ..io import cad
 from ..project import Project
 from ..terrain.raster import read_geotiff
+from . import ponds
 
 log = logging.getLogger(__name__)
 
 REL = "site/survey_layers.json"
-STYLE = 4   # how the layers are modelled; a file made with an older style is rebuilt on load
+STYLE = 5   # how the layers are modelled; a file made with an older style is rebuilt on load
 
 # SP layer (or prefix) -> how the viewer draws it. height_m: display height above the ground (m).
 KINDS: List[Tuple[str, Dict[str, Any]]] = [
@@ -67,6 +68,8 @@ GATE_WIDTH_M = (1.0, 8.0)  # a gate symbol's long side, clamped to a sensible ga
 MAX_OTHER_FEATURES = 3000  # unsorted layers (title blocks, hatching) are capped so the viewer stays quick
 MIN_SURFACE_M2 = 1.0      # smaller road or path surfaces are slivers between drawn lines
 PATH_MAX_WIDTH_M = 5.0     # a band between path lines this narrow (on average) is path surface
+PATH_MAX_BETWEEN_M = 8.0   # ground between beds (outlined by path edges) up to this wide is path
+PATH_MIN_AREA_M2 = 6.0     # smaller leftovers between beds are slivers, not path
 ROAD_MAX_WIDTH_M = 25.0    # a band between road lines narrower than this is road surface
 ROAD_END_GAP_M = 30.0      # loose road ends this close are joined (the break symbols at a road's ends)
 EDGE_COLOR = {"road": "#8A8A85", "path": "#B9A27A"}   # kerb and path edge lines
@@ -116,7 +119,9 @@ class _Ground:
     def __init__(self, project: Project, bounds=None):
         from ..terrain.extend import extend_dem
 
-        d, _ = extend_dem(read_geotiff(project.path("terrain/existing.tif")), bounds, boundary=park_boundary(project))
+        # the ground as surveyed (ponds cut for the flood model are drawn at their water surface)
+        rel = "terrain/existing_surveyed.tif" if project.exists("terrain/existing_surveyed.tif") else "terrain/existing.tif"
+        d, _ = extend_dem(read_geotiff(project.path(rel)), bounds, boundary=park_boundary(project))
         self.z, self.cell, (self.x0, self.y0) = d.z, d.cell_size, d.origin
 
     def __call__(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -242,6 +247,7 @@ def build(project: Project) -> Dict[str, Any]:
     openings = [gt["opening"] for gl in gates_by_layer.values() for gt in gl[0]]
 
     layers = []
+    pond_polys: List[Any] = []
     for name, style, pieces in read:
         kind = style["kind"]
         feats = []
@@ -267,8 +273,15 @@ def build(project: Project) -> Dict[str, Any]:
             pieces, loose = _footprints(pieces)
             if loose:
                 notes.append(f"{loose} line(s) on this layer do not close into a building outline; left out.")
+        elif kind == "water":
+            polys = ponds.outlines(pieces)
+            pond_polys += polys
+            for poly in polys:
+                m = _drape_polygon(poly, ground, step)
+                if m:
+                    feats.append({**m, "color": style["color"], "water": True})
         elif kind in ("road", "path"):
-            surfaces = _road_surfaces(pieces, park_boundary(project)) if kind == "road" else _path_surfaces(pieces)
+            surfaces = _road_surfaces(pieces, park_boundary(project)) if kind == "road"                 else _path_surfaces(pieces, park_boundary(project))
             for poly in surfaces:
                 m = _drape_polygon(poly, ground, step)
                 if m:
@@ -311,6 +324,7 @@ def build(project: Project) -> Dict[str, Any]:
             **style, "count": len(feats), **({"sized": sized} if kind in ("tree", "palm") else {}),
             "features": feats,
         })
+    ponds.record(project, pond_polys, ground, park_boundary(project))
     out = {"schema_version": "1.1", "style": STYLE, "drawing": f"survey/{drawing.name}", "extent": extent,
            "note": "Plan positions from the survey, heights from the ground model. Wall, building and tree "
                    "heights are display heights only.",
@@ -470,8 +484,13 @@ def _road_surfaces(pieces, boundary):
     return out
 
 
-def _path_surfaces(pieces):
-    """Path surface: the narrow bands between path lines (a band of the same width all round)."""
+def _path_surfaces(pieces, boundary=None):
+    """Path surface, from either way of drawing paths:
+
+    - two edge lines a path's width apart: the narrow bands between them;
+    - beds (lawns, planting) outlined by the path edges, the paths being the ground between the beds and the
+      park's edge: the lines and the boundary are joined, the enclosed beds found, and what is left between
+      them, where it is no wider than a path (``PATH_MAX_BETWEEN_M``), is path."""
     from shapely.geometry import LineString
     from shapely.ops import polygonize, unary_union
 
@@ -479,11 +498,24 @@ def _path_surfaces(pieces):
     if not lines:
         return []
     faces = list(polygonize(unary_union(lines)))
-    out = []
-    for f in faces:
-        # a face with a hole is a band between two rings (the hole is a separate face)
-        if 2 * f.area / f.length <= PATH_MAX_WIDTH_M:
-            out.append(f)
+    # a face with a hole is a band between two rings (the hole is a separate face)
+    out = [f for f in faces if 2 * f.area / f.length <= PATH_MAX_WIDTH_M]
+    if boundary is None:
+        return out
+    half = PATH_MAX_BETWEEN_M / 2
+
+    def wide_share(f):   # how much of a face is wider than a path (a bed is mostly wide, a path network not)
+        return f.buffer(-half).buffer(half).area / f.area if f.area > 0 else 0
+
+    edge = boundary.exterior
+    beds = [f for f in polygonize(unary_union(lines + [LineString(edge.coords)]))
+            if not f.interiors and wide_share(f) >= 0.5 and f.area < 0.6 * boundary.area]   # with holes: the network
+    if len(beds) < 2:
+        return out
+    ground = boundary.difference(unary_union(beds + out))
+    narrow = ground.difference(ground.buffer(-half).buffer(half))
+    parts = list(narrow.geoms) if hasattr(narrow, "geoms") else [narrow]
+    out += [g for g in parts if g.geom_type == "Polygon" and g.area >= PATH_MIN_AREA_M2]
     return out
 
 

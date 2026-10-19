@@ -12,3 +12,15 @@ examples/output/
 
 # client data (HSR pilot surveys, DWGs, park tables)
 /data/
+
+# low-poly art from the Asset Store (EULA: not redistributable); spongepark unity lowpoly-assets
+unity/SpongeParkApp/Assets/Synty/
+unity/SpongeParkApp/Assets/Synty.meta
+unity/SpongeParkApp/Assets/SimpleNaturePack/
+unity/SpongeParkApp/Assets/SimpleNaturePack.meta
+unity/SpongeParkApp/Assets/BrokenVector/
+unity/SpongeParkApp/Assets/BrokenVector.meta
+unity/SpongeParkApp/Assets/Tree9/
+unity/SpongeParkApp/Assets/Tree9.meta
+unity/SpongeParkApp/Assets/SpongePark/Resources/LowPoly/
+unity/SpongeParkApp/Assets/SpongePark/Resources/LowPoly.meta

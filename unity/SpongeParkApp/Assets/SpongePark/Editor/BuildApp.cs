@@ -24,6 +24,7 @@ namespace SpongePark.EditorTools
                 EditorSceneManager.SaveScene(s, Scene);
             }
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(Scene, true) };
+            LowPolyArt.List();   // the low-poly art the app places, when the packs are in the project
             PlayerSettings.productName = "Sponge Park";
             PlayerSettings.companyName = "Habitat Collective";
             return new[] { Scene };

@@ -1,5 +1,6 @@
-// Vertex-coloured models (walls, trees, buildings, NbS, flow lines) for the built-in render pipeline:
-// sun with soft shadows (received and cast), sky light from above and bounce from the ground, distance haze.
+// Vertex-coloured models, low-poly (built-in render pipeline): fences, gates, buildings, roads and paths, NbS, flow
+// lines, and the app's own trees when the low-poly packs are missing. Flat colours with the sun (soft shadows,
+// received and cast), sky light and haze; darker while it rains (not in the 2D plan).
 Shader "SpongePark/VertexLit"
 {
     SubShader
@@ -13,9 +14,7 @@ Shader "SpongePark/VertexLit"
             #pragma fragment frag
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
-            #include "UnityCG.cginc"
-            #include "Lighting.cginc"
-            #include "AutoLight.cginc"
+            #include "LowPoly.cginc"
             struct appdata { float4 vertex : POSITION; float3 normal : NORMAL; float4 color : COLOR; };
             struct v2f
             {
@@ -25,7 +24,7 @@ Shader "SpongePark/VertexLit"
                 SHADOW_COORDS(1)
                 UNITY_FOG_COORDS(2)
             };
-            v2f vert (appdata v)
+            v2f vert(appdata v)
             {
                 v2f o;
                 o.pos = UnityObjectToClipPos(v.vertex);
@@ -35,14 +34,10 @@ Shader "SpongePark/VertexLit"
                 UNITY_TRANSFER_FOG(o, o.pos);
                 return o;
             }
-            fixed4 frag (v2f i) : SV_Target
+            fixed4 frag(v2f i) : SV_Target
             {
-                float3 n = normalize(i.n);
-                float3 L = normalize(_WorldSpaceLightPos0.xyz);
-                float sun = saturate(dot(n, L)) * SHADOW_ATTENUATION(i);
-                // sky light from above, warm bounce from the ground below
-                float3 ambient = lerp(float3(0.50, 0.47, 0.40), float3(0.74, 0.80, 0.86), n.y * 0.5 + 0.5);
-                float3 col = i.color.rgb * (ambient * 0.62 + _LightColor0.rgb * sun * 0.72);
+                fixed3 albedo = lerp(Wetten(i.color.rgb, _Wet), i.color.rgb, _PlanView);
+                fixed3 col = LowPolyLight(albedo, normalize(i.n), SHADOW_ATTENUATION(i));
                 UNITY_APPLY_FOG(i.fogCoord, col);
                 return fixed4(col, 1);
             }
@@ -57,13 +52,8 @@ Shader "SpongePark/VertexLit"
             #pragma multi_compile_shadowcaster
             #include "UnityCG.cginc"
             struct v2f { V2F_SHADOW_CASTER; };
-            v2f vert (appdata_base v)
-            {
-                v2f o;
-                TRANSFER_SHADOW_CASTER_NORMALOFFSET(o)
-                return o;
-            }
-            float4 frag (v2f i) : SV_Target { SHADOW_CASTER_FRAGMENT(i) }
+            v2f vert(appdata_base v) { v2f o; TRANSFER_SHADOW_CASTER_NORMALOFFSET(o) return o; }
+            float4 frag(v2f i) : SV_Target { SHADOW_CASTER_FRAGMENT(i) }
             ENDCG
         }
     }

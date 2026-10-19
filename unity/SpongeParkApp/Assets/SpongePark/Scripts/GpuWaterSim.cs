@@ -28,6 +28,14 @@ namespace SpongePark
 
         public static bool Supported => SystemInfo.supportsComputeShaders;
 
+        /// Rainfall intensity (mm/h) at simulated time t (s).
+        public float RainAt(float t)
+        {
+            if (rain == null || rainDt <= 0 || t < 0) return 0;
+            int i = Mathf.FloorToInt(t / rainDt);
+            return i < rain.Length ? rain[i] : 0;
+        }
+
         public void Init(JToken inp)
         {
             cs = Resources.Load<ComputeShader>("WaterSim");

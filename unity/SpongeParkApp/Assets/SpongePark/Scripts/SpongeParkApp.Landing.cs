@@ -34,6 +34,7 @@ namespace SpongePark
         // ------------------------------------------------------------ screens
         void ShowMain()
         {
+            Debug.Log("screen: workspace");
             if (landing != null) landing.style.display = DisplayStyle.None;
             if (intakeView != null) intakeView.style.display = DisplayStyle.None;
             mainApp.style.display = DisplayStyle.Flex;
@@ -49,6 +50,7 @@ namespace SpongePark
 
         void ShowLanding()
         {
+            Debug.Log("screen: start");
             mainApp.style.display = DisplayStyle.None;
             mainOverlay.style.display = DisplayStyle.None;
             if (intakeView != null) intakeView.style.display = DisplayStyle.None;
@@ -66,11 +68,6 @@ namespace SpongePark
             landing = new VisualElement();
             landing.AddToClassList("landing");
             root.Insert(root.IndexOf(mainApp), landing);
-
-            var glowA = Blob(new Color(0.36f, 0.44f, 0.32f, 0.45f), -260, -260, 820);
-            var glowB = Blob(new Color(0.76f, 0.55f, 0.36f, 0.32f), 1000, 520, 760);
-            landing.Add(glowA);
-            landing.Add(glowB);
 
             // two columns under the nav: new / open on the left (wider), recently opened on the right
             var columns = new VisualElement();
@@ -672,6 +669,7 @@ namespace SpongePark
                      (qc != null && qc.Type != JTokenType.Null ? $"; spot levels agree to {(float)qc["rmse_m"]:0.000} m." : ".");
             projectPath = (string)r["project"];
             yield return OpenProject(false);
+            yield return StartGuide();   // a new project: the checklist guides it (unless turned off in Settings)
             ShowMain();
         }
     }

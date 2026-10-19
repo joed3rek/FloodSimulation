@@ -120,6 +120,10 @@ namespace SpongePark
             return dt > 0 ? dl / siteArea / dt : 0;   // L / m2 / h = mm/h
         }
 
+        /// Rainfall now (mm/h) at simulated time t (s): the live storm's own series, else the replay's.
+        public float RainNow(float t, bool live) =>
+            live && Gpu != null && Gpu.Ready ? Gpu.RainAt(t) : RainAt(t / 3600f);
+
         public float EndTime => Frames != null && Frames.Count > 0 ? Frames.Times[Frames.Count - 1] : Gpu?.Duration ?? 0;
 
         void OnDestroy() => Gpu?.Dispose();
