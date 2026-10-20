@@ -141,3 +141,12 @@ def test_slivers_and_flat_shapes_do_not_stop_the_survey_layers():
     assert m is None or len(m["tri"]) % 3 == 0
     ok = _drape_polygon(Polygon([(0, 0), (10, 0), (10, 3), (0, 3)]), ground, 1.0)
     assert ok is not None and len(ok["tri"]) >= 6
+
+
+def test_a_missing_save_folder_is_reported_plainly(tmp_path):
+    # e.g. "I:\Shared drives\..." mangled to "I:\Shared_drives\...": say so, before any work is done
+    p = make_dxf(tmp_path / "park survey.dxf")
+    missing = tmp_path / "Shared_drives" / "park.sponge"
+    with pytest.raises(cad.CadError, match="does not exist"):
+        intake.finish(p, {}, missing)
+    assert not (tmp_path / "park survey_SP.dxf").exists()

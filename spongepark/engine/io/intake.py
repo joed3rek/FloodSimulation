@@ -255,6 +255,9 @@ def finish(survey: Path, links: Dict[str, str], project_path: Optional[Path] = N
     from ..terrain.survey import import_survey
 
     survey = Path(survey)
+    if project_path and not Path(project_path).parent.is_dir():
+        raise cad.CadError(f"the folder to save the project in does not exist: {Path(project_path).parent}. "
+                           "Choose an existing folder in 'Save the project as'.")
     renames = {old: (new or f"SP-X-{old}") for old, new in links.items() if old != "0" and not old.startswith(SYMBOL)}
     cleaned = survey.with_name(survey.stem + "_SP.dxf")
     source = _place_symbols(survey, {k[len(SYMBOL):]: v for k, v in links.items() if k.startswith(SYMBOL) and v})

@@ -404,7 +404,11 @@ namespace SpongePark
             links.Clear();
             foreach (var l in r["layers"])
                 if (l["question"] == null || l["question"].Type == JTokenType.Null) links[(string)l["layer"]] = (string)l["proposed"];
-            intakeProjectPath = System.Text.RegularExpressions.Regex.Replace((string)r["survey"], @"\.(dxf|dwg)$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Replace(' ', '_') + ".sponge";
+            // next to the drawing; only the file name loses its spaces (the folders are kept as they are, e.g.
+            // "I:\Shared drives\..." on Google Drive)
+            var survey = (string)r["survey"];
+            intakeProjectPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(survey) ?? "",
+                                             System.IO.Path.GetFileNameWithoutExtension(survey).Replace(' ', '_') + ".sponge");
             BuildIntake();
             landing.style.display = DisplayStyle.None;
             intakeView.style.display = DisplayStyle.Flex;
