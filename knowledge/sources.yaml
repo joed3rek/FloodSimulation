@@ -24,7 +24,7 @@ sources:
   - id: pub_abc_waters
     title: ABC Waters Design Guidelines; Engineering Procedures for ABC Waters Design Features (condensed booklet); design calculation templates
     publisher: PUB, Singapore's National Water Agency
-    edition: "Design Guidelines 2018 (4th ed.); booklet and templates undated on the page (page last updated 03 Mar 2026)"
+    edition: "Design Guidelines 2018 (4th ed.); Engineering Procedures condensed booklet 2024 edition (page last updated 03 Mar 2026)"
     kind: manual
     access: open
     status: reachable
@@ -293,9 +293,9 @@ sources:
     status: reachable
     landing: https://www.epa.gov/water-research/storm-water-management-model-swmm
     files:
-      - https://nepis.epa.gov/Exe/ZyPURL.cgi?Dockey=P100NYRA.txt       # linked from the landing page (volume to confirm on fetch)
-      - https://nepis.epa.gov/Exe/ZyPURL.cgi?Dockey=P100S9AS.txt       # linked from the landing page
-      - https://nepis.epa.gov/Exe/ZyPURL.cgi?Dockey=P100P2NY.txt       # linked from the landing page
+      - https://nepis.epa.gov/Exe/ZyPDF.cgi?Dockey=P100NYRA.PDF        # linked from the landing page (volume to confirm on fetch)
+      - https://nepis.epa.gov/Exe/ZyPDF.cgi?Dockey=P100S9AS.PDF        # linked from the landing page
+      - https://nepis.epa.gov/Exe/ZyPDF.cgi?Dockey=P100P2NY.PDF        # linked from the landing page
       - https://www.epa.gov/system/files/documents/2022-02/swmm5-reference-manual-ii-addendum-20220210mas2wr-1.pdf
       - https://www.epa.gov/system/files/documents/2022-04/swmm-users-manual-version-5.2.pdf
       - https://www.epa.gov/system/files/documents/2022-08/SWMM%20Reference%20Manual%20Errata.pdf
@@ -329,8 +329,8 @@ sources:
     publisher: The Water Research Foundation (with EWRI/ASCE and others)
     edition: "2020"
     kind: dataset
-    access: open
-    status: reachable
+    access: user-supplied   # owner offers it free, but waterrf.org answers 403 to the identified downloader (2026-10-20)
+    status: blocked
     landing: https://bmpdatabase.org/
     files:
       - https://www.waterrf.org/system/files/resource/2020-11/DRPT-4968_0.pdf   # 200, application/pdf, 4.0 MB
@@ -488,7 +488,7 @@ sources:
     edition: "2022"
     kind: dataset
     access: open
-    status: reachable
+    status: deferred   # 2.4 GB (HEAD 2026-10-20): fetched when Part B needs it (I4, built-project siting)
     landing: https://www.pasda.psu.edu/uci/DataSummary.aspx?dataset=7152
     files:
       - https://www.pasda.psu.edu/download/phillyLiDAR/2022/Products/Philadelphia_dem_3ft_2022.zip

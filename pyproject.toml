@@ -37,6 +37,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "httpx>=0.27"]
+# NbS knowledge base extraction (docs/KNOWLEDGE_BRIEF.md, A3): text and layout, tables, web pages, spreadsheets
+knowledge = ["pymupdf>=1.24", "pdfplumber>=0.11", "beautifulsoup4>=4.12", "openpyxl>=3.1"]
 
 [project.scripts]
 spongepark = "spongepark.cli.main:app"

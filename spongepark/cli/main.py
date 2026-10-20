@@ -37,10 +37,13 @@ nbs_app = typer.Typer(help="Component catalogue and design guidelines.", no_args
 itzi_app = typer.Typer(help="Itzi, the 2D flood model (run as a separate program).", no_args_is_help=True)
 unity_app = typer.Typer(help="Assets for the Unity app.", no_args_is_help=True)
 schema_app = typer.Typer(help="The shared .sponge JSON Schema and the generated Unity classes.", no_args_is_help=True)
+knowledge_app = typer.Typer(help="NbS knowledge base: the source registry and its downloads (docs/KNOWLEDGE_BRIEF.md).",
+                            no_args_is_help=True)
 for sub, name in [(project_app, "project"), (params_app, "params"), (rain_app, "rainfall"), (site_app, "site"),
                   (option_app, "option"), (terrain_app, "terrain"), (layout_app, "layout"), (optimise_app, "optimise"),
                   (rhino_app, "rhino"), (sim2d_app, "sim2d"),
-                  (nbs_app, "nbs"), (schema_app, "schema"), (itzi_app, "itzi"), (unity_app, "unity")]:
+                  (nbs_app, "nbs"), (schema_app, "schema"), (itzi_app, "itzi"), (unity_app, "unity"),
+                  (knowledge_app, "knowledge")]:
     app.add_typer(sub, name=name)
 
 SITE_LAYERS = {
@@ -98,6 +101,96 @@ def itzi_status() -> None:
 
     exe = launcher()
     typer.echo(f"Itzi launcher: {exe}" if exe else "Itzi is not set up (spongepark itzi setup --qgis <QGIS folder>).")
+
+
+@knowledge_app.command("fetch")
+def knowledge_fetch(source: Optional[str] = typer.Option(None, "--source", help="One source id."),
+                    all_: bool = typer.Option(False, "--all", help="Every open, reachable source."),
+                    force: bool = typer.Option(False, help="Fetch again what was fetched before.")) -> None:
+    """Download open sources politely into knowledge/raw/ (git-ignored), with a fetch.json per source."""
+    from spongepark.engine.knowledge import fetch, registry
+
+    if not source and not all_:
+        raise typer.BadParameter("give --source <id> or --all.")
+    srcs = registry.sources()
+    chosen = [s for s in srcs if s.id == source] if source else [s for s in srcs if s.fetchable]
+    if source and not chosen:
+        raise typer.BadParameter(f"no source '{source}' in knowledge/sources.yaml.")
+    f = fetch.Fetcher(registry.user_agent())
+    for s in chosen:
+        try:
+            rec = fetch.fetch_source(s, f, force=force)
+        except ValueError as ex:
+            typer.echo(f"{s.id}: {ex}")
+            continue
+        for e in rec["entries"]:
+            if e.get("url") in s.files:
+                what = e.get("file") or e.get("reason")
+                typer.echo(f"{s.id}: {e['outcome']:8} {what}" + (f" ({e['size'] / 1e6:.1f} MB)" if e.get("size") else ""))
+
+
+@knowledge_app.command("add")
+def knowledge_add(source: str = typer.Option(..., "--source"), file: Path = typer.Option(..., "--file")) -> None:
+    """Register a copy you supply for a source (paid, login-only or blocked to automated clients)."""
+    from spongepark.engine.knowledge import fetch
+
+    rec = fetch.add(source, file)
+    typer.echo(f"{source}: added {rec['entries'][-1]['file']} (sha256 {rec['entries'][-1]['sha256'][:12]}...)")
+
+
+@knowledge_app.command("status")
+def knowledge_status() -> None:
+    """Each source: fetched, partly fetched, failed (with reasons), not fetched, or a user copy needed."""
+    from spongepark.engine.knowledge import fetch
+
+    for r in fetch.status():
+        files = f"{r['files']}/{r['of']} files, {r['size_mb']} MB" if r["of"] or r["files"] else ""
+        typer.echo(f"{r['id']:20} {r['access']:14} {r['state']:28} {files}")
+        for pr in r["problems"]:
+            typer.echo(f"{'':22}{pr}")
+
+
+@knowledge_app.command("index")
+def knowledge_index(source: Optional[str] = typer.Option(None, "--source"), force: bool = False) -> None:
+    """Build the page-indexed text store of downloaded documents (kept in knowledge/raw/, git-ignored)."""
+    from spongepark.engine.knowledge import registry, textstore
+
+    for s in registry.sources():
+        if source and s.id != source:
+            continue
+        if not (s.raw_dir() / "fetch.json").exists():
+            continue
+        for r in textstore.build(s.id, force=force):
+            typer.echo(f"{s.id}: {r['file']}: {r['pages']} pages" + (f" ({r['error']})" if r.get("error") else ""))
+
+
+@knowledge_app.command("search")
+def knowledge_search(source: str, pattern: str, limit: int = 20) -> None:
+    """Search a source's text store (a regular expression, case-insensitive)."""
+    from spongepark.engine.knowledge import textstore
+
+    for h in textstore.search(source, pattern, limit=limit):
+        typer.echo(f"[{h['file']} p.{h['page']} {h['label'][:40]}] {h['text']}")
+        typer.echo("")
+
+
+@knowledge_app.command("check")
+def knowledge_check(source: Optional[str] = typer.Option(None, "--source")) -> None:
+    """Check staged rules: valid fields and units, and each snippet found on the page it cites."""
+    from spongepark.engine.knowledge import registry, staging
+
+    bad = 0
+    for s in registry.sources():
+        if (source and s.id != source) or not staging.path(s.id).exists():
+            continue
+        n = len(staging.load(s.id))
+        probs = staging.check(s.id)
+        bad += len(probs)
+        typer.echo(f"{s.id}: {n} staged rules, {len(probs)} problems")
+        for pr in probs:
+            typer.echo("  " + pr)
+    if bad:
+        raise typer.Exit(1)
 
 
 @schema_app.command("export")
