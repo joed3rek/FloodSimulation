@@ -502,3 +502,18 @@ Toggle Label { color: var(--text-primary); font-size: 12px; }
 .btn--back { align-self: flex-start; padding-left: 0; }
 .card, TextField.input, DropdownField.input, .btn, .chip, .field-label { flex-shrink: 0; }
 .figure { flex-shrink: 1; min-height: 180px; }
+
+/* ================= loading screen (the engine is starting or working) ================= */
+.loading { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: rgba(10, 11, 13, 0.72); align-items: center; justify-content: center; }
+.loading-card {
+    width: 420px; max-width: 90%; padding: 28px 28px 24px 28px; align-items: center; background-color: var(--bg-panel);
+    border-width: 1px; border-color: var(--border-strong); border-radius: 10px;
+}
+.loading-ring {
+    width: 44px; height: 44px; border-radius: 22px; border-width: 4px; margin-bottom: 18px;
+    border-color: var(--border-strong); border-top-color: var(--accent); border-right-color: var(--accent);
+}
+.loading-title { -unity-font: resource("UI/Fonts/Inter-SemiBold"); font-size: 16px; margin: 0 0 6px 0; white-space: normal; -unity-text-align: middle-center; }
+.loading-detail { color: var(--text-secondary); font-size: 12px; margin: 0 0 10px 0; white-space: normal; -unity-text-align: middle-center; }
+.loading-elapsed { color: var(--accent); font-size: 11px; margin: 0; -unity-text-align: middle-center; }
+.loading-hint { color: var(--text-disabled); font-size: 11px; margin: 10px 0 0 0; white-space: normal; -unity-text-align: middle-center; }

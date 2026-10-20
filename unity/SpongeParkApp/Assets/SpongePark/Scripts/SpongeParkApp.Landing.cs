@@ -199,18 +199,20 @@ namespace SpongePark
         IEnumerator EnsureEngine()
         {
             yield return CheckEngine();
-            if (!engineUp && !engineLaunched) { engineLaunched = true; launcher.Launch(); }
+            if (!engineUp && !engineLaunched) { engineLaunched = true; if (launcher.Launch()) engineLaunchAt = Time.realtimeSinceStartup; }
         }
 
         /// Waits (up to 30 s) for the engine, starting it if needed; then runs next. Says why if it never comes up.
         IEnumerator WhenEngineReady(System.Action next)
         {
             landingStatus.text = "Starting the engine…";
+            ShowLoading("Starting the engine", "Opening the flood model on this computer", "This takes a few seconds the first time.");
             for (int i = 0; i < 30 && !engineUp; i++)
             {
                 yield return EnsureEngine();
                 if (!engineUp) yield return new WaitForSecondsRealtime(1);
             }
+            HideLoading();
             if (!engineUp)
             {
                 landingStatus.text = "The engine did not start" + (launcher.Message.StartsWith("could not") ? " (" + launcher.Message + ")" : "") +
@@ -294,7 +296,9 @@ namespace SpongePark
             projectPath = path;
             info = null;   // so a project open before this one does not count as success
             landingStatus.text = "Opening " + System.IO.Path.GetFileName(path) + "…";
+            ShowLoading("Opening the project", System.IO.Path.GetFileName(path));
             yield return OpenProject(false);
+            HideLoading();
             if (info == null) { landingStatus.text = "Could not open: " + api.LastError; yield break; }
             ShowMain();
         }
@@ -389,8 +393,10 @@ namespace SpongePark
         {
             if (string.IsNullOrEmpty(path)) yield break;
             landingStatus.text = "Reading " + System.IO.Path.GetFileName(path) + "…";
+            ShowLoading("Reading the drawing", System.IO.Path.GetFileName(path), "Large drawings can take a minute.");
             JToken r = null;
             yield return api.Send("POST", "/intake/start", new { path }, x => r = x, 600);
+            HideLoading();
             if (r == null)
             {
                 landingStatus.text = api.LastError.Contains("404")
@@ -664,13 +670,21 @@ namespace SpongePark
             };
             if (area > 0) body["park_area_m2"] = area;
             JToken r = null;
-            yield return api.RunJob("POST", "/intake/finish", body, x => r = x, s => intakeStatus.text = "Cleaning the drawing and building the ground… " + s);
-            if (r == null) { intakeStatus.text = "The engine reported a problem: " + api.LastError; buildButton.SetEnabled(true); yield break; }
+            ShowLoading("Cleaning the drawing and building the ground", "Sending the drawing", "This can take a few minutes for a large park.");
+            yield return api.RunJob("POST", "/intake/finish", body, x => r = x, s =>
+            {
+                intakeStatus.text = "Cleaning the drawing and building the ground… " + s;
+                loadingStep = s == "running" ? "Removing duplicates, building the ground model" : s;
+            });
+            if (r == null) { HideLoading(); intakeStatus.text = "The engine reported a problem: " + api.LastError; buildButton.SetEnabled(true); yield break; }
             var qc = r["qc"]?["spot_cross_validation"];
             status = $"Ground model built. {r["cleaning"]["duplicates_removed_total"]} duplicate objects removed" +
                      (qc != null && qc.Type != JTokenType.Null ? $"; spot levels agree to {(float)qc["rmse_m"]:0.000} m." : ".");
             projectPath = (string)r["project"];
+            loadingWhat = "Opening the project";
+            loadingStep = System.IO.Path.GetFileName(projectPath);
             yield return OpenProject(false);
+            HideLoading();
             yield return StartGuide();   // a new project: the checklist guides it (unless turned off in Settings)
             ShowMain();
         }

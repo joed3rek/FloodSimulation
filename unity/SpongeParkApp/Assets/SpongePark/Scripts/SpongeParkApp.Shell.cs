@@ -28,6 +28,9 @@ namespace SpongePark
         Timeline timeline;
         StatusBar statusBar;
         Toasts toasts;
+        Loading loading;
+        string loadingWhat, loadingStep, loadingNote;   // set by the start screen and intake while they wait on the engine
+        float busySince = -1, engineLaunchAt = -1;
         Dialog siteSetup, targetsDialog, settingsDialog;
         PanelSettings panelSettings;
         readonly Dictionary<string, Command> commands = new Dictionary<string, Command>();
@@ -82,6 +85,8 @@ namespace SpongePark
             toasts = new Toasts();
             ws = new Workspace(ui, BuildAppBar(), ribbon, contentsPanel, props, timeline, statusBar, toasts);
             root.Add(ws.Root);
+            loading = new Loading();
+            root.Add(loading.Root);
             mainApp = ws.Root;
             mainOverlay = new VisualElement();   // the old overlay layer: the workspace has its own
             BuildOverlays(ws.Overlay);
@@ -785,7 +790,29 @@ namespace SpongePark
             appProject.text = HasProject ? (string)info["name"] ?? Path.GetFileNameWithoutExtension(projectPath) : bundle ? "Results viewer" : "No project";
             appSaved.text = !HasProject ? "" : busy ? "saving…" : "saved";
             Toast();
+            SyncLoading();
         }
+
+        /// The loading screen: while the engine starts, while the start screen or intake waits on it, and for any
+        /// job in the workspace that takes longer than a second (quick edits never flash it).
+        void SyncLoading()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (!busy) busySince = -1;
+            else if (busySince < 0) busySince = now;
+            if (loadingWhat != null) loading.Set(loadingWhat, loadingStep, loadingNote);
+            else if (!engineUp && !bundle && engineLaunchAt >= 0 && now - engineLaunchAt < 30)
+                loading.Set("Starting the engine", "Opening the flood model on this computer", "This takes a few seconds the first time.");
+            else if (busy && now - busySince > 1f)
+                loading.Set("The engine is working", status.TrimEnd('.', '…', ' '), LongJob(status) ? "Flood runs and optimising can take a few minutes." : null);
+            else loading.Set(null);
+        }
+
+        static bool LongJob(string s) =>
+            new[] { "Optimis", "Simulat", "flood simulation", "Analysing", "Generat", "Placing NbS", "Verif" }.Any(s.Contains);
+
+        void ShowLoading(string what, string step = null, string note = null) { loadingWhat = what; loadingStep = step; loadingNote = note; }
+        void HideLoading() => loadingWhat = loadingStep = loadingNote = null;
 
         void SyncOptions()
         {
