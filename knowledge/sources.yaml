@@ -178,7 +178,7 @@ sources:
   - id: townsville_wsud
     title: WSUD Guidelines for the Coastal Dry Tropics (parts 1-n)
     publisher: Townsville City Council
-    edition: unknown
+    edition: "based on SEQ WSUD Technical Design Guidelines (2006); part 1 supplied 2026-10-20, other parts still needed"
     kind: manual
     access: user-supplied
     status: blocked
@@ -195,10 +195,10 @@ sources:
   - id: cgwb_recharge
     title: Manual on Artificial Recharge of Ground Water
     publisher: Central Ground Water Board, Ministry of Jal Shakti, India
-    edition: "2007 (to confirm)"
+    edition: "September 2007 (preface, Faridabad)"
     kind: manual
     access: open
-    status: unreachable
+    status: user-copy   # the owner's site rejects the TLS handshake; copy supplied by the user 2026-10-20
     landing: https://www.cgwb.gov.in/cgwbpnm/publication-detail/330
     files: []
     robots: "unknown (TLS handshake refused)"
@@ -313,7 +313,7 @@ sources:
     edition: "2nd ed., June 1986"
     kind: manual
     access: open
-    status: unreachable
+    status: user-copy   # nrcs.usda.gov timed out; copy supplied by the user 2026-10-20
     landing: https://www.nrcs.usda.gov/resources/guides-and-instructions/urban-hydrology-for-small-watersheds-tr-55
     files: []
     robots: "unknown (time-out)"

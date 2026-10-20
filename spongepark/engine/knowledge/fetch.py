@@ -333,7 +333,7 @@ def status(base: Optional[Path] = None) -> List[Dict[str, Any]]:
         elif s.access == "user-supplied":
             state = "user copy added" if ok else "user copy needed"
         elif not s.fetchable:
-            state = f"not fetchable ({s.status})"
+            state = "copy added" if ok else f"not fetchable ({s.status})"
         elif len({e['url'] for e in ok if e.get('url')}) >= len(s.files):
             state = "fetched"
         elif ok:

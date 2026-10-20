@@ -144,7 +144,8 @@ def knowledge_status() -> None:
     from spongepark.engine.knowledge import fetch
 
     for r in fetch.status():
-        files = f"{r['files']}/{r['of']} files, {r['size_mb']} MB" if r["of"] or r["files"] else ""
+        n = f"{r['files']}/{r['of']} files" if r["of"] else f"{r['files']} file{'s' if r['files'] != 1 else ''}"
+        files = f"{n}, {r['size_mb']} MB" if r["of"] or r["files"] else ""
         typer.echo(f"{r['id']:20} {r['access']:14} {r['state']:28} {files}")
         for pr in r["problems"]:
             typer.echo(f"{'':22}{pr}")
