@@ -388,61 +388,64 @@ Toggle Label { color: var(--text-primary); font-size: 12px; }
 .layer-count { font-size: 11px; color: var(--accent); margin-left: 6px; flex-shrink: 0; }
 .layer-row--selected { border-color: var(--accent); background-color: var(--accent-soft); }
 
-/* ================= start screen (dark) ================= */
-.landing { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: var(--bg-app); overflow: hidden; align-items: center; }
-.landing-nav { position: absolute; left: 0; right: 0; top: 0; padding: 24px 64px; align-items: center; }
-.brand-mark { width: 28px; height: 28px; border-radius: 6px; background-color: var(--accent); align-items: center; justify-content: center; margin-right: 10px; }
-.brand-mark Label { color: var(--accent-ink); font-size: 14px; -unity-font: resource("UI/Fonts/Inter-SemiBold"); }
-.landing-brand { color: var(--text-primary); font-size: 18px; -unity-font: resource("UI/Fonts/Inter-SemiBold"); }
-.hero { margin-top: 120px; width: 760px; align-items: center; }
-.hero-title { color: var(--text-primary); font-size: 40px; -unity-font: resource("UI/Fonts/Inter-SemiBold"); -unity-text-align: middle-center; margin: 0; white-space: normal; }
-.hero-accent { color: var(--accent); }
-.hero-text { color: var(--text-secondary); font-size: 14px; white-space: normal; -unity-text-align: middle-center; margin: 14px 40px 28px 40px; }
-.drop {
-    width: 520px; padding: 24px 16px; border-width: 1px; border-color: var(--border-strong);
-    background-color: var(--bg-panel); border-radius: 8px; align-items: center;
-    transition-property: background-color, border-color; transition-duration: 0.2s;
+/* ================= start screen: banner, the two ways in, recent projects as pictures ================= */
+.landing {
+    position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: #0D1413; overflow: hidden;
+    --land-card: #1B2223; --land-card-hover: #222B2C; --land-border: #283132; --land-primary: #5B7152;
+    --land-primary-hover: #66805C; --land-icon: #2E3634; --land-text: #E9ECEA; --land-muted: #9BA5A2;
 }
-.drop:hover:enabled { background-color: var(--bg-raised); border-color: var(--accent); }
-.drop-icon { width: 44px; height: 44px; border-radius: 22px; background-color: var(--accent); align-items: center; justify-content: center; margin-bottom: 10px; }
-.drop-icon--clay { background-color: var(--success); }
-.drop-arrow { color: var(--accent-ink); font-size: 20px; -unity-font: resource("UI/Fonts/Inter-SemiBold"); }
-.drop-title { color: var(--text-primary); font-size: 18px; -unity-font: resource("UI/Fonts/Inter-SemiBold"); }
-.drop-text { color: var(--text-secondary); font-size: 12px; margin-top: 2px; white-space: normal; -unity-text-align: middle-center; }
-.hero-status { color: var(--warning); font-size: 12px; margin-top: 10px; white-space: normal; -unity-text-align: middle-center; }
-.choice-row { justify-content: center; flex-wrap: nowrap; }
-.drop--new, .drop--open { width: 300px; margin: 0 8px; padding: 20px 14px; }
-.landing-columns { position: absolute; left: 64px; right: 64px; top: 90px; bottom: 40px; flex-direction: row; }
-.landing-left { flex-grow: 3; flex-basis: 0; margin-right: 48px; }
-.landing-right { flex-grow: 2; flex-basis: 0; min-width: 340px; }
-.landing-left .hero { margin-top: 28px; width: auto; align-items: flex-start; padding-bottom: 32px; }
-.landing-left .hero-title { -unity-text-align: middle-left; align-self: stretch; }
-.landing-left .hero-text { -unity-text-align: middle-left; margin: 14px 0 26px 0; max-width: 620px; }
-.landing-left .choice-row { justify-content: flex-start; align-self: stretch; }
-.landing-left .drop--new, .landing-left .drop--open { width: auto; flex-grow: 1; flex-basis: 0; margin: 0 16px 0 0; }
-.landing-left .drop--open { margin-right: 0; }
-.landing-left .hero-status { -unity-text-align: middle-left; }
-.recent { flex-grow: 1; margin-top: 28px; }
-.recent-head { justify-content: space-between; align-items: center; flex-wrap: nowrap; margin-bottom: 6px; padding: 0 4px 0 10px; }
-.recent-title { color: var(--text-secondary); font-size: 10px; letter-spacing: 2px; -unity-font: resource("UI/Fonts/Inter-SemiBold"); }
-.recent-list { background-color: var(--bg-panel); border-width: 1px; border-color: var(--border); border-radius: 8px; padding: 4px; flex-grow: 1; }
-.recent-item { flex-direction: row; align-items: center; flex-shrink: 0; }
-.recent-open {
-    flex-grow: 1; flex-shrink: 1; flex-direction: row; align-items: center; height: 48px; margin: 0; padding: 0 10px 0 8px;
-    border-width: 0; border-radius: 6px; background-color: rgba(0, 0, 0, 0);
+.landing-scroll { flex-grow: 1; }
+.landing-scroll > .unity-scroll-view__content-viewport > .unity-scroll-view__content-container { padding-bottom: 40px; }
+.land-hero { flex-shrink: 0; overflow: hidden; }
+.land-hero-img { position: absolute; top: 0; right: 0; bottom: 0; background-image: resource("UI/Landing/hero"); -unity-background-scale-mode: scale-and-crop; }
+.land-hero-text { position: absolute; left: 64px; top: 0; bottom: 0; justify-content: center; width: 44%; min-width: 520px; }
+.land-eyebrow { color: var(--land-muted); font-size: 13px; letter-spacing: 5px; margin: 0 0 18px 0; -unity-font: resource("UI/Fonts/Mulish-Medium"); }
+.land-title { color: #F3F5F3; font-size: 52px; margin: 0; padding: 0; white-space: normal; -unity-font: resource("UI/Fonts/Mulish-Bold"); }
+.land-sub { color: #C9CFCC; font-size: 20px; letter-spacing: 0.4px; margin: 14px 0 0 0; white-space: normal; max-width: 600px; -unity-font: resource("UI/Fonts/Mulish-Regular"); }
+.land-actions { flex-direction: row; margin: 14px 48px 0 48px; flex-shrink: 0; }
+.land-action {
+    width: 31%; min-width: 360px; max-width: 520px; flex-direction: row; align-items: center; height: 74px; margin: 0; padding: 0 20px 0 12px;
+    background-color: var(--land-card); border-width: 1px; border-color: var(--land-border); border-radius: 6px;
 }
-.recent-open:hover:enabled { background-color: var(--bg-hover); }
-.recent-icon { width: 30px; height: 30px; border-radius: 6px; background-color: var(--accent-soft); align-items: center; justify-content: center; margin-right: 12px; flex-shrink: 0; }
-.recent-glyph { color: var(--accent); font-size: 12px; }
-.recent-words { flex-grow: 1; flex-shrink: 1; overflow: hidden; justify-content: center; }
-.recent-name { height: 18px; margin: 0; padding: 0; flex-shrink: 0; color: var(--text-primary); font-size: 13px; -unity-font: resource("UI/Fonts/Inter-Medium"); -unity-text-align: middle-left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recent-path { height: 16px; margin: 0; padding: 0; flex-shrink: 0; color: var(--text-secondary); font-size: 11px; -unity-text-align: middle-left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recent-when { color: var(--text-secondary); font-size: 11px; margin-left: 10px; flex-shrink: 0; -unity-text-align: middle-right; }
-.recent-remove { width: 26px; height: 26px; margin: 0 6px 0 2px; padding: 0; border-width: 0; border-radius: 4px; flex-shrink: 0; background-color: rgba(0, 0, 0, 0); color: var(--text-secondary); font-size: 16px; }
-.recent-remove:hover:enabled { background-color: rgba(245, 138, 128, 0.25); color: var(--text-primary); }
-.recent-item--missing .recent-name, .recent-item--missing .recent-path { color: var(--text-disabled); }
-.recent-item--missing .recent-when { color: var(--warning); }
-.recent-empty { color: var(--text-secondary); font-size: 12px; -unity-text-align: middle-center; white-space: normal; padding: 18px 14px; }
+.land-action--next { margin-left: 16px; }
+.land-action:hover:enabled { background-color: var(--land-card-hover); border-color: #3A4546; }
+.land-action--primary { background-color: var(--land-primary); border-color: #6C8462; }
+.land-action--primary:hover:enabled { background-color: var(--land-primary-hover); border-color: #7C9672; }
+.land-action-icon { width: 50px; height: 50px; border-radius: 6px; background-color: var(--land-icon); align-items: center; justify-content: center; flex-shrink: 0; }
+.land-action--primary .land-action-icon { background-color: rgba(255, 255, 255, 0.1); }
+.land-action-icon .icon { width: 22px; height: 22px; -unity-background-image-tint-color: #E9ECEA; }
+.land-action-words { flex-grow: 1; margin-left: 16px; }
+.land-action-title { color: var(--land-text); font-size: 16px; margin: 0; padding: 0; -unity-text-align: middle-left; -unity-font: resource("UI/Fonts/Mulish-Medium"); }
+.land-action-text { color: #C3CBC7; font-size: 13px; margin: 3px 0 0 0; padding: 0; -unity-text-align: middle-left; -unity-font: resource("UI/Fonts/Mulish-Regular"); }
+.land-arrow { width: 18px; height: 18px; -unity-background-image-tint-color: #DDE2DF; }
+.land-status { color: var(--warning); font-size: 13px; margin: 10px 48px 0 48px; white-space: normal; -unity-font: resource("UI/Fonts/Mulish-Regular"); }
+.land-recent-head { flex-direction: row; align-items: center; margin: 30px 48px 14px 48px; flex-shrink: 0; }
+.land-recent-title { color: var(--land-text); font-size: 24px; flex-grow: 1; margin: 0; padding: 0; -unity-font: resource("UI/Fonts/Mulish-Medium"); }
+.land-search { flex-direction: row; align-items: center; width: 250px; height: 36px; padding-left: 12px; border-width: 1px; border-color: #3A4344; border-radius: 4px; background-color: #121A1A; }
+.land-search .icon { -unity-background-image-tint-color: #C3CBC7; }
+.land-search TextField { flex-grow: 1; margin: 0; }
+.land-search .unity-base-text-field__input { background-color: rgba(0, 0, 0, 0); border-width: 0; color: var(--land-text); font-size: 14px; -unity-font: resource("UI/Fonts/Mulish-Regular"); padding-left: 8px; }
+.land-search-hint { position: absolute; left: 38px; top: 0; bottom: 0; color: #7E8885; font-size: 14px; -unity-text-align: middle-left; -unity-font: resource("UI/Fonts/Mulish-Regular"); }
+.land-viewall { flex-direction: row; align-items: center; margin-left: 24px; padding: 6px 4px; background-color: rgba(0, 0, 0, 0); border-width: 0; color: var(--land-text); font-size: 15px; -unity-font: resource("UI/Fonts/Mulish-Regular"); }
+.land-viewall:hover:enabled { color: #FFFFFF; background-color: rgba(0, 0, 0, 0); }
+.land-viewall .land-arrow { margin-left: 10px; width: 16px; height: 16px; }
+.land-clear { color: var(--land-muted); margin-left: 18px; }
+.land-clear:hover:enabled { color: #F58A80; }
+.land-grid { flex-direction: row; flex-wrap: wrap; margin: 0 48px; }
+.land-card { margin: 0 0 18px 0; padding: 0; border-width: 0; border-radius: 6px; overflow: hidden; background-color: var(--land-card); flex-direction: column; align-items: stretch; }
+.land-card:hover:enabled { background-color: var(--land-card-hover); }
+.land-card:hover:enabled .land-thumb { -unity-background-image-tint-color: #FFFFFF; }
+.land-thumb { background-color: #18211F; -unity-background-scale-mode: scale-and-crop; -unity-background-image-tint-color: #E4E4E4; align-items: center; justify-content: center; }
+.land-card-info { flex-direction: row; align-items: center; height: 64px; padding: 0 10px 0 17px; }
+.land-card-words { flex-grow: 1; flex-shrink: 1; overflow: hidden; }
+.land-card-name { color: var(--land-text); font-size: 16px; margin: 0; padding: 0; -unity-text-align: middle-left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -unity-font: resource("UI/Fonts/Mulish-Medium"); }
+.land-card-date { color: var(--land-muted); font-size: 14px; margin: 4px 0 0 0; padding: 0; -unity-text-align: middle-left; -unity-font: resource("UI/Fonts/Mulish-Regular"); }
+.land-card--missing .land-card-name { color: #6F7976; }
+.land-card--missing .land-card-date { color: var(--warning); }
+.land-more { width: 32px; height: 32px; margin: 0; padding: 0; border-width: 0; border-radius: 4px; background-color: rgba(0, 0, 0, 0); align-items: center; justify-content: center; flex-shrink: 0; }
+.land-more:hover:enabled { background-color: rgba(255, 255, 255, 0.08); }
+.land-more .icon { -unity-background-image-tint-color: #DDE2DF; }
+.land-empty { color: var(--land-muted); font-size: 15px; margin: 8px 48px; -unity-font: resource("UI/Fonts/Mulish-Regular"); white-space: normal; }
 
 /* file browser */
 .modal-back { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: rgba(10, 11, 13, 0.6); align-items: center; justify-content: center; }
@@ -517,3 +520,40 @@ Toggle Label { color: var(--text-primary); font-size: 12px; }
 .loading-detail { color: var(--text-secondary); font-size: 12px; margin: 0 0 10px 0; white-space: normal; -unity-text-align: middle-center; }
 .loading-elapsed { color: var(--accent); font-size: 11px; margin: 0; -unity-text-align: middle-center; }
 .loading-hint { color: var(--text-disabled); font-size: 11px; margin: 10px 0 0 0; white-space: normal; -unity-text-align: middle-center; }
+
+/* ================= opening animation (after Unity's splash) ================= */
+.splash { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: #111514; overflow: hidden; }
+.splash-land { position: absolute; top: 0; right: 0; bottom: 0; left: 0; -unity-background-scale-mode: scale-and-crop; }
+.splash-contour-clip { position: absolute; top: 0; left: 0; bottom: 0; width: 0; overflow: hidden; }
+.splash-contours { right: auto; bottom: auto; }
+.splash-words { position: absolute; left: 80px; top: 9%; width: 560px; }
+.splash-eyebrow-row { flex-direction: row; align-items: center; }
+.splash-eyebrow { color: #B1C99A; font-size: 13px; margin: 0; padding: 0; -unity-font: resource("UI/Fonts/Mulish-Medium"); }
+.splash-rule { height: 1px; width: 340px; margin-left: 14px; background-color: #353D38; }
+.splash-title { color: #F0F2ED; font-size: 84px; margin: 14px 0 0 0; padding: 0; -unity-font: resource("UI/Fonts/Mulish-Bold"); white-space: normal; }
+.splash-title--second { margin-top: -22px; }
+.splash-sub { color: #A8B0AA; font-size: 22px; margin: 16px 0 0 0; padding: 0; white-space: normal; -unity-font: resource("UI/Fonts/Mulish-Regular"); }
+.splash-steps { margin-top: 40px; }
+.splash-status { color: #F0F2ED; font-size: 18px; margin: 0 0 12px 0; padding: 0; -unity-font: resource("UI/Fonts/Mulish-Medium"); }
+.splash-bar-row { flex-direction: row; align-items: center; margin-bottom: 22px; }
+.splash-track { width: 420px; height: 16px; border-radius: 8px; border-width: 1px; border-color: #353D38; background-color: #1B211F; overflow: hidden; }
+.splash-fill { height: 100%; border-radius: 8px; background-color: #9DBB84; transition-property: width; transition-duration: 0.4s; transition-timing-function: ease-out-cubic; }
+.splash-count { color: #F0F2ED; font-size: 16px; margin: 0 0 0 20px; padding: 0; -unity-font: resource("UI/Fonts/Mulish-Regular"); }
+.splash-step { flex-direction: row; align-items: center; height: 40px; }
+.splash-dot { width: 26px; height: 26px; border-radius: 13px; border-width: 1.5px; border-color: #4A534E; align-items: center; justify-content: center; margin-left: 4px; }
+.splash-dot .icon { width: 16px; height: 16px; -unity-background-image-tint-color: #111514; opacity: 0; }
+.splash-step--done .splash-dot { background-color: #9DBB84; border-color: #9DBB84; }
+.splash-step--done .splash-dot .icon { opacity: 1; }
+.splash-step--current .splash-dot { border-color: #B1C99A; }
+.splash-step-text { color: #7C857F; font-size: 16px; margin: 0 0 0 26px; padding: 0; -unity-font: resource("UI/Fonts/Mulish-Regular"); }
+.splash-step--done .splash-step-text { color: #F0F2ED; }
+.splash-step--current .splash-step-text { color: #F0F2ED; }
+.splash-panel {
+    position: absolute; left: 78px; bottom: 84px; width: 962px; height: 140px; flex-direction: row; align-items: center; padding: 0 12px;
+    background-color: rgba(27, 33, 31, 0.86); border-width: 1px; border-color: #353D38; border-radius: 8px;
+}
+.splash-thumb { width: 266px; height: 116px; border-radius: 4px; -unity-background-scale-mode: scale-and-crop; flex-shrink: 0; }
+.splash-divider { width: 1px; height: 84px; background-color: #353D38; margin: 0 26px; }
+.splash-fact { flex-grow: 1; flex-shrink: 1; }
+.splash-fact-head { color: #B1C99A; font-size: 14px; margin: 0 0 10px 0; padding: 0; -unity-font: resource("UI/Fonts/Mulish-SemiBold"); }
+.splash-fact-text { color: #E3E7E1; font-size: 16px; margin: 0; padding: 0; white-space: normal; -unity-font: resource("UI/Fonts/Mulish-Regular"); }

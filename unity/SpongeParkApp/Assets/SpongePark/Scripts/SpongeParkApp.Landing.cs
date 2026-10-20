@@ -7,6 +7,7 @@ using System.Linq;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Kit = SpongePark.UI.Kit;
 
 namespace SpongePark
 {
@@ -27,8 +28,6 @@ namespace SpongePark
         const string RecentKey = "spongepark.recent";          // before: paths joined with '|' (read once, then replaced)
         const string RecentListKey = "spongepark.recent.v2";   // JSON [{path, name, opened (unix seconds)}]
         const int RecentKeep = 20;
-        ScrollView recentList;
-        Button recentClear;
         float nextEngineCheck;
 
         // ------------------------------------------------------------ screens
@@ -66,127 +65,218 @@ namespace SpongePark
             landing = new VisualElement();
             landing.AddToClassList("landing");
             root.Insert(root.IndexOf(mainApp), landing);
+            var scroll = new ScrollView(ScrollViewMode.Vertical) { horizontalScrollerVisibility = ScrollerVisibility.Hidden };
+            scroll.AddToClassList("landing-scroll");
+            landing.Add(scroll);
 
-            // two columns under the nav: new / open on the left (wider), recently opened on the right
-            var columns = new VisualElement();
-            columns.AddToClassList("landing-columns");
-            landing.Add(columns);
-            var left = new VisualElement();
-            left.AddToClassList("landing-left");
-            columns.Add(left);
-            var right = new VisualElement();
-            right.AddToClassList("landing-right");
-            columns.Add(right);
+            // banner: the park picture on the right, fading into the page under the words
+            landHero = new VisualElement();
+            landHero.AddToClassList("land-hero");
+            landHeroImg = new VisualElement { pickingMode = PickingMode.Ignore };
+            landHeroImg.AddToClassList("land-hero-img");
+            landHero.Add(landHeroImg);
+            var words = new VisualElement { pickingMode = PickingMode.Ignore };
+            words.AddToClassList("land-hero-text");
+            var eyebrow = Text(UI.Splash.Spaced("DESIGN   RESTORE   ADAPT"), "land-eyebrow");
+            words.Add(eyebrow);
+            landTitle = Text("Nature-based\nsolutions, in your hands.", "land-title");
+            words.Add(landTitle);
+            landSub = Text("Plan, design and visualise resilient parks, wetlands and urban landscapes.", "land-sub");
+            words.Add(landSub);
+            landHero.Add(words);
+            scroll.Add(landHero);
 
-            var nav = Row("landing-nav");
-            var brand = Row("brand");
-            var mark = new VisualElement();
-            mark.AddToClassList("brand-mark");
-            mark.Add(new Label("s"));
-            brand.Add(mark);
-            brand.Add(Text("Sponge Park.", "landing-brand"));
-            nav.Add(brand);
-            landing.Add(nav);
+            // the two ways in: a new project starts from the site survey; or open a saved one
+            var actions = new VisualElement();
+            actions.AddToClassList("land-actions");
+            actions.Add(ActionCard("plus", "New Project", "Start a new park design from its survey (DXF)", true,
+                () => PickFile("Choose the site survey (DXF)", "Site survey", "dxf,dwg", f => StartCoroutine(StartIntake(f)))));
+            var open = ActionCard("folder", "Open Project", "Browse your files for a .sponge project", false,
+                () => PickFile("Open a Sponge Park project", "Sponge Park project", "sponge", f => StartCoroutine(OpenExisting(f))));
+            open.AddToClassList("land-action--next");
+            actions.Add(open);
+            scroll.Add(actions);
+            landingStatus = Text("", "land-status");
+            scroll.Add(landingStatus);
 
-            var hero = new VisualElement();
-            hero.AddToClassList("hero");
-            hero.Add(Text("Every park can", "hero-title"));
-            hero.Add(Text("hold the rain.", "hero-title", "hero-accent"));
-            hero.Add(Text("Start with the surveyor's drawing. The engine sorts out its layers, asks you about the ones it is not sure of, and builds the ground the water will move over.", "hero-text"));
+            // recent projects, as pictures of their sites
+            var head = new VisualElement();
+            head.AddToClassList("land-recent-head");
+            head.Add(Text("Recent Projects", "land-recent-title"));
+            var search = new VisualElement();
+            search.AddToClassList("land-search");
+            search.Add(Kit.Icon("search"));
+            var hint = Text("Search projects…", "land-search-hint");
+            landSearch = new TextField();
+            landSearch.RegisterValueChangedCallback(e => { Kit.Show(hint, string.IsNullOrEmpty(e.newValue)); FillRecent(); });
+            search.Add(landSearch);
+            search.Add(hint);
+            head.Add(search);
+            landViewAll = new Button(() => { recentAll = !recentAll; FillRecent(); });
+            landViewAll.AddToClassList("land-viewall");
+            landViewAllLabel = Text("View all", "");
+            landViewAll.Add(landViewAllLabel);
+            var arrow = Kit.Icon("arrow-right");
+            arrow.AddToClassList("land-arrow");
+            landViewAll.Add(arrow);
+            head.Add(landViewAll);
+            landClear = new Button { text = "Clear list", tooltip = "Empty the recent list (the project files are not touched)" };
+            landClear.AddToClassList("land-viewall");
+            landClear.AddToClassList("land-clear");
+            landClear.clicked += () =>
+            {
+                if (landClear.text == "Clear list")
+                {
+                    landClear.text = "Click again to clear";
+                    landClear.schedule.Execute(() => landClear.text = "Clear list").StartingIn(3000);
+                    return;
+                }
+                SaveRecent(new List<RecentProject>());
+                recentAll = false;
+                landClear.text = "Clear list";
+                FillRecent();
+            };
+            head.Add(landClear);
+            scroll.Add(head);
+            recentGrid = new VisualElement();
+            recentGrid.AddToClassList("land-grid");
+            recentGrid.RegisterCallback<GeometryChangedEvent>(e => { if (!Mathf.Approximately(e.oldRect.width, e.newRect.width)) LayoutGrid(); });
+            scroll.Add(recentGrid);
 
-            // two ways in: start a new project from a survey, or open a .sponge project
-            var choices = Row("choice-row");
-            choices.Add(ChoiceCard("+", "New project", "Choose the site survey (DXF)",
-                () => PickFile("Choose the site survey (DXF)", "Site survey", "dxf,dwg", p => StartCoroutine(StartIntake(p))), true));
-            choices.Add(ChoiceCard("◆", "Open a project", "A .sponge file you saved before",
-                () => PickFile("Open a Sponge Park project", "Sponge Park project", "sponge", p => StartCoroutine(OpenExisting(p))), false));
-            hero.Add(choices);
-            landingStatus = Text("", "hero-status");
-            hero.Add(landingStatus);
-            left.Add(hero);
+            // sizes follow the window: banner about a third of the height, as many picture columns as fit
+            landing.RegisterCallback<GeometryChangedEvent>(e => LayoutLanding());
+        }
 
-            // right: recently opened projects, newest first; the list scrolls inside its panel
-            var recent = new VisualElement();
-            recent.AddToClassList("recent");
-            var head = Row("recent-head");
-            head.Add(Text("RECENTLY OPENED", "recent-title"));
-            recentClear = Btn("Clear list", () => { SaveRecent(new List<RecentProject>()); FillRecent(); }, "btn--link");
-            head.Add(recentClear);
-            recent.Add(head);
-            recentList = new ScrollView(ScrollViewMode.Vertical) { horizontalScrollerVisibility = ScrollerVisibility.Hidden };
-            recentList.AddToClassList("recent-list");
-            recent.Add(recentList);
-            right.Add(recent);
+        VisualElement landHero, landHeroImg, recentGrid;
+        Label landTitle, landSub, landViewAllLabel;
+        TextField landSearch;
+        Button landViewAll, landClear;
+        bool recentAll;
+        int recentCols = 3;
+        float landW, landH;
+
+        void LayoutLanding()
+        {
+            var r = landing.layout;
+            if (r.width <= 0 || (Mathf.Approximately(r.width, landW) && Mathf.Approximately(r.height, landH))) return;
+            landW = r.width;
+            landH = r.height;
+            float h = Mathf.Clamp(r.height * 0.31f, 220, 400);
+            landHero.style.height = h;
+            landHeroImg.style.width = r.width * 0.58f;   // cropped to fit; the words sit left of it
+            landTitle.style.fontSize = Mathf.Clamp(h * 0.155f, 36, 58);
+            landSub.style.fontSize = Mathf.Clamp(h * 0.065f, 17, 22);
+        }
+
+        void LayoutGrid()
+        {
+            float gridW = recentGrid.layout.width;
+            if (float.IsNaN(gridW) || gridW <= 0) return;
+            int cols = Mathf.Clamp(Mathf.FloorToInt((gridW + 18) / 360f), 2, 5);
+            if (cols != recentCols) { recentCols = cols; FillRecent(); }
+            else SizeCards();
+        }
+
+        void SizeCards()
+        {
+            float gridW = recentGrid.layout.width, gap = 18;
+            if (float.IsNaN(gridW) || gridW <= 0) return;
+            float w = Mathf.Floor((gridW - gap * (recentCols - 1)) / recentCols);
+            int i = 0;
+            foreach (var c in recentGrid.Children())
+            {
+                if (!c.ClassListContains("land-card")) continue;
+                c.style.width = w;
+                c.style.marginRight = (i++ % recentCols == recentCols - 1) ? 0 : gap;
+                var thumb = c.Q(className: "land-thumb");
+                if (thumb != null) thumb.style.height = Mathf.Round(w * 0.38f);
+            }
+        }
+
+        Button ActionCard(string icon, string title, string text, bool primary, System.Action onClick)
+        {
+            var b = new Button(onClick);
+            b.AddToClassList("land-action");
+            if (primary) b.AddToClassList("land-action--primary");
+            var box = new VisualElement { pickingMode = PickingMode.Ignore };
+            box.AddToClassList("land-action-icon");
+            box.Add(Kit.Icon(icon));
+            b.Add(box);
+            var words = new VisualElement { pickingMode = PickingMode.Ignore };
+            words.AddToClassList("land-action-words");
+            words.Add(Text(title, "land-action-title"));
+            words.Add(Text(text, "land-action-text"));
+            b.Add(words);
+            var arrow = Kit.Icon("arrow-right");
+            arrow.AddToClassList("land-arrow");
+            b.Add(arrow);
+            return b;
         }
 
         void FillRecent()
         {
-            recentList.Clear();
+            if (recentGrid == null) return;
+            recentGrid.Clear();
             var all = Recent();
-            recentClear.style.display = all.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
-            if (all.Count == 0)
-            {
-                recentList.Add(Text("Projects you open or create will appear here.", "recent-empty"));
-                return;
-            }
-            foreach (var r in all) recentList.Add(RecentItem(r));
+            var q = landSearch?.value?.Trim() ?? "";
+            var shown = all.Where(r => q.Length == 0 || (r.name ?? "").IndexOf(q, System.StringComparison.OrdinalIgnoreCase) >= 0
+                                                    || r.path.IndexOf(q, System.StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            int first = recentCols * 2;   // two rows unless View all
+            Kit.Show(landViewAll, shown.Count > first || recentAll);
+            Kit.Show(landClear, all.Count > 0);
+            landViewAllLabel.text = recentAll ? "Show fewer" : $"View all ({shown.Count})";
+            if (all.Count == 0) { recentGrid.Add(Text("Projects you open or create appear here.", "land-empty")); return; }
+            if (shown.Count == 0) { recentGrid.Add(Text($"No project matches “{q}”.", "land-empty")); return; }
+            foreach (var r in recentAll ? shown : shown.Take(first)) recentGrid.Add(RecentCard(r));
+            SizeCards();
         }
 
-        VisualElement RecentItem(RecentProject r)
+        VisualElement RecentCard(RecentProject r)
         {
             bool missing = !System.IO.File.Exists(r.path);
-            var item = new VisualElement();
-            item.AddToClassList("recent-item");
-            item.EnableInClassList("recent-item--missing", missing);
-
-            var open = new Button(() => StartCoroutine(OpenExisting(r.path))) { tooltip = r.path };
-            open.AddToClassList("recent-open");
-            var icon = new VisualElement { pickingMode = PickingMode.Ignore };
-            icon.AddToClassList("recent-icon");
-            icon.Add(Text("◆", "recent-glyph"));
-            open.Add(icon);
+            var card = new Button(() => StartCoroutine(OpenExisting(r.path))) { tooltip = r.path };
+            card.AddToClassList("land-card");
+            card.EnableInClassList("land-card--missing", missing);
+            var thumb = new VisualElement { pickingMode = PickingMode.Ignore };
+            thumb.AddToClassList("land-thumb");
+            var tex = Contour(r.path);
+            if (tex != null) thumb.style.backgroundImage = new StyleBackground(tex);
+            card.Add(thumb);
+            var info = new VisualElement { pickingMode = PickingMode.Ignore };
+            info.AddToClassList("land-card-info");
             var words = new VisualElement { pickingMode = PickingMode.Ignore };
-            words.AddToClassList("recent-words");
-            words.Add(Text(string.IsNullOrEmpty(r.name) ? System.IO.Path.GetFileNameWithoutExtension(r.path) : r.name, "recent-name"));
-            words.Add(Text(Shorten(System.IO.Path.GetDirectoryName(r.path) ?? "", 48), "recent-path"));
-            open.Add(words);
-            open.Add(Text(missing ? "file not found" : Ago(r.opened), "recent-when"));
-            item.Add(open);
-
-            var remove = new Button(() => { Forget(r.path); FillRecent(); }) { text = "×", tooltip = "Remove from this list (the file is not deleted)" };
-            remove.AddToClassList("recent-remove");
-            item.Add(remove);
-            return item;
-        }
-
-        static string Shorten(string s, int max) => s.Length <= max ? s : "…" + s.Substring(s.Length - (max - 1));
-
-        static string Ago(System.DateTime? when)
-        {
-            if (when == null) return "";
-            var d = System.DateTime.UtcNow - when.Value;
-            if (d.TotalMinutes < 1) return "just now";
-            if (d.TotalHours < 1) return $"{(int)d.TotalMinutes} min ago";
-            if (d.TotalDays < 1) return $"{(int)d.TotalHours} h ago";
-            if (d.TotalDays < 2) return "yesterday";
-            if (d.TotalDays < 7) return $"{(int)d.TotalDays} days ago";
-            return when.Value.ToLocalTime().ToString("d MMM yyyy");
-        }
-
-        VisualElement ChoiceCard(string glyph, string title, string text, System.Action onClick, bool primary)
-        {
-            var card = new Button(onClick);
-            card.AddToClassList("drop");
-            card.AddToClassList(primary ? "drop--new" : "drop--open");
-            var icon = new VisualElement();
-            icon.AddToClassList("drop-icon");
-            if (!primary) icon.AddToClassList("drop-icon--clay");
-            icon.Add(Text(glyph, "drop-arrow"));
-            card.Add(icon);
-            card.Add(Text(title, "drop-title"));
-            card.Add(Text(text, "drop-text"));
+            words.AddToClassList("land-card-words");
+            words.Add(Text(string.IsNullOrEmpty(r.name) ? System.IO.Path.GetFileNameWithoutExtension(r.path) : r.name, "land-card-name"));
+            words.Add(Text(missing ? "File not found" : r.opened == null ? "" :
+                r.opened.Value.ToLocalTime().ToString("MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture), "land-card-date"));
+            info.Add(words);
+            var more = new Button { tooltip = "More" };
+            more.AddToClassList("land-more");
+            more.Add(Kit.Icon("more"));
+            more.clicked += () =>
+            {
+                var menu = new GenericDropdownMenu();
+                if (!missing) menu.AddItem("Open", false, () => StartCoroutine(OpenExisting(r.path)));
+                if (!missing) menu.AddItem("Show in folder", false, () => Application.OpenURL("file:///" + (System.IO.Path.GetDirectoryName(r.path) ?? "").Replace('\\', '/')));
+                menu.AddItem("Remove from this list", false, () => { Forget(r.path); FillRecent(); });
+                menu.DropDown(more.worldBound, more, false);
+            };
+            info.Add(more);
+            card.Add(info);
             return card;
         }
+
+        /// Each project's card shows one of the contour maps, always the same one for the same file.
+        static Texture2D Contour(string project)
+        {
+            int h = 17;
+            foreach (var ch in FullPath(project).ToLowerInvariant()) h = h * 31 + ch;
+            var k = (h & 0x7fffffff) % 6;
+            if (!contours.TryGetValue(k, out var t)) contours[k] = t = Resources.Load<Texture2D>("UI/Landing/contour_" + k);
+            return t;
+        }
+
+        static readonly Dictionary<int, Texture2D> contours = new Dictionary<int, Texture2D>();
 
         /// While the landing is up: checks the engine every few seconds and starts it once if it is not running.
         void AnimateLanding()

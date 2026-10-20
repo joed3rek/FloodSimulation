@@ -83,7 +83,19 @@ namespace SpongePark
             if (Arg("-spProject") != null) StartCoroutine(Autorun());
             else
             {
+                // the opening animation (not over screenshots unless asked for with -spSplash)
+                bool splashOn = Arg("-spShot") == null || System.Environment.GetCommandLineArgs().Contains("-spSplash");
+                var splash = splashOn ? new UI.Splash(new[] { ("ui", "Loading the interface"), ("gpu", "Checking the graphics card"),
+                    ("recent", "Reading recent projects"), ("start", "Preparing the start screen"), ("engine", "Starting the flood engine") }) : null;
+                if (splash != null)
+                {
+                    splash.Hold = System.Environment.GetCommandLineArgs().Contains("-spSplash");
+                    if (float.TryParse(Arg("-spSplashAt"), out var at)) splash.FreezeAt = at;   // -spSplashAt s: that moment of the animation
+                    doc.rootVisualElement.Add(splash.Root);
+                    splash.Done("ui");
+                }
                 ShowLanding();
+                if (splash != null) StartCoroutine(RunSplash(splash));
                 StartCoroutine(CheckEngine());
                 if (Arg("-spShot") != null) StartCoroutine(Shot());
                 if (System.Environment.GetCommandLineArgs().Contains("-spNewProject")) StartCoroutine(Later(3, NewProjectNow()));
@@ -92,6 +104,26 @@ namespace SpongePark
                 if (sponge != null) StartCoroutine(OpenWhenReady(sponge));
             }
 #endif
+        }
+
+        /// The splash's steps, each ticked when its work is really done; it leaves once all are (or after 8 s
+        /// for the engine, which then carries on behind the start screen's own loading screen).
+        IEnumerator RunSplash(UI.Splash splash)
+        {
+            _ = GpuWaterSim.Supported;   // the check itself: can this graphics card run the live water?
+            splash.Done("gpu");
+            splash.Done("recent");   // ShowLanding read the list and checked each file
+            while (landW <= 0) yield return null;   // the start screen has its layout
+            splash.Done("start");
+            float until = Time.realtimeSinceStartup + 8;
+            while (!engineUp && Time.realtimeSinceStartup < until)
+            {
+                yield return EnsureEngine();
+                if (!engineUp) yield return new WaitForSecondsRealtime(0.5f);
+            }
+            if (engineUp) splash.Done("engine");
+            else splash.Note("engine", "Starting the flood engine (carries on in the background)");
+            splash.Leave();
         }
 
         // behind another window: a few frames a second are enough to poll jobs (not in screenshot or autorun mode)
