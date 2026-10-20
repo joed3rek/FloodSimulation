@@ -163,7 +163,11 @@ class Site:
     @classmethod
     def load(cls, project: Project, option_id: Optional[str] = None) -> "Site":
         """The site; an option with its own ``scenarios/<id>/site/subcatchments.geojson`` (rebuilt on
-        its graded ground) uses those subcatchments."""
+        its graded ground) uses those subcatchments (rebuilt first if quick design edits left them owed)."""
+        if option_id and option_id != "baseline":
+            from ..layout.apply import ensure_regraded
+
+            ensure_regraded(project, option_id)
         b = project.read_geojson(BOUNDARY)["features"]
         boundary = unary_union([shape(f["geometry"]) for f in b]) if b else None
         rel = f"scenarios/{option_id}/{SUBCATCHMENTS}" if option_id else SUBCATCHMENTS

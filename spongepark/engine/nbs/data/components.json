@@ -43,6 +43,12 @@
       "scales": ["street", "park", "lake"], "swmm": "storage", "geometry": ["Polygon"],
       "description": "Low gabion check dam (0.3-0.6 m) or baffle inside a storm water drain, creating a pool upstream with overflow notch; usually paired with separators, NSBBs or floating wetlands.",
       "modelling_note": "Hydrology: small storage pool behind the dam with a notch weir. Separators, NSBBs and floating wetlands treat water quality and are not credited with volume reduction."
+    },
+    "green_bridge": {
+      "label": "Green bridge (check dam across a swale)", "chapter": null, "functions": ["detention", "infiltration", "access"],
+      "scales": ["park"], "swmm": "storage", "geometry": ["LineString"],
+      "description": "A low earth or stone crossing drawn across a bioswale: it holds water in the swale behind it up to its crest, and above the crest water spills over it into the next stretch. People walk across it.",
+      "modelling_note": "Ground: the swale is raised to the crest under the bridge, so the flow map and the 2D storm pond behind it. SWMM: the pool behind each bridge is a storage node (a wedge whose area grows with depth to the pool area at the crest) with an overflow weir as long as the swale's bottom is wide; the swale's outflow passes through its bridges from upstream to downstream."
     }
   }
 }

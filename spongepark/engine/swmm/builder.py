@@ -236,9 +236,12 @@ def build_spec(
     # SWMM allows one inlet link per outfall: each link leaving the site gets its own outfall node
     # at the same place and invert; this also makes per-link volumes exact (cumulative inflow).
     link_outfall: Dict[str, Tuple[str, str, str]] = {}
+    decks = unary_union([e.footprint() for e in elements if e.type == "green_bridge"])         if any(e.type == "green_bridge" for e in elements) else None
     for e in elements:
         eid = swmm_id(e.id)
         fp = e.footprint()
+        if decks is not None and e.spec.is_lid and fp.intersects(decks):   # a bridge's deck is its own (rain on it)
+            fp = fp.difference(decks)
         zone_id = e.soil_zone
         if zone_id is None:
             z, _ = site.dominant_soil(fp)

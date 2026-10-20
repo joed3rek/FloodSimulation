@@ -276,6 +276,18 @@
           "default": null,
           "title": "Permanent Pool Depth M"
         },
+        "pool_area_m2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pool Area M2"
+        },
         "safety_bench_width_m": {
           "anyOf": [
             {

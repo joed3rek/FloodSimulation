@@ -17,15 +17,16 @@ namespace SpongePark
     public partial class SpongeParkApp
     {
         const string DesignScenario = "design";
-        static readonly string[] ToolTypes = { "rain_garden", "bioswale", "detention_pond", "retention_pond", "recharge_well" };
+        static readonly string[] ToolTypes = { "rain_garden", "bioswale", "detention_pond", "retention_pond", "recharge_well", "green_bridge" };
         static readonly Dictionary<string, string> ToolNames = new Dictionary<string, string>
         {
             ["rain_garden"] = "Rain garden", ["bioswale"] = "Bioswale", ["detention_pond"] = "Detention pond",
-            ["retention_pond"] = "Retention pond", ["recharge_well"] = "Recharge well",
+            ["retention_pond"] = "Retention pond", ["recharge_well"] = "Recharge well", ["green_bridge"] = "Green bridge",
         };
         static readonly Dictionary<string, string> Prefix = new Dictionary<string, string>
         {
             ["rain_garden"] = "RG", ["bioswale"] = "SW", ["detention_pond"] = "DP", ["retention_pond"] = "RP", ["recharge_well"] = "RW",
+            ["green_bridge"] = "GB",
         };
         static readonly Dictionary<string, string> FieldNames = new Dictionary<string, string>
         {
@@ -33,6 +34,7 @@ namespace SpongePark
             ["top_width_m"] = "Top width (m)", ["side_slope_h_v"] = "Side slope (H:V)", ["check_dam_spacing_m"] = "Check dam spacing (m)",
             ["outlet_diameter_m"] = "Outlet diameter (m)", ["permanent_pool_depth_m"] = "Permanent pool depth (m)",
             ["safety_bench_width_m"] = "Safety bench width (m)", ["well_diameter_m"] = "Well diameter (m)", ["well_depth_m"] = "Well depth (m)",
+            ["dam_height_m"] = "Crest height (m)",
         };
 
         VisualElement hotspotList, propsBox, warnBox, budgetFill, budgetBar;
@@ -82,11 +84,14 @@ namespace SpongePark
                 : "First " + (rain ? "" : "use the design rainfall") + (!rain && !soils ? " and " : "") + (soils ? "" : "answer the ground questions") +
                   " (Site > Site setup). The flow lines and hotspots need neither.";
             drawHint.text = tool == null
-                ? (selectedId != null
+                ? (selectedId != null && (string)Feature(selectedId)?["properties"]?["type"] == "green_bridge"
+                    ? $"{selectedId} selected: drag an end to change where it crosses, drag inside to move it, Delete to remove; crest height in Properties."
+                    : selectedId != null
                     ? $"{selectedId} selected: drag {(Feature(selectedId)?["properties"]?["fit_points"] != null ? "a point to reshape the curve" : "a corner to change its shape")}, " +
                       "drag inside to move it, Delete to remove; Curve / Straight changes its lines; sizes in Properties."
                     : "")
                 : DrawOf(tool) == "point" ? $"Click on the ground to place a {ToolNames[tool].ToLower()}."
+                : tool == "green_bridge" ? "Click on one bank of a bioswale, then the other: the bridge holds water in the swale behind it up to its crest, then lets it spill over. Esc cancels."
                 : DrawOf(tool) == "line" ? "Click along the swale's line; double-click or Enter to finish, Backspace removes the last point, Esc cancels."
                 : "Click the corners on the ground; double-click or Enter to finish, Backspace removes the last corner, Esc cancels.";
             if (siteConfirmed && info != null && designFor != projectPath && !busy) StartCoroutine(LoadDesign());
@@ -172,7 +177,10 @@ namespace SpongePark
         }
 
         // ------------------------------------------------------------ step 3: design state
-        static string DrawOf(string type) => type == "recharge_well" ? "point" : type == "bioswale" ? "line" : "polygon";
+        static string DrawOf(string type) => type == "recharge_well" ? "point" : type == "bioswale" || type == "green_bridge" ? "line" : "polygon";
+
+        /// A green bridge is always a straight crossing; the rest follow Curve / Straight.
+        bool CurveFor(string type) => DrawCurve && type != "green_bridge";
 
         IEnumerator LoadDesign()
         {
@@ -249,10 +257,18 @@ namespace SpongePark
             {
                 var key = kv.Name;
                 float cur = p[key] != null && p[key].Type != JTokenType.Null ? (float)p[key] : (float)kv.Value;
-                card.Add(TextInput(FieldNames.TryGetValue(key, out var lab) ? lab : key, cur.ToString("0.###"),
+                var label = type == "green_bridge" && key == "top_width_m" ? "Deck width (m)" : FieldNames.TryGetValue(key, out var lab) ? lab : key;
+                card.Add(TextInput(label, cur.ToString("0.###"),
                     v => { if (float.TryParse(v, out var x)) pending[key] = x; }));
             }
             var range = designTools[type]["depth_range_m"];
+            if (type == "green_bridge")
+            {
+                float pool = p["pool_area_m2"] != null && p["pool_area_m2"].Type != JTokenType.Null ? (float)p["pool_area_m2"] : 0;
+                card.Add(Text(pool > 0
+                    ? $"Holds a pool of about {pool:0} m² in the swale behind it; above the crest the water spills over into the next stretch."
+                    : "Draw it from bank to bank across a bioswale: it holds water in the swale behind it up to its crest.", "muted"));
+            }
             if (range != null && range.Type == JTokenType.Array)
                 card.Add(Text($"Safe ponding depth {(float)range[0]:0.00}–{(float)range[1]:0.00} m (default limits).", "muted"));
             card.Add(Btn("Apply sizes", () =>
@@ -352,7 +368,13 @@ namespace SpongePark
             designResult = r;
             if (history) { undoStack.Push(before); redoStack.Clear(); }
             if (selectedId != null && Feature(selectedId) == null) selectedId = null;
-            yield return ShowDesignGround();
+            // what the engine worked out for the elements (a bridge's pool) goes onto the drawn ones
+            foreach (var row in r["elements"] ?? new JArray())
+                if (row["pool_area_m2"] != null && Feature((string)row["id"]) is JObject fe) fe["properties"]["pool_area_m2"] = row["pool_area_m2"];
+            right.Option = DesignScenario;
+            showProposed = true;
+            ApplyViewports();
+            yield return right.ReloadGround(api, frame);   // only the carved ground: quick
             RefreshDesign();
             status = $"{ActionWord(action)} {elementId}".Trim() + ". Ground carved and checked.";
             AfterDesignEdit();
@@ -426,7 +448,7 @@ namespace SpongePark
                     ["geometry"] = new JObject { ["type"] = kind == "polygon" ? "Polygon" : "LineString" },
                     ["properties"] = new JObject(),
                 };
-                SetShape(f, drawPts, DrawCurve);
+                SetShape(f, drawPts, CurveFor(tool));
                 AddElement(tool, (JObject)f["geometry"], (JObject)f["properties"]);
             }
             else return;
@@ -507,12 +529,13 @@ namespace SpongePark
                     lastClickXY = xy;
                     if (dbl) { FinishShape(); return; }
                     drawPts.Add(xy);
+                    if (tool == "green_bridge" && drawPts.Count == 2) { FinishShape(); return; }   // bank to bank
                 }
                 // the shape so far with the pointer as the next point: smooth through the points (Curve) or straight
                 bool closed = DrawOf(tool) == "polygon";
                 var fits = new List<Vector2>(drawPts);
                 if (onGround) fits.Add(xy);
-                var shape = ShapeThrough(fits, closed, DrawCurve);
+                var shape = ShapeThrough(fits, closed, CurveFor(tool));
                 if (closed && shape.Count >= 3) shape.Add(shape[0]);
                 right.Design.Preview(drawPts.Select(WorldOf).ToList(), shape.Select(WorldOf).ToList(), col);
                 if (onGround && drawPts.Count > 0)

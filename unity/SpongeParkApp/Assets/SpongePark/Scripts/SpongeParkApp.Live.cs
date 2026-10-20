@@ -68,6 +68,10 @@ namespace SpongePark
         {
             designDirty = false;
             yield return SimulateDesign();
+            if (!status.StartsWith("Error"))   // Run's "Simulating the design..." gives way to what was done
+                status = "Flow redone on the design: water runs into the elements, and the bridges hold it back." +
+                         (ReadyToSimulate ? " The storm plays on the design; SWMM checks it in the background (Results)."
+                                          : " Use the rainfall and answer the ground questions (Site setup) to see the storm.");
         }
 
         IEnumerator SimulateDesign()

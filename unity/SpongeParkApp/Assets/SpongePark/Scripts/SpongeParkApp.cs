@@ -174,7 +174,7 @@ namespace SpongePark
             if (look != null && look.Length == 2 && frame != null && float.TryParse(look[0], out var lx) && float.TryParse(look[1], out var ly))
                 rigLeft.Target = frame.World(lx, ly, left.Terrain.GroundAt(lx, ly) is var gz && !float.IsNaN(gz) ? gz : frame.ZRef);
             yield return new WaitForSecondsRealtime(1);
-            if (Arg("-spDraw") != null) { yield return DrawForTest(Arg("-spDraw")); yield return new WaitForSecondsRealtime(2); }
+            if (Arg("-spDraw") != null) { foreach (var d in Arg("-spDraw").Split('|')) yield return DrawForTest(d); yield return new WaitForSecondsRealtime(2); }   // several: a|b
             // workspace checks: -spPanel <name> opens a panel, tab or dialog, or runs a command (several:
             // -spPanel tab:design,checks,run:live); -spScroll <px> scrolls the open Properties tab
             if (Arg("-spPanel") != null) foreach (var name in Arg("-spPanel").Split(',')) OpenPanel(name.Trim());

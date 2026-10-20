@@ -36,7 +36,7 @@ ICONS = {
     "extents": "scan", "tour": "rotate-3d", "close": "x", "info": "info", "warning": "triangle-alert",
     "check": "check", "circle": "circle", "locked": "lock-keyhole", "save": "save", "swap": "arrow-left-right",
     "snap": "magnet", "engine": "server", "storm": "cloud-rain-wind", "legend": "list",
-    "draw-curve": "pen-tool", "draw-straight": "slash",
+    "draw-curve": "pen-tool", "draw-straight": "slash", "green-bridge": "brick-wall",
 }
 
 

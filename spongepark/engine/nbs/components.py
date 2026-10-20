@@ -64,6 +64,7 @@ class NbSElement(BaseModel):
     well_diameter_m: Optional[float] = None
     well_depth_m: Optional[float] = None
     dam_height_m: Optional[float] = None
+    pool_area_m2: Optional[float] = None  # green bridge: water surface behind it at the crest (from the carved ground)
     freeboard_m: Optional[float] = None
     safety_bench_width_m: Optional[float] = None  # retention pond bench at the permanent pool edge
     # guideline-only attributes (optional, checked when given)
@@ -119,7 +120,7 @@ class NbSElement(BaseModel):
         """Depth from storage invert to the overflow crest, m."""
         if self.type == "recharge_well":
             return float(self.well_depth_m)
-        if self.type == "inline_check_dam":
+        if self.type in ("inline_check_dam", "green_bridge"):
             return float(self.dam_height_m)
         return self.pool_depth_m + float(self.max_ponding_depth_m or 0.0)
 
@@ -135,6 +136,9 @@ class NbSElement(BaseModel):
         if self.type == "recharge_well":
             a = fp.area
             return [(0.0, a), (ymax, a)]
+        if self.type == "green_bridge":   # backwater on a graded channel: the pool lengthens with depth
+            a = max(float(self.pool_area_m2 if self.pool_area_m2 is not None else fp.area), 0.01)
+            return [(float(h), max(a * min(h / top, 1.0), 0.01 * a)) for h in np.linspace(0.0, ymax, n)]
         z = float(self.side_slope_h_v or 0.0)
         out = []
         min_area = 0.01 * fp.area
@@ -292,7 +296,7 @@ _RENAMED = {"top_width_m": "width_m", "max_ponding_depth_m": "depth_m", "well_di
             "weir_length_m": "overflow_weir_length_m"}
 _PARAMS = ["top_width_m", "max_ponding_depth_m", "side_slope_h_v", "soil_media_depth_m", "storage_layer_depth_m",
            "permanent_pool_depth_m", "freeboard_m", "safety_bench_width_m", "invert_elev_m", "longitudinal_slope_pct", "manning_n",
-           "vegetation_volume_fraction", "check_dam_spacing_m", "dam_height_m", "well_diameter_m", "well_depth_m",
+           "vegetation_volume_fraction", "check_dam_spacing_m", "dam_height_m", "pool_area_m2", "well_diameter_m", "well_depth_m",
            "seepage_rate_mm_hr", "weir_length_m",
            # guideline-only attributes travel as extra parameters
            "forebay_volume_fraction", "cell_count", "length_to_width", "shallow_zone_depth_m", "peak_velocity_m_s",

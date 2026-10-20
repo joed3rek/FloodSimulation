@@ -31,6 +31,7 @@ namespace SpongePark
             "detention_pond" => new Color(0.16f, 0.47f, 0.84f),
             "retention_pond" => new Color(0.08f, 0.3f, 0.62f),
             "recharge_well" => new Color(0.38f, 0.31f, 0.84f),
+            "green_bridge" => new Color(0.66f, 0.52f, 0.3f),
             _ => new Color(0.4f, 0.4f, 0.4f)
         };
 
@@ -63,8 +64,9 @@ namespace SpongePark
                 float w = gt == "LineString"
                     ? (p["top_width_m"] != null && p["top_width_m"].Type != JTokenType.Null ? (float)p["top_width_m"] : 3f)
                     : (sel ? 0.5f : 0.3f);
-                if (gt == "LineString") m.Ribbon(pts, w, lift, new Color(col.r, col.g, col.b) * 0.9f);
-                m.Ribbon(pts, sel ? 0.45f : 0.25f, lift + 0.02f, col);
+                float up = type == "green_bridge" ? lift + 0.12f : lift;   // a bridge's deck stands over its swale
+                if (gt == "LineString") m.Ribbon(pts, w, up, new Color(col.r, col.g, col.b) * 0.9f);
+                m.Ribbon(pts, sel ? 0.45f : 0.25f, up + 0.02f, col);
                 if (sel)   // handles to drag: the corners, or a curve's fit points
                 {
                     var grips = p["fit_points"] is JArray fp

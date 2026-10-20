@@ -153,6 +153,13 @@ _DEFAULTS: List[Tuple[str, object, str, Source, str]] = [
     ("nbs.inline_check_dam.dam_height_m", 0.45, "m", L, "Gabion check dam height (4.12: 0.3-0.6 m)."),
     ("nbs.inline_check_dam.notch_width_m", 0.5, "m", D, "Overflow notch width."),
     ("nbs.inline_check_dam.side_slope_h_v", 1.0, "H:V", D, "Drain pool side slope (near-vertical drain walls)."),
+    # --- green bridge (check dam across a bioswale) ---------------------------------------------
+    ("nbs.green_bridge.dam_height_m", 0.15, "m", D,
+     "Crest above the swale bottom (PUB ABC Waters check dams 100 mm; TRCA at most 0.6 m); kept below the swale depth."),
+    ("nbs.green_bridge.top_width_m", 1.5, "m", D, "Deck width along the swale (a walkable crossing)."),
+    ("nbs.green_bridge.seepage_fraction", 1.0, "fraction", D,
+     "Pool bed seepage as a fraction of the native soil rate (1 = the swale's unlined bed)."),
+    ("nbs.green_bridge.min_spacing_m", 10.0, "m", D, "Closest spacing of bridges on one swale (HC 10-15 m, TRCA 10-20 m)."),
     # --- layout generation (Phase 4) ---------------------------------------------------------------
     ("layout.types", ["detention_pond", "bioswale", "rain_garden", "recharge_well"], "-", D,
      "Element types the generator places, in order: ponds take the largest flows at low points, swales convey "

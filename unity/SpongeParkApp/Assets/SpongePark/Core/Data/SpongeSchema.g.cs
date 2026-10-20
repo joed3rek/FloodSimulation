@@ -56,6 +56,7 @@ namespace SpongePark.Data
         [JsonProperty("outlet")] public Outlet Outlet { get; set; }
         [JsonProperty("overflow_weir_length_m")] public double? OverflowWeirLengthM { get; set; }
         [JsonProperty("permanent_pool_depth_m")] public double? PermanentPoolDepthM { get; set; }
+        [JsonProperty("pool_area_m2")] public double? PoolAreaM2 { get; set; }
         [JsonProperty("safety_bench_width_m")] public double? SafetyBenchWidthM { get; set; }
         [JsonProperty("seepage_rate_mm_hr")] public double? SeepageRateMmHr { get; set; }
         [JsonProperty("side_slope_h_v")] public double? SideSlopeHV { get; set; }

@@ -73,6 +73,22 @@ namespace SpongePark
             }
         }
 
+        /// After a design edit: only the carved ground and the element footprints change. The survey objects
+        /// and flow lines stay; the storm frames no longer belong to this ground, so they are dropped.
+        public IEnumerator ReloadGround(EngineClient api, SiteFrame frame)
+        {
+            JToken terrain = null, comps = null;
+            string opt = Option == "baseline" ? null : Option;
+            yield return api.Get(api.P("/terrain" + (opt == null ? "" : "?option=" + opt)), r => terrain = r);
+            if (opt != null) yield return api.Get(api.P($"/options/{opt}/components"), r => comps = r);
+            if (terrain == null) yield break;
+            api.ClearError();
+            Terrain.Build(HeightGrid.FromPayload(terrain), frame, comps);
+            if (Frames != null) { Water.Show(new float[Frames.Rows * Frames.Cols]); Frames = null; }
+            RetainedTime = RetainedLitres = RainLitres = null;
+            Status = "no 2D run yet for this design";
+        }
+
         public IEnumerator StartGpu(EngineClient api, SiteFrame frame, int rp)
         {
             JToken inp = null;

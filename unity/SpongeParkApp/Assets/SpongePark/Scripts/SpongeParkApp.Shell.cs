@@ -142,7 +142,8 @@ namespace SpongePark
             // Design
             C("select", "Select", "select", "Select, move and reshape elements", () => SetTool(null), () => siteConfirmed && designFc != null, () => tool == null, key: "V");
             foreach (var (t, icon, key) in new[] { ("rain_garden", "rain-garden", "R"), ("bioswale", "bioswale", "B"), ("detention_pond", "detention-pond", "D"),
-                                                   ("retention_pond", "retention-pond", "T"), ("recharge_well", "recharge-well", "W") })
+                                                   ("retention_pond", "retention-pond", "T"), ("recharge_well", "recharge-well", "W"),
+                                                   ("green_bridge", "green-bridge", "G") })
             {
                 var tt = t;
                 C("tool-" + t, ToolNames[t], icon, $"Draw a {ToolNames[t].ToLower()} on the ground", () => SetTool(tt),

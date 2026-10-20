@@ -120,6 +120,7 @@ class ElementParameters(SpongeModel):
     vegetation_volume_fraction: Optional[float] = None
     check_dam_spacing_m: Optional[float] = None
     dam_height_m: Optional[float] = None
+    pool_area_m2: Optional[float] = None  # green bridge: pool behind it at the crest
     diameter_m: Optional[float] = None  # recharge well
     well_depth_m: Optional[float] = None
     seepage_rate_mm_hr: Optional[float] = None
