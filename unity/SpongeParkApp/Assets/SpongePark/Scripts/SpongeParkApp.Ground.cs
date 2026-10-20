@@ -197,6 +197,7 @@ namespace SpongePark
             JToken r2 = null;
             yield return api.Send("PUT", api.P("/site/wells"), body, x => r2 = x);
             if (r2 == null) yield break;
+            siteSetup.Close();   // saved: the dialog closes; the result shows as a toast
             FillWells(r2);
             status = $"Wells saved: {(int)r2["in_model"]} of {(int)r2["count"]} in the flood model of the existing site and every design; the drainage is redone around them.";
             yield return LoadViews();
@@ -244,6 +245,7 @@ namespace SpongePark
             JToken r2 = null;
             yield return api.Send("PUT", api.P("/site/ponds"), new JObject { ["answers"] = answers }, x => r2 = x);
             if (r2 == null) yield break;
+            siteSetup.Close();   // saved: the dialog closes; the result shows as a toast
             FillPonds(r2["ponds"]);
             status = $"Ponds saved: {(float)r2["room_m3"]:0} m³ of room cut into the ground model; the flow lines are redone on it.";
             yield return LoadViews();
@@ -274,6 +276,7 @@ namespace SpongePark
             JToken r = null;
             yield return api.Send("PUT", api.P("/rainfall"), new { preset = "hsr_imd_24h" }, x => r = x);
             if (r == null) yield break;
+            siteSetup.Close();   // saved: the dialog closes; the result shows as a toast
             yield return Refresh();
             yield return LoadGroundAndRain();
             var peak = r["storms"].Last();
@@ -342,6 +345,7 @@ namespace SpongePark
             JToken r = null;
             yield return api.Send("PUT", api.P("/site/ground"), answers, x => r = x);
             if (r == null) yield break;
+            siteSetup.Close();   // saved: the dialog closes; the result shows as a toast
             groundSaved = r;
             ShowGroundResult();
             yield return Refresh();
