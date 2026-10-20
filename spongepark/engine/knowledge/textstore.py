@@ -20,9 +20,10 @@ from . import registry
 def norm(text: str) -> str:
     """Text as compared: unicode-folded, dashes and quotes plain, whitespace collapsed, lower case."""
     t = unicodedata.normalize("NFKC", text or "")
-    t = t.replace("–", "-").replace("—", "-").replace("−", "-").replace("­", "")
+    t = re.sub(r"­\s*", "", t)   # soft hyphens (and the line break after one) join the word
+    t = t.replace("–", "-").replace("—", "-").replace("−", "-")
     t = t.replace("‘", "'").replace("’", "'").replace("“", '"').replace("”", '"')
-    t = re.sub(r"-\s*\n\s*", "", t)   # words broken across lines
+    t = re.sub(r"(?<=[A-Za-z])-[ \t]*\n\s*(?=[a-z])", "", t)   # words broken across lines ("infil-\ntration")
     return re.sub(r"\s+", " ", t).strip().lower()
 
 

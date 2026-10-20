@@ -43,10 +43,20 @@ rejects it, and only approved rules will drive the design checks.
 
 ## State (2026-10-20)
 
-- K1: 10 sources fetched (about 530 MB). Blocked to automated clients: Minnesota manual (bot check),
-  NACTO, Townsville, Urban Nature Atlas, BMP Database summary (WRF answers 403); unreachable: CGWB (TLS),
-  NRCS TR-55 (time-out), MOHURD. Paid: CIRIA C753/C768, Melbourne WSUD, MS 2526.
-- K2: 219 staged rules from three sources (STEP LID wiki, PUB ABC Waters engineering procedures 2024,
-  MSMA 2nd edition) for rain gardens / bioretention, bioswales and swales, detention basins, retention
-  (wet) ponds, recharge wells (soakaways, infiltration sumps), infiltration trenches, filter strips, check
-  dams and wetlands. Philadelphia's manuals and SWMM Vol. III (LID parameters) are next.
+- K1: 10 sources fetched (about 530 MB). Supplied by the user: CGWB recharge manual, BMP Database 2020
+  summary, TR-55, Townsville part 1, and the Habitat Collective fact sheets 4.1-4.12 (`hc_guidelines`).
+  Still blocked: Minnesota manual (bot check), NACTO, Townsville design chapters, Urban Nature Atlas.
+  Paid: CIRIA C753/C768, Melbourne WSUD, MS 2526; unreachable: MOHURD.
+- K2: 384 staged rules, every snippet verified on its page:
+
+  | Source | Climate | Rules |
+  |---|---|---|
+  | Habitat Collective fact sheets (4.2, 4.5-4.8) | Aw (US-derived rules keep Cfa/Dfa) | 143 |
+  | STEP LID wiki | Dfa, Dfb | 121 |
+  | MSMA 2nd edition | Af | 56 |
+  | PUB ABC Waters engineering procedures 2024 | Af | 42 |
+  | CGWB Manual on Artificial Recharge (2007) | Aw, BSh, Cwa, Am | 22 |
+
+  Conflicts are kept with their sources (e.g. groundwater separation 0.6-1.5 m across sources, and the
+  HC bio-swale sheet itself gives both 5 ft and 2 ft). Next: Philadelphia manuals, SWMM Vol. III (LID
+  parameters for the K4 SWMM mapping), the remaining HC sheets (4.1, 4.3, 4.4, 4.9-4.12), then K3 review.

@@ -226,6 +226,26 @@ sources:
     elements: [rain_garden, bioswale, detention_basin, retention_pond, infiltration_trench, rainwater_harvesting, constructed_wetland]
     priority: 1
 
+  - id: hc_guidelines
+    title: "Habitat Collective NbS design guidelines, sections 4.1-4.12 (fact sheets)"
+    publisher: Habitat Collective
+    edition: "Draft D2, August 2026 (PDF creation dates 2026-08-29)"
+    kind: manual
+    access: user-supplied
+    status: user-copy   # supplied by the user from Downloads/Fact Sheets, 2026-10-20
+    landing: ""
+    files: []
+    licence_note: >-
+      The project team's own draft guidelines, supplied by the user. Kept locally (knowledge/raw/, git-ignored);
+      only cited facts are committed. Already cited by spongepark/engine/nbs/data/guidelines.json (HC-4.10, 4.11, 4.12).
+    notes: >-
+      4.1 permeable pavers, 4.2 rain garden, 4.3 infiltration trench, 4.4 tree trench, 4.5 percolation well,
+      4.6 retention basin, 4.7 bio-swale, 4.8 detention basin, 4.9 sidewalk planters, 4.10 constructed wetlands,
+      4.11 edge engineering, 4.12 in-line SWD treatment.
+    climate: [Aw]
+    elements: [permeable_pavement, rain_garden, infiltration_trench, tree_trench, recharge_well, retention_pond, bioswale, detention_basin, constructed_wetland, check_dam]
+    priority: 1
+
   # ------------------------------------------------------------------ design manuals (user-supplied)
   - id: ciria_c753
     title: The SuDS Manual (C753) and Guidance on the construction of SuDS (C768)
