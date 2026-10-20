@@ -27,10 +27,14 @@ namespace SpongePark.UI
         {
             this.state = state;
             Root = Kit.Box("right-col");
+            // the checklist keeps its height; Properties takes the rest and scrolls (on a 768 px screen too)
             ChecklistSlot = new VisualElement();
+            ChecklistSlot.style.flexShrink = 0;
             Root.Add(ChecklistSlot);
             panel = Kit.Box("panel", "panel--right");
             panel.style.flexGrow = 1;
+            panel.style.flexShrink = 1;
+            panel.style.minHeight = 120;
             Root.Add(panel);
             var head = Kit.Box("panel-head");
             collapse = Kit.IconButton("collapse-right", "Collapse the panel", () => state.ChangeLayout(l => l.propsCollapsed = !l.propsCollapsed));

@@ -40,6 +40,7 @@ namespace SpongePark
         JToken flowData, designTools, designResult;
         JObject designFc;
         string designFor;                     // project the design state belongs to
+        string viewsFor;                      // project the site frame and views were loaded for
         string tool;                          // null = select
         string selectedId;
         readonly List<Vector2> drawPts = new List<Vector2>();
@@ -81,7 +82,10 @@ namespace SpongePark
                 : "First " + (rain ? "" : "use the design rainfall") + (!rain && !soils ? " and " : "") + (soils ? "" : "answer the ground questions") +
                   " (Site > Site setup). The flow lines and hotspots need neither.";
             drawHint.text = tool == null
-                ? (selectedId != null ? $"{selectedId} selected: drag a corner to change its shape, drag inside to move it, Delete to remove; sizes in Properties." : "")
+                ? (selectedId != null
+                    ? $"{selectedId} selected: drag {(Feature(selectedId)?["properties"]?["fit_points"] != null ? "a point to reshape the curve" : "a corner to change its shape")}, " +
+                      "drag inside to move it, Delete to remove; Curve / Straight changes its lines; sizes in Properties."
+                    : "")
                 : DrawOf(tool) == "point" ? $"Click on the ground to place a {ToolNames[tool].ToLower()}."
                 : DrawOf(tool) == "line" ? "Click along the swale's line; double-click or Enter to finish, Backspace removes the last point, Esc cancels."
                 : "Click the corners on the ground; double-click or Enter to finish, Backspace removes the last corner, Esc cancels.";
@@ -172,8 +176,10 @@ namespace SpongePark
 
         IEnumerator LoadDesign()
         {
+            // the site frame comes with LoadViews: until then try again later (an opened project that is already
+            // confirmed gets here before its site model has loaded)
+            if (bundle || frame == null || viewsFor != projectPath) yield break;
             designFor = projectPath;
-            if (bundle || frame == null) yield break;
             JToken tools = null, cur = null;
             yield return api.Get(api.P("/design/tools"), x => tools = x);
             yield return api.Get(api.P($"/design/{DesignScenario}"), x => cur = x);
@@ -275,11 +281,59 @@ namespace SpongePark
             }
         }
 
+        // ------------------------------------------------------------ curve or straight (swales and outlines)
+        // Curve: the clicked points are fit points and the element follows the smooth curve through them (like a
+        // CAD spline); Straight: straight segments between them. Remembered between sessions.
+        bool DrawCurve
+        {
+            get => PlayerPrefs.GetInt("spongepark.drawcurve", 1) == 1;
+            set => PlayerPrefs.SetInt("spongepark.drawcurve", value ? 1 : 0);
+        }
+
+        /// The element's outline or line through pts: smooth (curve) or as placed (straight).
+        static List<Vector2> ShapeThrough(List<Vector2> pts, bool closed, bool curve) =>
+            curve && pts.Count >= 3 ? Spline.Through(pts, closed) : new List<Vector2>(pts);
+
+        static JArray Coords(IEnumerable<Vector2> pts) => new JArray(pts.Select(p => new JArray(Round(p.x), Round(p.y))));
+
+        /// Sets a line's or outline's geometry from its points; curve keeps the points as fit points.
+        static void SetShape(JToken f, List<Vector2> pts, bool curve)
+        {
+            var g = (JObject)f["geometry"];
+            var props = (JObject)f["properties"];
+            bool closed = (string)g["type"] == "Polygon";
+            curve &= pts.Count >= 3;
+            var shape = ShapeThrough(pts, closed, curve);
+            if (closed)
+            {
+                var ring = Coords(shape);
+                ring.Add(new JArray(Round(shape[0].x), Round(shape[0].y)));
+                var rings = new JArray();
+                rings.Add(ring);   // new JArray(ring) would copy the ring's points instead of nesting it
+                g["coordinates"] = rings;
+            }
+            else g["coordinates"] = Coords(shape);
+            if (curve) props["fit_points"] = Coords(pts);
+            else props.Remove("fit_points");
+        }
+
+        /// Curve or Straight pressed: the drawing mode, and the selected swale or outline changes to match.
+        void SetCurve(bool curve)
+        {
+            DrawCurve = curve;
+            var f = Feature(selectedId);
+            if (tool != null || f == null || Corners(f) == null || (f["properties"]["fit_points"] != null) == curve) return;
+            var before = designFc.ToString();
+            SetShape(f, Corners(f), curve);
+            f["properties"]["source"] = "designer";
+            StartCoroutine(Run(SendDesign("reshape", selectedId, before), curve ? "Smoothing" : "Straightening"));
+        }
+
         void SetTool(string t)
         {
             tool = t;
             drawPts.Clear();
-            right.Design.Preview(null, null, false, Color.white);
+            right.Design.Preview(null, null, Color.white);
             if (t != null) selectedId = null;
             RefreshDesign();
         }
@@ -347,14 +401,16 @@ namespace SpongePark
                 if (!used.Contains(Prefix[type] + i)) return Prefix[type] + i;
         }
 
-        void AddElement(string type, JObject geometry)
+        void AddElement(string type, JObject geometry, JObject props = null)
         {
             var before = designFc.ToString();
             var id = NextId(type);
+            props ??= new JObject();
+            props["id"] = id;
+            props["type"] = type;
             ((JArray)designFc["features"]).Add(new JObject
             {
-                ["type"] = "Feature", ["geometry"] = geometry,
-                ["properties"] = new JObject { ["id"] = id, ["type"] = type },
+                ["type"] = "Feature", ["geometry"] = geometry, ["properties"] = props,
             });
             selectedId = id;
             StartCoroutine(Run(SendDesign("create", id, before), "Carving " + ToolNames[type].ToLower()));
@@ -364,19 +420,19 @@ namespace SpongePark
         {
             if (tool == null) return;
             var kind = DrawOf(tool);
-            if (kind == "polygon" && drawPts.Count >= 3)
+            if ((kind == "polygon" && drawPts.Count >= 3) || (kind == "line" && drawPts.Count >= 2))
             {
-                var ring = new JArray(drawPts.Select(p => new JArray(Round(p.x), Round(p.y))));
-                ring.Add(new JArray(Round(drawPts[0].x), Round(drawPts[0].y)));
-                var rings = new JArray();
-                rings.Add(ring);   // new JArray(ring) would copy the ring's points instead of nesting it
-                AddElement(tool, new JObject { ["type"] = "Polygon", ["coordinates"] = rings });
+                var f = new JObject
+                {
+                    ["geometry"] = new JObject { ["type"] = kind == "polygon" ? "Polygon" : "LineString" },
+                    ["properties"] = new JObject(),
+                };
+                SetShape(f, drawPts, DrawCurve);
+                AddElement(tool, (JObject)f["geometry"], (JObject)f["properties"]);
             }
-            else if (kind == "line" && drawPts.Count >= 2)
-                AddElement(tool, new JObject { ["type"] = "LineString", ["coordinates"] = new JArray(drawPts.Select(p => new JArray(Round(p.x), Round(p.y)))) });
             else return;
             drawPts.Clear();
-            right.Design.Preview(null, null, false, Color.white);
+            right.Design.Preview(null, null, Color.white);
         }
 
         static double Round(float v) => System.Math.Round(v, 3);
@@ -453,9 +509,15 @@ namespace SpongePark
                     if (dbl) { FinishShape(); return; }
                     drawPts.Add(xy);
                 }
-                right.Design.Preview(drawPts.Select(WorldOf).ToList(), onGround ? world : (Vector3?)null, DrawOf(tool) == "polygon", col);
+                // the shape so far with the pointer as the next point: smooth through the points (Curve) or straight
+                bool closed = DrawOf(tool) == "polygon";
+                var fits = new List<Vector2>(drawPts);
+                if (onGround) fits.Add(xy);
+                var shape = ShapeThrough(fits, closed, DrawCurve);
+                if (closed && shape.Count >= 3) shape.Add(shape[0]);
+                right.Design.Preview(drawPts.Select(WorldOf).ToList(), shape.Select(WorldOf).ToList(), col);
                 if (onGround && drawPts.Count > 0)
-                    status = DrawOf(tool) == "line" ? $"{ToolNames[tool]}: {PathLength(drawPts, xy):0.0} m" : $"{ToolNames[tool]}: {Area(drawPts, xy):0.0} m²";
+                    status = closed ? $"{ToolNames[tool]}: {Area(shape):0.0} m²" : $"{ToolNames[tool]}: {PathLength(shape):0.0} m";
                 return;
             }
 
@@ -480,7 +542,9 @@ namespace SpongePark
                 {
                     pts[vertexDrag] = xy;
                     bool closed = (string)sel["geometry"]["type"] == "Polygon";
-                    right.Design.Preview(pts.Select(WorldOf).ToList(), null, closed, new Color(0.76f, 0.55f, 0.36f));
+                    var shape = ShapeThrough(pts, closed, sel["properties"]["fit_points"] != null);
+                    if (closed && shape.Count >= 3) shape.Add(shape[0]);
+                    right.Design.Preview(pts.Select(WorldOf).ToList(), shape.Select(WorldOf).ToList(), new Color(0.76f, 0.55f, 0.36f));
                     status = $"Reshaping {selectedId}: corner {vertexDrag + 1}";
                 }
             }
@@ -489,7 +553,7 @@ namespace SpongePark
                 var sel = Feature(selectedId);
                 int k = vertexDrag;
                 vertexDrag = -1;
-                right.Design.Preview(null, null, false, Color.white);
+                right.Design.Preview(null, null, Color.white);
                 if (sel != null && onGround && (xy - dragFrom).magnitude > 0.2f)
                 {
                     var before = designFc.ToString();
@@ -509,17 +573,21 @@ namespace SpongePark
                 if (f != null && d.magnitude > 0.3f)
                 {
                     var before = designFc.ToString();
-                    Translate(f["geometry"], d);
+                    Translate(f["geometry"]["coordinates"], d);
+                    if (f["properties"]["fit_points"] != null) Translate(f["properties"]["fit_points"], d);
                     f["properties"]["source"] = "designer";
                     StartCoroutine(Run(SendDesign("move", selectedId, before), "Moving"));
                 }
             }
         }
 
-        /// The corners of a polygon (without the closing repeat) or the points of a line; null for points.
+        /// The corners of a polygon (without the closing repeat) or the points of a line, or a curve's fit points;
+        /// null for points.
         static List<Vector2> Corners(JToken f)
         {
             if (f == null) return null;
+            if (f["properties"]?["fit_points"] is JArray fp && fp.Count >= 2)
+                return fp.Select(q => new Vector2((float)q[0], (float)q[1])).ToList();
             var g = f["geometry"];
             var t = (string)g["type"];
             if (t == "Polygon")
@@ -548,6 +616,13 @@ namespace SpongePark
 
         static void MoveCorner(JToken f, int k, Vector2 p)
         {
+            if (f["properties"]?["fit_points"] != null)   // a curve: move the fit point, the curve follows
+            {
+                var pts = Corners(f);
+                pts[k] = p;
+                SetShape(f, pts, true);
+                return;
+            }
             var g = f["geometry"];
             var pt = new JArray(Round(p.x), Round(p.y));
             if ((string)g["type"] == "Polygon")
@@ -559,7 +634,8 @@ namespace SpongePark
             else ((JArray)g["coordinates"])[k] = pt;
         }
 
-        static void Translate(JToken g, Vector2 d)
+        /// Moves every [x, y] in coords (any nesting) by d.
+        static void Translate(JToken coords, Vector2 d)
         {
             void Shift(JToken c)
             {
@@ -570,7 +646,7 @@ namespace SpongePark
                 }
                 else if (c is JArray arr) foreach (var x in arr) Shift(x);
             }
-            Shift(g["coordinates"]);
+            Shift(coords);
         }
 
         string HitElement(Vector2 p)
@@ -629,18 +705,17 @@ namespace SpongePark
             return inside;
         }
 
-        static float PathLength(List<Vector2> pts, Vector2 cursor)
+        static float PathLength(List<Vector2> pts)
         {
             float s = 0;
             for (int i = 0; i + 1 < pts.Count; i++) s += (pts[i + 1] - pts[i]).magnitude;
-            return s + (pts.Count > 0 ? (cursor - pts[pts.Count - 1]).magnitude : 0);
+            return s;
         }
 
-        static float Area(List<Vector2> pts, Vector2 cursor)
+        static float Area(List<Vector2> pts)
         {
-            var all = new List<Vector2>(pts) { cursor };
             float a = 0;
-            for (int i = 0; i < all.Count; i++) { var p = all[i]; var q = all[(i + 1) % all.Count]; a += p.x * q.y - q.x * p.y; }
+            for (int i = 0; i < pts.Count; i++) { var p = pts[i]; var q = pts[(i + 1) % pts.Count]; a += p.x * q.y - q.x * p.y; }
             return Mathf.Abs(a) / 2;
         }
     }

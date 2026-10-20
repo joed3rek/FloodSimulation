@@ -34,7 +34,6 @@ namespace SpongePark
         // ------------------------------------------------------------ screens
         void ShowMain()
         {
-            Debug.Log("screen: workspace");
             if (landing != null) landing.style.display = DisplayStyle.None;
             if (intakeView != null) intakeView.style.display = DisplayStyle.None;
             mainApp.style.display = DisplayStyle.Flex;
@@ -50,7 +49,6 @@ namespace SpongePark
 
         void ShowLanding()
         {
-            Debug.Log("screen: start");
             mainApp.style.display = DisplayStyle.None;
             mainOverlay.style.display = DisplayStyle.None;
             if (intakeView != null) intakeView.style.display = DisplayStyle.None;

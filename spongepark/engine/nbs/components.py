@@ -78,6 +78,9 @@ class NbSElement(BaseModel):
     native_ksat_m_s: Optional[float] = None
 
     soil_zone: Optional[str] = None
+    # drawn as a curve (like a CAD spline): the points the designer placed; the geometry is the smooth
+    # curve through them (open for a swale, closed for an outline). None = drawn with straight segments.
+    fit_points: Optional[List[List[float]]] = None
     param_sources: Dict[str, str] = Field(default_factory=dict)
     # record fields this engine does not model, kept so a round trip loses nothing:
     # {"record": {...}, "parameters": {...}, "outlet": {...}}
@@ -295,7 +298,7 @@ _PARAMS = ["top_width_m", "max_ponding_depth_m", "side_slope_h_v", "soil_media_d
            "forebay_volume_fraction", "cell_count", "length_to_width", "shallow_zone_depth_m", "peak_velocity_m_s",
            "contained_return_period_yr", "hydraulic_retention_time_hr", "native_ksat_m_s"]
 _TOP = ["infiltration_rate_mm_hr", "area_m2", "storage_volume_m3", "contributing_area_m2", "drawdown_time_hr",
-        "soil_zone", "param_sources", "notes", "results"]
+        "soil_zone", "fit_points", "param_sources", "notes", "results"]
 
 
 _RECORD_KEYS = {"id", "type", "geometry", "parameters", "connections", "locked", "source", *_TOP}

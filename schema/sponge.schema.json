@@ -419,6 +419,24 @@
           "default": null,
           "title": "Drawdown Time Hr"
         },
+        "fit_points": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fit Points"
+        },
         "geometry": {
           "$ref": "#/$defs/Geometry"
         },

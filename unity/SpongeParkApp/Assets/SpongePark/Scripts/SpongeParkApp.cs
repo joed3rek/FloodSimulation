@@ -48,6 +48,9 @@ namespace SpongePark
 
         void Start()
         {
+            // keep polling engine jobs (optimise, SWMM, 2D runs) while the window is behind another one;
+            // OnApplicationFocus throttles the frame rate meanwhile
+            Application.runInBackground = true;
             api = gameObject.AddComponent<EngineClient>();
             launcher = gameObject.AddComponent<EngineLauncher>();
             exportDir = Path.Combine(Application.persistentDataPath, "exports");
@@ -89,6 +92,13 @@ namespace SpongePark
                 if (sponge != null) StartCoroutine(OpenWhenReady(sponge));
             }
 #endif
+        }
+
+        // behind another window: a few frames a second are enough to poll jobs (not in screenshot or autorun mode)
+        void OnApplicationFocus(bool focused)
+        {
+            if (Arg("-spShot") != null || Arg("-spProject") != null) return;
+            Application.targetFrameRate = focused ? -1 : 10;
         }
 
         static string Arg(string name)
@@ -165,14 +175,15 @@ namespace SpongePark
                 rigLeft.Target = frame.World(lx, ly, left.Terrain.GroundAt(lx, ly) is var gz && !float.IsNaN(gz) ? gz : frame.ZRef);
             yield return new WaitForSecondsRealtime(1);
             if (Arg("-spDraw") != null) { yield return DrawForTest(Arg("-spDraw")); yield return new WaitForSecondsRealtime(2); }
-            if (float.TryParse(Arg("-spAfter"), out var after)) yield return new WaitForSecondsRealtime(after);   // -spAfter s: let the storm play
-            // workspace checks: -spPanel <name> opens a panel, tab or dialog (several: -spPanel tab:design,checks);
-            // -spScroll <px> scrolls the open Properties tab
+            // workspace checks: -spPanel <name> opens a panel, tab or dialog, or runs a command (several:
+            // -spPanel tab:design,checks,run:live); -spScroll <px> scrolls the open Properties tab
             if (Arg("-spPanel") != null) foreach (var name in Arg("-spPanel").Split(',')) OpenPanel(name.Trim());
+            if (float.TryParse(Arg("-spAfter"), out var after)) yield return new WaitForSecondsRealtime(after);   // -spAfter s: let the storm play
             if (float.TryParse(Arg("-spScroll"), out var sc) && props != null) props.Page(ui.PropsTab).scrollOffset = new Vector2(0, sc);
             yield return new WaitForSecondsRealtime(0.5f);
             Debug.Log($"camera: plan {rigLeft.Plan} pitch {rigLeft.Pitch} yaw {rigLeft.Yaw} distance {rigLeft.Distance} ortho {camLeft.orthographic}");
             Debug.Log($"frame rate: {1f / Mathf.Max(1e-4f, Time.smoothDeltaTime):0} fps");
+            Debug.Log($"design: confirmed {siteConfirmed}, loaded {designFc != null}, draw tools {(commands["tool-rain_garden"].Enabled() ? "enabled" : "disabled")}, tool {tool ?? "select"}");
             if (plan != null) Debug.Log($"plan zoom {plan.Zoom:0.000} offset {plan.Offset} size {plan.contentRect.size}");
             ScreenCapture.CaptureScreenshot(Arg("-spShot"));
             yield return new WaitForSecondsRealtime(2);
@@ -261,6 +272,7 @@ namespace SpongePark
             planSetFor = false;
             designFc = null;
             designFor = null;
+            viewsFor = null;
             selectedId = null;
             tool = null;
             yield return Refresh();
@@ -368,6 +380,7 @@ namespace SpongePark
             else yield return api.Get(api.P("/terrain"), r => t = r);
             if (t == null) { status = "no terrain"; yield break; }
             frame = SiteFrame.From(HeightGrid.FromPayload(t), exaggeration);
+            viewsFor = projectPath;
             left.Option = "baseline";
             right.Option = CurrentOption ?? "baseline";
             yield return left.Load(api, frame, rp, bundle);

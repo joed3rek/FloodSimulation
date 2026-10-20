@@ -65,23 +65,26 @@ namespace SpongePark
                     : (sel ? 0.5f : 0.3f);
                 if (gt == "LineString") m.Ribbon(pts, w, lift, new Color(col.r, col.g, col.b) * 0.9f);
                 m.Ribbon(pts, sel ? 0.45f : 0.25f, lift + 0.02f, col);
-                if (sel)   // corner handles to drag
-                    foreach (var q in pts) m.Box(q + Vector3.up * lift, 0.7f, 0.5f, Color.white);
+                if (sel)   // handles to drag: the corners, or a curve's fit points
+                {
+                    var grips = p["fit_points"] is JArray fp
+                        ? fp.Select(q => { float x = (float)q[0], y = (float)q[1]; return frame.World(x, y, ground(x, y)); }).ToList()
+                        : pts;
+                    foreach (var q in grips) m.Box(q + Vector3.up * lift, 0.7f, 0.5f, Color.white);
+                }
             }
             elements = Make("elements", m);
         }
 
-        /// The shape being drawn: placed corners, and the line to the pointer.
-        public void Preview(List<Vector3> pts, Vector3? cursor, bool closed, Color col)
+        /// The shape being drawn or reshaped: the placed points, and the line through them (to the pointer, closed
+        /// for an outline; straight or smooth, worked out by the caller). Nulls clear it.
+        public void Preview(List<Vector3> pts, List<Vector3> path, Color col)
         {
             if (preview != null) Destroy(preview);
-            if (pts == null || (pts.Count == 0 && cursor == null)) return;
+            if (pts == null || path == null || path.Count == 0) return;
             var m = new MeshBuilder();
-            var all = new List<Vector3>(pts);
-            if (cursor.HasValue) all.Add(cursor.Value);
-            if (closed && all.Count >= 3) all.Add(all[0]);
             var up = Vector3.up * 0.15f;
-            m.Ribbon(all.Select(q => q + up).ToList(), 0.3f, 0, col);
+            if (path.Count >= 2) m.Ribbon(path.Select(q => q + up).ToList(), 0.3f, 0, col);
             foreach (var q in pts) m.Prism(q, 0.25f, 0.4f, 8, col);
             preview = Make("preview", m);
         }

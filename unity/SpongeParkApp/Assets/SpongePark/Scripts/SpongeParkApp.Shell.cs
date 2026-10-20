@@ -132,7 +132,7 @@ namespace SpongePark
                 C("flow-" + k, label, icon, $"Show or hide the {label.ToLower()} (from the ground alone)", () => SetFlow(key, !FlowOn(key)),
                   () => flowData != null, () => flowData != null && FlowOn(key));
             }
-            C("baseline", "Analyse existing site", "baseline", "SWMM on the existing park for every storm (needed to compare options)",
+            C("baseline", "Analyse existing", "baseline", "SWMM on the existing park for every storm (needed to compare options)",
               () => StartCoroutine(Run(Baseline(), "Analysing")), () => Engine && siteConfirmed && FloodReady, visible: () => !bundle);
             // Design
             C("select", "Select", "select", "Select, move and reshape elements", () => SetTool(null), () => siteConfirmed && designFc != null, () => tool == null, key: "V");
@@ -143,6 +143,10 @@ namespace SpongePark
                 C("tool-" + t, ToolNames[t], icon, $"Draw a {ToolNames[t].ToLower()} on the ground", () => SetTool(tt),
                   () => siteConfirmed && designFc != null && !busy, () => tool == tt, key: key);
             }
+            C("draw-curve", "Curve", "draw-curve", "Swales and outlines as smooth curves through the points you place (like a CAD spline); with an element selected, smooths it",
+              () => SetCurve(true), () => siteConfirmed && designFc != null && !busy, () => DrawCurve);
+            C("draw-straight", "Straight", "draw-straight", "Swales and outlines with straight lines between the points you place; with an element selected, straightens it",
+              () => SetCurve(false), () => siteConfirmed && designFc != null && !busy, () => !DrawCurve);
             C("delete", "Delete", "delete", "Delete the selected element", DeleteSelected, () => selectedId != null && !busy, key: "Delete");
             C("undo", "Undo", "undo", "Undo the last design change", Undo, () => undoStack.Count > 0 && !busy, key: "Ctrl+Z");
             C("redo", "Redo", "redo", "Redo", Redo, () => redoStack.Count > 0 && !busy, key: "Ctrl+Y");
@@ -210,6 +214,7 @@ namespace SpongePark
             var draw = design.Group("Draw");
             draw.Large(commands["select"]);
             foreach (var t in ToolTypes) draw.Large(commands["tool-" + t]);
+            design.Group("Lines").Small(commands["draw-curve"]).Small(commands["draw-straight"]);
             design.Group("Edit").Small(commands["delete"]).Small(commands["undo"]).Small(commands["redo"]);
             design.Group("Suggest layout").Large(commands["quick"]).Large(commands["optimise-design"]);
             design.Group("Options").Small(commands["generate"]).Small(commands["optimise-option"]).Small(commands["least-area"]);
@@ -731,6 +736,9 @@ namespace SpongePark
                 case "targets": targetsDialog.Open(); break;
                 case "settings": settingsDialog.Open(); break;
                 case "max": ui.ViewportMax = true; break;
+                case "run":   // a ribbon command by id, e.g. run:live (when it is enabled)
+                    if (parts.Length > 1 && commands.TryGetValue(parts[1], out var cmd) && cmd.Enabled()) cmd.Run();
+                    break;
             }
         }
 

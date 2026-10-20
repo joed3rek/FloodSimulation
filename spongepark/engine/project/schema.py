@@ -149,6 +149,8 @@ class ElementRecord(SpongeModel):
     locked: bool = False
     source: Literal["proposal", "designer"] = "proposal"
     soil_zone: Optional[str] = None
+    # drawn as a curve: the designer's points; the geometry is the smooth curve through them (absent = straight)
+    fit_points: Optional[List[List[float]]] = None
     param_sources: Dict[str, str] = Field(default_factory=dict)
     notes: str = ""
     results: Dict[str, Dict[str, Any]] = Field(default_factory=dict)  # return period -> verified metrics

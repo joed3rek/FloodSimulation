@@ -75,6 +75,7 @@ namespace SpongePark.Data
         [JsonProperty("connections")] public Connections Connections { get; set; }
         [JsonProperty("contributing_area_m2")] public double? ContributingAreaM2 { get; set; }
         [JsonProperty("drawdown_time_hr")] public double? DrawdownTimeHr { get; set; }
+        [JsonProperty("fit_points")] public List<List<double>> FitPoints { get; set; }
         [JsonProperty("geometry")] public Geometry Geometry { get; set; }
         [JsonProperty("id")] public string Id { get; set; }
         [JsonProperty("infiltration_rate_mm_hr")] public double? InfiltrationRateMmHr { get; set; }

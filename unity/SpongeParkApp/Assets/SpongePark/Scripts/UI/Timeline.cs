@@ -48,7 +48,7 @@ namespace SpongePark.UI
             head.Add(text);
             rp = new DropdownField(new List<string> { "—" }, 0);
             rp.AddToClassList("input");
-            rp.style.width = 110;
+            rp.style.width = 150;
             rp.style.marginBottom = 0;
             rp.style.height = 20;
             rp.style.minHeight = 20;
