@@ -5,6 +5,8 @@
 // the TR-55 curve numbers (with their table and page) and shows a runoff check per storm.
 // Ponds: each pond in the park needs its depth and how deep the water usually stands; the room between is cut
 // into the ground model, so the flow analysis, the 2D flood model and SWMM store water in it.
+// Wells: the recharge wells on the survey are part of the existing site once their depth, diameter and the
+// strata's infiltration rate are given (for all of them, or well by well); nothing is assumed.
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,6 +23,13 @@ namespace SpongePark
         Button pondSave;
         class PondRow { public string Id; public TextField Depth, Water; }
         readonly List<PondRow> pondFields = new List<PondRow>();
+        VisualElement wellCard, wellCommon, wellRows;
+        Label wellText;
+        Button wellSave;
+        TextField wellDepth, wellDia, wellRate;
+        Foldout wellSingles;
+        class WellRow { public string Id; public TextField Depth, Diameter; }
+        readonly List<WellRow> wellFields = new List<WellRow>();
         Label rainText, groundResult;
         Button rainButton;
         DropdownField soilField, pathsField;
@@ -32,7 +41,7 @@ namespace SpongePark
         readonly List<CoverRow> covers = new List<CoverRow>();
 
         /// The three pages of Site setup.
-        void BuildGroundAndRain(VisualElement rainPage, VisualElement groundPage, VisualElement pondPage)
+        void BuildGroundAndRain(VisualElement rainPage, VisualElement groundPage, VisualElement pondPage, VisualElement wellPage)
         {
             rainCard = new VisualElement();
             rainCard.Add(Text("DESIGN RAINFALL", "eyebrow"));
@@ -73,7 +82,43 @@ namespace SpongePark
             pondSave = Btn("Save the ponds", () => StartCoroutine(Run(SavePonds(), "Cutting the ponds into the ground model")), "btn--wide");
             pondCard.Add(pondSave);
             pondPage.Add(pondCard);
+
+            wellCard = new VisualElement();
+            wellCard.Add(Text("EXISTING RECHARGE WELLS", "eyebrow"));
+            wellText = Text("", "muted");
+            wellCard.Add(wellText);
+            wellCommon = Row();
+            wellCommon.AddToClassList("field-row");
+            wellDepth = Field("Depth (m)");
+            wellDia = Field("Diameter (m)");
+            wellRate = Field("Strata infiltration (mm/h)");
+            wellRate.tooltip = "How fast the permeable strata at the wells take water, from a borehole log or a percolation test";
+            wellCommon.Add(wellDepth);
+            wellCommon.Add(wellDia);
+            wellCommon.Add(wellRate);
+            wellCard.Add(wellCommon);
+            wellSingles = new Foldout { text = "Change single wells", value = false };
+            wellRows = new VisualElement();
+            wellSingles.Add(wellRows);
+            wellCard.Add(wellSingles);
+            wellSave = Btn("Save the wells", () => StartCoroutine(Run(SaveWells(), "Adding the wells to the flood model")), "btn--wide");
+            wellCard.Add(wellSave);
+            wellPage.Add(wellCard);
         }
+
+        static TextField Field(string label, string value = "")
+        {
+            var f = new TextField(label) { value = value };
+            f.AddToClassList("input");
+            f.AddToClassList("field-stack");
+            return f;
+        }
+
+        static string Fmt(JToken v) =>
+            v == null || v.Type == JTokenType.Null ? "" : ((float)v).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+        static float? Num(TextField f) =>
+            float.TryParse(f.value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (float?)null;
 
         void SyncGroundAndRain()
         {
@@ -97,6 +142,64 @@ namespace SpongePark
             JToken ponds = null;
             yield return api.Get(api.P("/site/ponds"), x => ponds = x);
             FillPonds(ponds?["ponds"]);
+            JToken wells = null;
+            yield return api.Get(api.P("/site/wells"), x => wells = x);
+            FillWells(wells);
+        }
+
+        // ------------------------------------------------------------ existing recharge wells
+        void FillWells(JToken st)
+        {
+            wellRows.Clear();
+            wellFields.Clear();
+            int count = (int?)st?["count"] ?? 0;
+            foreach (var e in new VisualElement[] { wellCommon, wellSingles, wellSave }) SpongePark.UI.Kit.Show(e, count > 0);
+            if (count == 0)
+            {
+                wellText.text = "The survey shows no recharge wells in this park. Nothing to answer here; add new wells on the Design tab.";
+                return;
+            }
+            int inModel = (int?)st["in_model"] ?? 0;
+            var drawn = st["drawn_diameters_m"]?.Select(x => ((float)x).ToString("0.##")).ToList() ?? new List<string>();
+            wellText.text = $"The survey shows {count} recharge well{(count == 1 ? "" : "s")} in the park. They are part of the park today, so they count in " +
+                            "the existing site and in every design; a design gets credit only for the wells you add. The drawing gives where they are" +
+                            (drawn.Count > 0 ? $" and, for some, the diameter ({string.Join(", ", drawn)} m, used where drawn)" : "") +
+                            ", not how deep they are or how fast the strata take water: give these for all of them (single wells can differ, below)." +
+                            (inModel < count ? $"\nCheck: {count - inModel} of {count} not in the flood model until answered." : $"\nAll {count} are in the flood model.");
+            var a = st["answers"];
+            wellDepth.value = Fmt(a?["depth_m"]);
+            wellDia.value = Fmt(a?["diameter_m"]);
+            wellRate.value = Fmt(a?["infiltration_rate_mm_hr"]);
+            foreach (var w in st["wells"])
+            {
+                var row = new WellRow { Id = (string)w["id"], Depth = Field("Depth (m)", Fmt(w["depth_m"])), Diameter = Field("Diameter (m)", Fmt(w["diameter_m"])) };
+                var box = new VisualElement();
+                box.AddToClassList("cover-row");
+                var miss = w["missing"]?.Select(x => (string)x).ToList() ?? new List<string>();
+                var drawnDia = w["drawn_diameter_m"] != null && w["drawn_diameter_m"].Type != JTokenType.Null ? $", drawn {(float)w["drawn_diameter_m"]:0.##} m" : "";
+                box.Add(Text($"{row.Id}, ground {(float)w["ground_m"]:0.00} m{drawnDia}" + ((bool?)w["in_model"] == true ? "" : $": needs {string.Join(", ", miss)}"), "field-label"));
+                var line = Row("field-row");
+                line.Add(row.Depth);
+                line.Add(row.Diameter);
+                box.Add(line);
+                wellRows.Add(box);
+                wellFields.Add(row);
+            }
+        }
+
+        IEnumerator SaveWells()
+        {
+            var body = new JObject
+            {
+                ["depth_m"] = Num(wellDepth), ["diameter_m"] = Num(wellDia), ["infiltration_rate_mm_hr"] = Num(wellRate),
+                ["wells"] = new JArray(wellFields.Select(r => new JObject { ["id"] = r.Id, ["depth_m"] = Num(r.Depth), ["diameter_m"] = Num(r.Diameter) })),
+            };
+            JToken r2 = null;
+            yield return api.Send("PUT", api.P("/site/wells"), body, x => r2 = x);
+            if (r2 == null) yield break;
+            FillWells(r2);
+            status = $"Wells saved: {(int)r2["in_model"]} of {(int)r2["count"]} in the flood model of the existing site and every design; the drainage is redone around them.";
+            yield return LoadViews();
         }
 
         // ------------------------------------------------------------ ponds
@@ -121,13 +224,12 @@ namespace SpongePark
                 var row = new PondRow { Id = (string)p["id"] };
                 row.Depth = new TextField("Depth (m)") { value = p["depth_m"]?.Type == JTokenType.Null || p["depth_m"] == null ? "" : ((float)p["depth_m"]).ToString("0.##") };
                 row.Water = new TextField("Water usually (m)") { value = p["water_m"]?.Type == JTokenType.Null || p["water_m"] == null ? "" : ((float)p["water_m"]).ToString("0.##") };
-                row.Depth.AddToClassList("input");
-                row.Water.AddToClassList("input");
+                foreach (var f in new[] { row.Depth, row.Water }) { f.AddToClassList("input"); f.AddToClassList("field-stack"); }
                 var box = new VisualElement();
                 box.AddToClassList("cover-row");
                 var storage = (bool?)p["in_model"] == true ? $": stores {(float)p["storage_m3"]:0} m³ in a storm" : ": not in the flood model yet";
                 box.Add(Text($"{row.Id}, {(float)p["area_m2"]:0} m², edge at {(float)p["edge_level_m"]:0.00} m{storage}", "field-label"));
-                var line = Row();
+                var line = Row("field-row");
                 line.Add(row.Depth);
                 line.Add(row.Water);
                 box.Add(line);
@@ -138,7 +240,6 @@ namespace SpongePark
 
         IEnumerator SavePonds()
         {
-            float? Num(TextField f) => float.TryParse(f.value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (float?)null;
             var answers = new JArray(pondFields.Select(r => new JObject { ["id"] = r.Id, ["depth_m"] = Num(r.Depth), ["water_m"] = Num(r.Water) }));
             JToken r2 = null;
             yield return api.Send("PUT", api.P("/site/ponds"), new JObject { ["answers"] = answers }, x => r2 = x);

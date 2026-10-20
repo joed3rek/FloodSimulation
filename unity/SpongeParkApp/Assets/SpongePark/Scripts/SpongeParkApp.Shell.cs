@@ -444,7 +444,8 @@ namespace SpongePark
             var rainPage = siteSetup.Page("rainfall", "Rainfall");
             var groundPage = siteSetup.Page("ground", "Ground");
             var pondPage = siteSetup.Page("ponds", "Ponds");
-            if (!bundle) BuildGroundAndRain(rainPage, groundPage, pondPage);
+            var wellPage = siteSetup.Page("wells", "Wells");
+            if (!bundle) BuildGroundAndRain(rainPage, groundPage, pondPage, wellPage);
 
             targetsDialog = new Dialog("Targets", host);
             var tb = targetsDialog.Body;

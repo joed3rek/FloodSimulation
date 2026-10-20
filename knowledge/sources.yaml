@@ -1,0 +1,626 @@
+# NbS knowledge base: source registry (docs/KNOWLEDGE_BRIEF.md, A1).
+#
+# access:   open           - the owner publishes it openly; the fetcher may download it (raw copies stay in
+#                            knowledge/raw/, git-ignored, never redistributed; only cited facts are committed)
+#           user-supplied  - paid, login-only, or not reachable by an automated client: the user provides a copy
+#                            (`spongepark knowledge add --source <id> --file <path>`)
+#           metadata-only  - registered for reference; nothing is downloaded
+# status:   what the check of 2026-10-20 found (landing pages, terms pages, robots.txt and HEAD requests only;
+#           nothing was downloaded). "blocked" = the owner's site refuses automated clients (403, bot check):
+#           never worked around; a person checks it in a browser or supplies the copy.
+# climate:  Koppen class(es) of the source's home region (rules record it; sizing always uses the project's storms)
+# elements: rain_garden, bioswale, vegetated_swale, filter_strip, tree_trench, infiltration_trench, recharge_well,
+#           permeable_pavement, green_roof, rainwater_harvesting, detention_basin, retention_pond,
+#           constructed_wetland, check_dam, depave
+# priority: 1 = needed for K2 (the five core elements), 2 = K4, 3 = context / learning (Part B)
+
+schema_version: "1.0"
+checked: "2026-10-20"
+user_agent: "spongepark-knowledge/0.1 (+https://github.com/joed3rek/FloodSimulation)"
+
+sources:
+
+  # ------------------------------------------------------------------ design manuals (open)
+  - id: pub_abc_waters
+    title: ABC Waters Design Guidelines; Engineering Procedures for ABC Waters Design Features (condensed booklet); design calculation templates
+    publisher: PUB, Singapore's National Water Agency
+    edition: "Design Guidelines 2018 (4th ed.); booklet and templates undated on the page (page last updated 03 Mar 2026)"
+    kind: manual
+    access: open
+    status: reachable
+    landing: https://www.pub.gov.sg/Professionals/Working-on-ABC-Waterways/ABC-Waters-Design-Guidelines
+    files:
+      - https://www.pub.gov.sg/-/media/PUB/Reservoirs/ABC/PDF/ABC_Waters_Design_Guidelines.pdf
+      - https://www.pub.gov.sg/-/media/PUB/Reservoirs/ABC/PDF/Condensed_Booklet_of_Engin_Procedures.pdf
+      - https://www.pub.gov.sg/-/media/PUB/Professionals/Compliance/ABC-templates/Vegetated-Swale.xlsx
+      - https://www.pub.gov.sg/-/media/PUB/Professionals/Compliance/ABC-templates/Bioretention-Swale.xlsx
+      - https://www.pub.gov.sg/-/media/PUB/Professionals/Compliance/ABC-templates/BioretentionBasin.xlsx
+    robots: "allowed (Disallow only /sitecore/, /api/, /404, /500)"
+    licence_note: >-
+      Linked for download from the owner's page. Terms of Use page (https://www.pub.gov.sg/terms-of-use) refused the
+      checker (403): text not recorded yet. Footer: "(c) 2025 Government of Singapore".
+    notes: >-
+      The URLs in the brief (info.pub.gov.sg/Documents/...) no longer resolve (no DNS); the owner now serves the
+      documents from www.pub.gov.sg/-/media/. "Details of ABC Waters Certification Criteria" is not linked on the
+      landing page: not found yet.
+    climate: [Af]
+    elements: [rain_garden, bioswale, vegetated_swale, constructed_wetland, detention_basin, retention_pond]
+    priority: 1
+
+  - id: phila_gsi
+    title: Green Stormwater Infrastructure Planning & Design Manual
+    publisher: Philadelphia Water Department
+    edition: "v3.1 per the brief (Dec 2024); the landing page states no version (page modified 2026-02-14)"
+    kind: manual
+    access: open
+    status: reachable
+    landing: https://water.phila.gov/gsi/planning-design/manual/
+    files:
+      - https://water.phila.gov/wp-content/uploads/files/gsi-planning-and-design-manual.pdf   # 200, application/pdf, 34.96 MB
+    robots: "allowed (Disallow only /wp-admin/)"
+    licence_note: >-
+      Offered for download on the owner's page. phila.gov Terms of Use (https://www.phila.gov/terms-of-use/):
+      all rights reserved; "Distribution or republication ... strictly prohibited without the prior written
+      permission of the City." Fits our use: private copy for extraction, only cited facts committed.
+    notes: The brief's /pool/files/ URL redirects to the /wp-content/uploads/files/ URL above.
+    climate: [Cfa]
+    elements: [rain_garden, bioswale, tree_trench, infiltration_trench, permeable_pavement, green_roof, depave, detention_basin]
+    priority: 1
+
+  - id: phila_smgm
+    title: Stormwater Management Guidance Manual
+    publisher: Philadelphia Water Department
+    edition: "v3.4 (page says 'Version 3.4'; the brief named v3.3); page modified 2026-07-03"
+    kind: manual
+    access: open
+    status: reachable
+    landing: https://water.phila.gov/development/stormwater-plan-review/manual/
+    files:
+      - https://water.phila.gov/wp-content/uploads/files/stormwater-management-guidance-manual.pdf   # 200, application/pdf, 153.1 MB
+    robots: allowed
+    licence_note: Same as phila_gsi (phila.gov Terms of Use, all rights reserved, no republication).
+    climate: [Cfa]
+    elements: [rain_garden, bioswale, infiltration_trench, permeable_pavement, green_roof, detention_basin, retention_pond, constructed_wetland, rainwater_harvesting]
+    priority: 1
+
+  - id: mn_manual
+    title: Minnesota Stormwater Manual (web, per practice)
+    publisher: Minnesota Pollution Control Agency
+    edition: "web, version 4.0 per home page; (c) 2026"
+    kind: manual
+    access: user-supplied
+    status: blocked
+    landing: https://stormwater.pca.state.mn.us/
+    files: []
+    robots: "robots.txt allows the practice pages, but a bot manager (Radware, validate.perfdrive.com) intercepts automated clients"
+    licence_note: >-
+      Disclaimers page (https://stormwater.pca.state.mn.us/disclaimers) sits behind the same bot check: not read.
+      Treat as all rights reserved until checked.
+    notes: >-
+      Not fetched automatically (the bot check is not worked around). Options: you save the practice pages from a
+      browser (bioretention, swales, ponds, dry detention, infiltration, permeable pavement, green roofs, tree
+      trenches, wetlands, filter strips, harvest and use) and add them, or ask MPCA for a copy.
+    climate: [Dfa, Dfb]
+    elements: [rain_garden, bioswale, vegetated_swale, filter_strip, tree_trench, infiltration_trench, permeable_pavement, green_roof, rainwater_harvesting, detention_basin, retention_pond, constructed_wetland]
+    priority: 1
+
+  - id: trca_lid
+    title: Low Impact Development Stormwater Management Planning and Design Guide (wiki)
+    publisher: Sustainable Technologies Evaluation Program (TRCA, CVC, LSRCA)
+    edition: "web (MediaWiki); table of contents edited 5 May 2026"
+    kind: manual
+    access: open
+    status: reachable
+    landing: https://wiki.sustainabletechnologies.ca/wiki/Table_of_Contents
+    files:   # HTML snapshots per practice
+      - https://wiki.sustainabletechnologies.ca/wiki/Bioretention
+      - https://wiki.sustainabletechnologies.ca/wiki/Bioretention:_Sizing_and_modeling
+      - https://wiki.sustainabletechnologies.ca/wiki/Bioswales
+      - https://wiki.sustainabletechnologies.ca/wiki/Swales
+      - https://wiki.sustainabletechnologies.ca/wiki/Enhanced_swales
+      - https://wiki.sustainabletechnologies.ca/wiki/Enhanced_swales:_Sizing
+      - https://wiki.sustainabletechnologies.ca/wiki/Infiltration_trenches
+      - https://wiki.sustainabletechnologies.ca/wiki/Infiltration_basins
+      - https://wiki.sustainabletechnologies.ca/wiki/Infiltration_chambers
+      - https://wiki.sustainabletechnologies.ca/wiki/Permeable_pavements
+      - https://wiki.sustainabletechnologies.ca/wiki/Green_roofs
+      - https://wiki.sustainabletechnologies.ca/wiki/Rainwater_harvesting
+      - https://wiki.sustainabletechnologies.ca/wiki/Stormwater_Tree_Trenches
+      - https://wiki.sustainabletechnologies.ca/wiki/Vegetated_filter_strips
+      - https://wiki.sustainabletechnologies.ca/wiki/Dry_ponds
+      - https://wiki.sustainabletechnologies.ca/wiki/Wet_ponds
+      - https://wiki.sustainabletechnologies.ca/wiki/Wetlands
+      - https://wiki.sustainabletechnologies.ca/wiki/Rain_gardens
+    robots: "no robots.txt (the path returns the main page)"
+    licence_note: >-
+      "Content is available under Creative Commons Attribution 4.0 International License unless otherwise noted."
+      (https://creativecommons.org/licenses/by/4.0/). Third-party images may carry other terms.
+    climate: [Dfa, Dfb]
+    elements: [rain_garden, bioswale, vegetated_swale, filter_strip, tree_trench, infiltration_trench, permeable_pavement, green_roof, rainwater_harvesting, detention_basin, retention_pond, constructed_wetland]
+    priority: 1
+
+  - id: nacto_ussg
+    title: Urban Street Stormwater Guide
+    publisher: National Association of City Transportation Officials (NACTO)
+    edition: "2017 (book, Island Press); web pages"
+    kind: manual
+    access: user-supplied
+    status: blocked
+    landing: https://nacto.org/publication/urban-street-stormwater-guide/
+    files: []
+    robots: "unknown: nacto.org answers 403 to automated clients, robots.txt included"
+    licence_note: Not read (403). Published as a book; the web pages' terms are unknown.
+    notes: Check in a browser whether the web version is free to read; otherwise a user copy.
+    climate: [various]
+    elements: [rain_garden, bioswale, tree_trench, permeable_pavement]
+    priority: 2
+
+  - id: seq_wsud
+    title: Water Sensitive Urban Design Technical Design Guidelines for South East Queensland
+    publisher: Water by Design (Healthy Land & Water) with SEQ councils
+    edition: "2006 v1 (to confirm)"
+    kind: manual
+    access: user-supplied
+    status: not-found
+    landing: https://waterbydesign.com.au/
+    files: []
+    robots: "redland.qld.gov.au: no rule for /download/"
+    licence_note: >-
+      Owner's terms (https://waterbydesign.com.au/?page_id=37): "you may download or print a single copy ... for
+      research or personal use"; no adaptation or republication without written permission.
+    notes: >-
+      The brief's Redland URL returns 404. The owner's site does not show this document on its WSUD page; the
+      owner's /resources page is still to be checked. Until the owner offers it, a user copy.
+    climate: [Cfa]
+    elements: [rain_garden, bioswale, vegetated_swale, constructed_wetland, retention_pond]
+    priority: 2
+
+  - id: townsville_wsud
+    title: WSUD Guidelines for the Coastal Dry Tropics (parts 1-n)
+    publisher: Townsville City Council
+    edition: unknown
+    kind: manual
+    access: user-supplied
+    status: blocked
+    landing: https://www.townsville.qld.gov.au/
+    files:
+      - https://www.townsville.qld.gov.au/__data/assets/pdf_file/0009/12222/GUIDELINES_1_Introduction_FINAL.pdf   # 403 to automated clients
+    robots: "unknown (403)"
+    licence_note: Not read (403).
+    notes: The council's site refuses automated clients; the parts list (bioretention, swales, wetlands ...) needs a browser.
+    climate: [Aw, BSh]
+    elements: [rain_garden, bioswale, constructed_wetland]
+    priority: 2
+
+  - id: cgwb_recharge
+    title: Manual on Artificial Recharge of Ground Water
+    publisher: Central Ground Water Board, Ministry of Jal Shakti, India
+    edition: "2007 (to confirm)"
+    kind: manual
+    access: open
+    status: unreachable
+    landing: https://www.cgwb.gov.in/cgwbpnm/publication-detail/330
+    files: []
+    robots: "unknown (TLS handshake refused)"
+    licence_note: Not read.
+    notes: >-
+      The server rejects the TLS handshake from both checkers (SEC_E_ILLEGAL_MESSAGE / unrecognised name). Retry
+      later; if it stays down, a user copy. Regional pack (India): recharge wells, pits, trenches, check dams.
+    climate: [Aw, BSh, Cwa, Am]
+    elements: [recharge_well, infiltration_trench, check_dam]
+    priority: 1
+
+  - id: msma2
+    title: Urban Stormwater Management Manual for Malaysia (MSMA), 2nd Edition
+    publisher: Department of Irrigation and Drainage (JPS), Malaysia
+    edition: "2nd ed., August 2012"
+    kind: manual
+    access: open      # the brief listed it as user-supplied; the owner offers it as a free PDF (your call)
+    status: reachable
+    landing: https://www.water.gov.my/index.php/pages/view/2070?mid=689
+    files:
+      - https://www.water.gov.my/jps/resources/MSMA2ndEdition_august_2012.pdf   # 200, application/pdf, 28.8 MB
+    robots: not checked
+    licence_note: "Footer: 'Copyright (C) JPS 2016. All Rights Reserved.' Linked for free download on the owner's page, no login."
+    climate: [Af]
+    elements: [rain_garden, bioswale, detention_basin, retention_pond, infiltration_trench, rainwater_harvesting, constructed_wetland]
+    priority: 1
+
+  # ------------------------------------------------------------------ design manuals (user-supplied)
+  - id: ciria_c753
+    title: The SuDS Manual (C753) and Guidance on the construction of SuDS (C768)
+    publisher: CIRIA
+    edition: "C753 2015; C768 2017"
+    kind: manual
+    access: user-supplied
+    status: sold
+    landing: https://www.ciriabooks.org/
+    files: []
+    licence_note: Sold; free to staff of CIRIA member organisations (via Accuris).
+    climate: [Cfb]
+    elements: [rain_garden, bioswale, vegetated_swale, filter_strip, tree_trench, infiltration_trench, permeable_pavement, green_roof, rainwater_harvesting, detention_basin, retention_pond, constructed_wetland]
+    priority: 1
+
+  - id: melbourne_wsud
+    title: "WSUD Engineering Procedures: Stormwater"
+    publisher: Melbourne Water / CSIRO Publishing
+    edition: "2005"
+    kind: manual
+    access: user-supplied
+    status: sold
+    landing: https://www.publishing.csiro.au/
+    files: []
+    licence_note: Book (CSIRO Publishing). melbournewater.com.au refused the checker (403), so an open copy from the owner is not confirmed.
+    climate: [Cfb]
+    elements: [rain_garden, bioswale, vegetated_swale, constructed_wetland, retention_pond]
+    priority: 2
+
+  - id: ms2526
+    title: MS 2526 (parts on detention ponds, on-site detention, bioretention, infiltration)
+    publisher: Department of Standards Malaysia
+    edition: unknown
+    kind: standard
+    access: user-supplied
+    status: sold
+    landing: https://mysol.jsm.gov.my/
+    files: []
+    licence_note: "Copyrighted under Section 18A, Standards Malaysia Act 1996 (Act 549). Sold via MySOL."
+    climate: [Af]
+    elements: [detention_basin, rain_garden, infiltration_trench]
+    priority: 3
+
+  - id: mohurd_sponge
+    title: Technical Guide for Sponge City Construction (2014); GB/T 51345-2018
+    publisher: Ministry of Housing and Urban-Rural Development (MOHURD), China
+    edition: "2014; 2018"
+    kind: standard
+    access: user-supplied
+    status: unreachable
+    landing: https://www.mohurd.gov.cn/
+    files: []
+    licence_note: Not read (the site did not resolve from the checker).
+    climate: [Cfa, Cwa, Dwa, BSk]
+    elements: [rain_garden, bioswale, permeable_pavement, green_roof, rainwater_harvesting, detention_basin, retention_pond, constructed_wetland]
+    priority: 2
+
+  # ------------------------------------------------------------------ model references
+  - id: swmm_ref
+    title: "SWMM 5 Reference Manual Vol I (Hydrology), Vol II (Hydraulics) + 2022 addendum, Vol III (Water Quality, Ch. 6 LID); SWMM 5.2 User's Manual; errata"
+    publisher: US Environmental Protection Agency
+    edition: "Vol I 2016, Vol II 2017, Vol III 2016; User's Manual v5.2 (2022)"
+    kind: manual
+    access: open
+    status: reachable
+    landing: https://www.epa.gov/water-research/storm-water-management-model-swmm
+    files:
+      - https://nepis.epa.gov/Exe/ZyPURL.cgi?Dockey=P100NYRA.txt       # linked from the landing page (volume to confirm on fetch)
+      - https://nepis.epa.gov/Exe/ZyPURL.cgi?Dockey=P100S9AS.txt       # linked from the landing page
+      - https://nepis.epa.gov/Exe/ZyPURL.cgi?Dockey=P100P2NY.txt       # linked from the landing page
+      - https://www.epa.gov/system/files/documents/2022-02/swmm5-reference-manual-ii-addendum-20220210mas2wr-1.pdf
+      - https://www.epa.gov/system/files/documents/2022-04/swmm-users-manual-version-5.2.pdf
+      - https://www.epa.gov/system/files/documents/2022-08/SWMM%20Reference%20Manual%20Errata.pdf
+    robots: "allowed (www.epa.gov disallows only admin and search paths)"
+    licence_note: >-
+      EPA disclaimers (https://www.epa.gov/web-policies-and-procedures/epa-disclaimers): "These documents may be
+      freely distributed and used for non-commercial, scientific and educational purposes."
+    climate: [n/a]
+    elements: [all]
+    priority: 1
+
+  - id: tr55
+    title: "Urban Hydrology for Small Watersheds, Technical Release 55 (TR-55)"
+    publisher: USDA Natural Resources Conservation Service
+    edition: "2nd ed., June 1986"
+    kind: manual
+    access: open
+    status: unreachable
+    landing: https://www.nrcs.usda.gov/resources/guides-and-instructions/urban-hydrology-for-small-watersheds-tr-55
+    files: []
+    robots: "unknown (time-out)"
+    licence_note: US federal government work; reuse statement not read yet (nrcs.usda.gov timed out, usda.gov answered 403).
+    notes: Already used by the engine (curve numbers, the ground questionnaire); register and cite. Retry later.
+    climate: [various US]
+    elements: [n/a]
+    priority: 1
+
+  # ------------------------------------------------------------------ performance evidence
+  - id: bmp_db_2020
+    title: International Stormwater BMP Database, 2020 Summary Statistics (DRPT-4968)
+    publisher: The Water Research Foundation (with EWRI/ASCE and others)
+    edition: "2020"
+    kind: dataset
+    access: open
+    status: reachable
+    landing: https://bmpdatabase.org/
+    files:
+      - https://www.waterrf.org/system/files/resource/2020-11/DRPT-4968_0.pdf   # 200, application/pdf, 4.0 MB
+    robots: "bmpdatabase.org: allowed (Disallow /config, /search, /api/, /static/); waterrf.org robots.txt: 403"
+    licence_note: >-
+      bmpdatabase.org disclaimer: "Permission to copy must be obtained from The Water Research Foundation."
+      Free download from the owner; private copy for extraction only.
+    notes: >-
+      The full database (2023 Urban Stormwater BMP Database) is "available by request" (email), not downloadable:
+      a request is yours to make.
+    climate: [mostly Cfa, Dfa, BSk (US)]
+    elements: [rain_garden, bioswale, vegetated_swale, filter_strip, infiltration_trench, permeable_pavement, green_roof, detention_basin, retention_pond, constructed_wetland]
+    priority: 2
+
+  # ------------------------------------------------------------------ catalogues and frameworks
+  - id: wb_nbs_catalogue
+    title: A Catalogue of Nature-based Solutions for Urban Resilience
+    publisher: World Bank
+    edition: "2021; hdl 10986/36507; DOI 10.1596/36507"
+    kind: catalogue
+    access: open
+    status: reachable
+    landing: https://openknowledge.worldbank.org/entities/publication/c33e226c-2fbb-5e11-8c21-7b711ecbc725
+    files:
+      - https://openknowledge.worldbank.org/bitstreams/9cd30338-59f8-5681-991a-c71163b3b003/download
+      - https://openknowledge.worldbank.org/bitstreams/d6ac4e40-2ff8-540c-b1f0-07ca824a33c6/download
+    robots: "allowed for /bitstreams/; Crawl-delay: 10"
+    licence_note: "License: CC BY 3.0 IGO (http://creativecommons.org/licenses/by/3.0/igo)"
+    climate: [global]
+    elements: [all]
+    priority: 3
+
+  - id: iucn_standard
+    title: "IUCN Global Standard for Nature-based Solutions (1st ed.): 8 criteria, 28 indicators"
+    publisher: IUCN
+    edition: "2020; ISBN 978-2-8317-2058-6; DOI 10.2305/IUCN.CH.2020.08.en"
+    kind: standard
+    access: open
+    status: reachable
+    landing: https://portals.iucn.org/library/node/49070
+    files:
+      - https://portals.iucn.org/library/sites/library/files/documents/2020-020-En.pdf
+    robots: "iucn.org: allowed, Crawl-delay: 10; portals.iucn.org robots.txt not checked"
+    licence_note: >-
+      IUCN terms (https://iucn.org/index.php/terms-and-conditions): "Textual Content can be reproduced for all
+      non-commercial purposes as long as you provide attribution to the author / IUCN and original source."
+    climate: [global]
+    elements: [all]
+    priority: 3
+
+  - id: una
+    title: Urban Nature Atlas
+    publisher: Naturvation / UNA consortium
+    edition: web
+    kind: catalogue
+    access: metadata-only
+    status: blocked
+    landing: https://una.city/
+    files: []
+    licence_note: Not read (403). Database on request from its owners; case references are added by the user by hand.
+    climate: [global]
+    elements: [all]
+    priority: 3
+
+  # ------------------------------------------------------------------ built-project datasets
+  - id: nyc_dep_gi
+    title: "DEP Green Infrastructure: Point Layer, Regulated Projects, Medians, Porous Pavement Right of Way Practices"
+    publisher: NYC Department of Environmental Protection (NYC Open Data)
+    edition: "monthly; data updated 2026-10-01"
+    kind: dataset
+    access: open
+    status: reachable
+    landing: https://data.cityofnewyork.us/d/df32-vzax
+    files:
+      - https://data.cityofnewyork.us/resource/df32-vzax.geojson   # point layer (replaces spjh-pz7h, which no longer exists)
+      - https://data.cityofnewyork.us/resource/fm4z-qud6.geojson   # regulated projects
+      - https://data.cityofnewyork.us/resource/drep-uzs7.geojson   # medians
+      - https://data.cityofnewyork.us/resource/n7f2-dyvt.geojson   # porous pavement ROW practices
+    fields: [asset_id, gi_id, project_na, asset_type, status, borough, sewer_type, outfall, asset_leng, asset_widt, asset_area, gi_feature, tree_latin]
+    robots: "allowed (/resource/ and /api/views/ not disallowed); Crawl-delay: 1"
+    licence_note: >-
+      No licence field on the datasets; NYC Open Data Terms of Use apply (https://opendata.cityofnewyork.us/overview/#termsofuse,
+      text not recorded yet). Large exports need paging ($limit/$offset).
+    climate: [Cfa]
+    elements: [rain_garden, bioswale, tree_trench, infiltration_trench, permeable_pavement]
+    priority: 3
+
+  - id: nyc_greenstreets
+    title: Greenstreets
+    publisher: NYC Department of Parks and Recreation (NYC Open Data)
+    edition: "data updated 2026-10-03"
+    kind: dataset
+    access: open
+    status: reachable
+    landing: https://data.cityofnewyork.us/d/mk9u-qu7i
+    files:
+      - https://data.cityofnewyork.us/resource/mk9u-qu7i.geojson
+    fields: [gstype, featurestatus, commissiondate, acres, starea, stlength, sitename, borough, subcategory]
+    robots: allowed
+    licence_note: NYC Open Data Terms of Use (as nyc_dep_gi).
+    climate: [Cfa]
+    elements: [rain_garden, bioswale, depave]
+    priority: 3
+
+  - id: phila_gsi_public
+    title: Green Stormwater Infrastructure Public Projects
+    publisher: Philadelphia Water Department (City of Philadelphia)
+    edition: unknown
+    kind: dataset
+    access: open
+    status: to-confirm
+    landing: https://catalog-old.data.gov/dataset/green-stormwater-infrastructure-public-projects
+    files: []
+    licence_note: City of Philadelphia License (per the catalogue listing; to confirm on OpenDataPhilly).
+    notes: >-
+      The brief's OpenDataPhilly URLs return 404; the datasets now carry a "pwd-" prefix
+      (e.g. https://opendataphilly.org/datasets/pwd-green-stormwater-infrastructure-private-projects/). Related layer:
+      https://opendataphilly.org/datasets/stormwater-management-practice-polygons (GSI practice types).
+    climate: [Cfa]
+    elements: [rain_garden, bioswale, tree_trench, infiltration_trench, permeable_pavement, green_roof]
+    priority: 3
+
+  - id: phila_gsi_private
+    title: Green Stormwater Infrastructure Private Projects (Regulation; Retrofit)
+    publisher: Philadelphia Water Department (City of Philadelphia)
+    edition: "metadata updated 2025-05-26 (data.gov harvest)"
+    kind: dataset
+    access: open
+    status: to-confirm
+    landing: https://opendataphilly.org/datasets/pwd-green-stormwater-infrastructure-private-projects/
+    files: []   # CSV, SHP, GeoJSON and API per the listing; URLs to record on the first fetch
+    licence_note: "City of Philadelphia License; Usage: Public Use; Free (https://metadata.phila.gov/#help/help-faqs/what-are-the-terms-of-use/)"
+    climate: [Cfa]
+    elements: [rain_garden, bioswale, tree_trench, infiltration_trench, permeable_pavement, green_roof, detention_basin]
+    priority: 3
+
+  - id: phila_gsi_parcels
+    title: GSI Planning Parcels (impervious cover by surface type)
+    publisher: Philadelphia Water Department (City of Philadelphia)
+    edition: unknown
+    kind: dataset
+    access: open
+    status: to-confirm
+    landing: https://opendataphilly.org/datasets/pwd-green-stormwater-infrastructure-gsi-planning-parcels/
+    files: []
+    licence_note: City of Philadelphia License (to confirm on the page).
+    climate: [Cfa]
+    elements: [n/a]
+    priority: 3
+
+  # ------------------------------------------------------------------ context layers for the dataset cities
+  - id: phl_dem_2022
+    title: Philadelphia LiDAR DEM (April 2022, 3 ft)
+    publisher: City of Philadelphia via PASDA
+    edition: "2022"
+    kind: dataset
+    access: open
+    status: reachable
+    landing: https://www.pasda.psu.edu/uci/DataSummary.aspx?dataset=7152
+    files:
+      - https://www.pasda.psu.edu/download/phillyLiDAR/2022/Products/Philadelphia_dem_3ft_2022.zip
+    licence_note: "City of Philadelphia License; Public Use; Free. Bare-earth classification to confirm in the 2022 mapping report."
+    climate: [Cfa]
+    elements: [n/a]
+    priority: 3
+
+  - id: phl_landcover_2018
+    title: Philadelphia Land Cover Raster (7 classes)
+    publisher: City of Philadelphia with UVM Spatial Analysis Lab
+    edition: "2018"
+    kind: dataset
+    access: open
+    status: reachable
+    landing: https://opendataphilly.org/datasets/philadelphia-land-cover-raster/
+    files: []   # PASDA dataset 1587; URL to record on fetch
+    licence_note: "City of Philadelphia License; Public Use; Free."
+    climate: [Cfa]
+    elements: [n/a]
+    priority: 3
+
+  - id: phl_impervious
+    title: Impervious Surfaces (vector, planimetric)
+    publisher: Philadelphia Water Department
+    edition: "2015 (PASDA 1136); 2004"
+    kind: dataset
+    access: open
+    status: reachable
+    landing: https://opendataphilly.org/datasets/impervious-surfaces/
+    files: []
+    licence_note: "City of Philadelphia License; Public Use; Free ('The City of Philadelphia reserves all rights in the database')."
+    climate: [Cfa]
+    elements: [n/a]
+    priority: 3
+
+  - id: nyc_dem_landcover
+    title: NYC 1 ft DEM; NYC Land Cover 6 in (2017)
+    publisher: City of New York (NYC Open Data)
+    edition: "2017"
+    kind: dataset
+    access: open
+    status: to-confirm
+    landing: https://data.cityofnewyork.us/
+    files: []
+    licence_note: NYC Open Data Terms of Use.
+    notes: The dataset ids tried return 404; find the current ids through the catalogue API before fetching.
+    climate: [Cfa]
+    elements: [n/a]
+    priority: 3
+
+  - id: us_soils_ssurgo
+    title: SSURGO / gSSURGO soils (hydrologic soil group, hydgrp)
+    publisher: USDA NRCS (Web Soil Survey, Soil Data Access)
+    edition: current
+    kind: dataset
+    access: open
+    status: to-confirm
+    landing: https://websoilsurvey.nrcs.usda.gov/
+    files: []
+    licence_note: US federal data; terms page to record (nrcs.usda.gov timed out).
+    climate: [various US]
+    elements: [n/a]
+    priority: 3
+
+  - id: us_nlcd
+    title: Annual NLCD land cover and fractional impervious surface (30 m)
+    publisher: USGS / MRLC
+    edition: "1985-2025"
+    kind: dataset
+    access: open
+    status: to-confirm
+    landing: https://www.mrlc.gov/data
+    files: []
+    licence_note: US federal data; terms to record.
+    climate: [various US]
+    elements: [n/a]
+    priority: 3
+
+  # ------------------------------------------------------------------ methods literature (metadata only)
+  - id: ideas_gi
+    title: "Optimization of Green Infrastructure Networks to Maximize Stormwater-Related Benefits and Minimize Life Cycle Costs Using a Noisy Genetic Algorithm and Machine Learning (IDEAS_GI)"
+    publisher: "Minsker, B.; Heidari Haratmeh, B. (EGU General Assembly 2023)"
+    edition: "2023; DOI 10.5194/egusphere-egu23-10670"
+    kind: paper
+    access: metadata-only
+    status: reachable
+    landing: https://meetingorganizer.copernicus.org/EGU23/EGU23-10670.html
+    files: []
+    licence_note: EGU abstracts are CC BY 4.0 (to confirm on the page). Related thesis https://www.ideals.illinois.edu/items/113690
+    climate: [Cfa]
+    elements: [all]
+    priority: 3
+
+  - id: dong2025_unet
+    title: Spatially explicit optimization of urban green infrastructure for multiple ecosystem services using deep learning surrogates
+    publisher: "Dong, Y.; Subramanyam, A.; Wu, H."
+    edition: "2025/2026 (Elsevier per Penn State; venue and DOI to confirm)"
+    kind: paper
+    access: metadata-only
+    status: to-confirm
+    landing: https://pure.psu.edu/en/publications/spatially-explicit-optimization-of-urban-green-infrastructure-for/
+    files: []
+    licence_note: Not known.
+    climate: [Cfa]
+    elements: [all]
+    priority: 3
+
+  - id: rhodium_swmm
+    title: "Rhodium-SWMM: An open-source tool for green infrastructure placement under deep uncertainty"
+    publisher: "Tebyanian, N.; Fischbach, J.; Lempert, R.; Knopman, D.; Wu, H.; Iulo, L.; Keller, K."
+    edition: "Environmental Modelling & Software 163 (2023) 105671; DOI 10.1016/j.envsoft.2023.105671"
+    kind: paper
+    access: metadata-only
+    status: reachable
+    landing: https://pure.psu.edu/en/publications/rhodium-swmm-an-open-source-tool-for-green-infrastructure-placeme/
+    files: []
+    licence_note: Paper access and the code repository's licence still to be found.
+    climate: [Cfa]
+    elements: [all]
+    priority: 3
+
+  - id: feng2023_mlp
+    title: Optimization of the Low-Impact Development Facility Area Based on a Surrogate Model
+    publisher: "Feng, J.; Yang, Y.; Li, J."
+    edition: "Water Resources Management 37(14), 2023; DOI 10.1007/s11269-023-03630-w"
+    kind: paper
+    access: metadata-only
+    status: reachable
+    landing: https://link.springer.com/article/10.1007/s11269-023-03630-w
+    files: []
+    licence_note: Springer; open access not confirmed.
+    climate: [Dwa]
+    elements: [all]
+    priority: 3

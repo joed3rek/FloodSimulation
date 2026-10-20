@@ -496,6 +496,31 @@ def ponds_put(pid: str, answers: List[Dict[str, Any]] = Body(..., embed=True)) -
     return out
 
 
+@app.get("/projects/{pid}/site/wells")
+def wells_get(pid: str) -> Dict[str, Any]:
+    """The existing recharge wells on the survey and whether each is in the flood model (needs its depth,
+    diameter and the strata's infiltration rate)."""
+    from spongepark.engine.site import wells
+
+    return wells.status(_project(pid))
+
+
+@app.put("/projects/{pid}/site/wells")
+def wells_put(pid: str, answers: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """The wells' depth, diameter and strata infiltration rate for all of them, and optionally per well
+    (``wells: [{id, ...}]``). Answered wells count in the existing site and every design."""
+    from spongepark.engine.site import wells
+
+    p = _project(pid)
+    with _locks[pid]:
+        try:
+            out = wells.apply(p, answers)
+        except ValueError as ex:
+            raise HTTPException(400, str(ex))
+        p.save()
+    return out
+
+
 @app.put("/projects/{pid}/site/ground")
 def ground_put(pid: str, answers: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     """Save the ground questionnaire: TR-55 curve numbers, the park's soil zone, CURVE_NUMBER infiltration."""

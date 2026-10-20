@@ -125,9 +125,12 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
     f, infil_fn, infil_note, infil_params = _infiltration(site, method, X, Y, mask, imperv)
 
     # NbS elements as sinks (resolved values written by the SWMM run of the option)
+    from ..site import wells
+
     els = None
-    if option_id != "baseline" and has_elements(project, option_id):
-        elements = load_elements(project, option_id)
+    elements = load_elements(project, option_id) if option_id != "baseline" and has_elements(project, option_id) else []
+    elements = elements + [e for e in wells.resolved(project) if e.id not in {x.id for x in elements}]   # existing wells
+    if elements:
         lab = -np.ones(mask.shape, np.int64)
         caps, rates, areas, ids = [], [], [], []
         for e in elements:

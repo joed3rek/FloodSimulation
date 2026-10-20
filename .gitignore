@@ -24,3 +24,8 @@ unity/SpongeParkApp/Assets/Tree9/
 unity/SpongeParkApp/Assets/Tree9.meta
 unity/SpongeParkApp/Assets/SpongePark/Resources/LowPoly/
 unity/SpongeParkApp/Assets/SpongePark/Resources/LowPoly.meta
+
+# NbS knowledge base: raw downloads are never committed (docs/KNOWLEDGE_BRIEF.md)
+knowledge/raw/
+knowledge/train/*
+!knowledge/train/manifest.json

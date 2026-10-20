@@ -440,6 +440,9 @@ def _generate(project: Project, option_id: str, types: Optional[List[str]], writ
         m = regions[e.id]
         sinks |= m
         sink_owner[m] = e.id
+    from .apply import _existing_well_sinks
+
+    _existing_well_sinks(project, g, sinks, sink_owner)
     subs, sub_rows = _rebuild(project, g, zg, sinks, sink_owner, sub_lab, sub_props)
     for e in elements:
         sc = f"SC_{e.id}"

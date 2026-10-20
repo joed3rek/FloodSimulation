@@ -111,6 +111,7 @@ def regrade(project: Project, option_id: str) -> Dict[str, Any]:
     for e, p in zip(elements, placed):
         sinks |= p.region
         owner[p.region] = e.id
+    _existing_well_sinks(project, g, sinks, owner)
     subs, sub_rows = _rebuild(project, g, zg, sinks, owner, sub_lab, sub_props)
     names = {s["properties"]["id"] for s in subs}
     for e in elements:
@@ -124,3 +125,14 @@ def regrade(project: Project, option_id: str) -> Dict[str, Any]:
     project.write_json(f"scenarios/{option_id}/regrade_report.json", rep)
     project.history.log("regrade", option=option_id, elements=len(elements))
     return rep
+
+
+def _existing_well_sinks(project: Project, g, sinks: np.ndarray, owner: np.ndarray) -> None:
+    """The existing recharge wells stay sinks on the graded ground, so each keeps its catchment SC_<id>
+    (where a design element covers a well's cell, the element takes the water)."""
+    from ..site import wells
+
+    for wid, rc in wells.sink_cells(project, g.X, g.Y, g.mask):
+        if not sinks[rc]:
+            sinks[rc] = True
+            owner[rc] = wid

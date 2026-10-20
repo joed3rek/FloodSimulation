@@ -74,22 +74,58 @@ def delineate(project: Project) -> Dict[str, Any]:
     L = fl.flow_length(filled, mask, dirs, cell)
     deps, depth = fl.depressions(z, filled, mask, cell, X, Y, float(P.value("terrain.min_depression_depth_m")))
     lab = fl.group_outlets(out_cell, mask, cell, float(P.value("terrain.min_subcatchment_area_m2")))
+    # existing recharge wells (answered in Site setup) are sinks: the cells draining into one form its own
+    # subcatchment SC_<well>, which overflows to the outfall the ground drained to before
+    from ..site import wells
+
+    well_of: Dict[int, str] = {}   # label in sub_lab -> well id
+    sub_lab = lab.copy()
+    cells = wells.sink_cells(project, X, Y, mask)
+    if cells:
+        sinks = np.zeros(mask.shape, bool)
+        for _, rc in cells:
+            sinks[rc] = True
+        fw = fl.fill_sinks(z, mask, sinks=sinks)
+        term = fl.outlet_of(fw, mask, fl.d8_directions(fw, mask, sinks=sinks))
+        nxt = int(lab.max()) + 1
+        for wid, (r, c) in cells:
+            into = mask & (term == r * mask.shape[1] + c)
+            if into.any():
+                sub_lab[into] = nxt
+                well_of[nxt] = wid
+                nxt += 1
 
     gy, gx = np.gradient(np.where(mask, dem.z, np.nan), cell)
     slope = 100 * np.hypot(gx, gy)
-    polys = _polygons(lab, dem)
+    polys = _polygons(sub_lab, dem)
+    base_polys = _polygons(lab, dem)
     imperv_kinds = set(P.value("terrain.impervious_context_kinds"))
     imperv, enclosing, outlines = context_surfaces(project, survey_boundary, float(mask.sum() * cell ** 2), imperv_kinds)
     dstore_base = float(P.value("surface.dstore_perv_mm"))
 
     subs, outs, rows = [], [], []
-    for k, poly in sorted(polys.items()):
+    exit_of: Dict[int, Tuple[int, int]] = {}
+    for k in sorted(base_polys):   # the outfalls: where each base catchment's water leaves the park
         m = lab == k
-        area = float(m.sum() * cell ** 2)
         a_exit = np.where(m & (out_cell == np.arange(out_cell.size).reshape(out_cell.shape)), acc, -1)
-        r, c = np.unravel_index(int(np.argmax(a_exit)), a_exit.shape)
+        exit_of[k] = np.unravel_index(int(np.argmax(a_exit)), a_exit.shape)
+        r, c = exit_of[k]
+        outs.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": (float(X[r, c]), float(Y[r, c]))},
+                     "properties": {"id": f"OUT_{k}", "invert_elev_m": round(float(dem.z[r, c]), 3), "kind": "FREE",
+                                    "note": "where surface flow leaves the surveyed park (to confirm: gate, wall "
+                                            "opening or drain inlet)"}})
+    for k, poly in sorted(polys.items()):
+        m = sub_lab == k
+        area = float(m.sum() * cell ** 2)
+        if k in well_of:   # a well's catchment: overflows to the outfall its cells drained to before
+            ids, cnt = np.unique(lab[m], return_counts=True)
+            base = int(ids[np.argmax(cnt)])
+            oid, sid = f"OUT_{base}", f"SC_{well_of[k]}"
+        else:
+            base = k
+            oid, sid = f"OUT_{k}", f"SC_{k}"
+        r, c = exit_of[base]
         inv = float(dem.z[r, c])
-        oid, sid = f"OUT_{k}", f"SC_{k}"
         flen = float(np.percentile(L[m], 95))
         s = slope[m]
         s = s[~np.isnan(s)]
@@ -101,12 +137,9 @@ def delineate(project: Project) -> Dict[str, Any]:
             "slope_pct": round(float(np.median(s)) if s.size else 0.5, 3),
             "flow_length_m": round(max(flen, cell), 2),
             "dstore_perv_mm": round(dstore_base + dep_mm, 2), "land_cover": "park (terrain-derived)",
-            "note": f"terrain-derived; natural depressions {dep_vol:.1f} m3 added as {dep_mm:.1f} mm depression storage",
+            "note": (f"drains into the existing recharge well {well_of[k]}; " if k in well_of else "")
+                    + f"terrain-derived; natural depressions {dep_vol:.1f} m3 added as {dep_mm:.1f} mm depression storage",
         }})
-        outs.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": (float(X[r, c]), float(Y[r, c]))},
-                     "properties": {"id": oid, "invert_elev_m": round(inv, 3), "kind": "FREE",
-                                    "note": "where surface flow leaves the surveyed park (to confirm: gate, wall "
-                                            "opening or drain inlet)"}})
         rows.append({"subcatchment": sid, "outfall": oid, "area_m2": area, "pct_imperv": imp, "slope_pct_median": float(np.median(s)) if s.size else None,
                      "flow_length_m": flen, "depression_m3": dep_vol, "depression_mm": dep_mm,
                      "outfall_xy": [float(X[r, c]), float(Y[r, c])], "outfall_level_m": inv})

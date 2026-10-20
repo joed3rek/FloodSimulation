@@ -77,9 +77,14 @@ def load_hyetographs(project: Project) -> Dict[int, Hyetograph]:
 # --------------------------------------------------------------------------- option
 def prepare_option(project: Project, option_id: str, site: Optional[Site] = None) -> tuple:
     """Resolve elements against parameters and soils, run guideline checks, write them back."""
+    from .site import wells
+
     site = site or Site.load(project, option_id)
+    # the existing recharge wells (survey, answered in Site setup) are in every scenario, the existing site too
+    existing = wells.resolved(project, site)
     if option_id == BASELINE:
-        return [], []
+        _contributing_areas(existing, site)
+        return existing, []
     if not has_elements(project, option_id):
         raise PipelineError(f"Scenario '{option_id}' has no elements.json.")
     method = str(project.parameters.value("swmm.infiltration_method")).upper()
@@ -93,6 +98,9 @@ def prepare_option(project: Project, option_id: str, site: Optional[Site] = None
     _contributing_areas(elements, site)
     findings = check_elements(elements)
     save_elements(project, option_id, elements)
+    existing = [e for e in existing if e.id not in {x.id for x in elements}]
+    _contributing_areas(existing, site)   # nothing is routed to or from them
+    elements += existing
     project.write_json(f"scenarios/{option_id}/guideline_findings.json", [f.model_dump() for f in findings])
     errors = [f for f in findings if f.severity == "error"]
     for f in findings:
@@ -184,9 +192,10 @@ def run_option(
             el = by_id.get(row["id"])
             if el is not None:
                 el.results[rp_key] = {k: v for k, v in row.items() if k not in ("id", "type") and v is not None}
-    save_elements(project, option_id, elements)
+    if option_id != BASELINE:   # the existing wells live in site/wells.geojson, not in the scenario
+        save_elements(project, option_id, [e for e in elements if e.source != "existing"])
     site_area = site.site_area_m2
-    nbs_area = sum(e.area_m2 or 0.0 for e in elements)
+    nbs_area = sum(e.area_m2 or 0.0 for e in elements if e.source != "existing")   # the design's own
     summary = {
         "option_id": option_id,
         "calibration": project.manifest.calibration_status if project.manifest.calibration_status != "uncalibrated"

@@ -32,6 +32,7 @@ dependencies = [
     "fastapi>=0.110",       # local engine API (Phase 7)
     "uvicorn>=0.27",
     "imageio-ffmpeg>=0.5",  # bundled ffmpeg for the app's video export
+    "pyyaml>=6",            # knowledge/sources.yaml (NbS knowledge base)
 ]
 
 [project.optional-dependencies]

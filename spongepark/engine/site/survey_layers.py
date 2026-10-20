@@ -21,7 +21,7 @@ import numpy as np
 from ..io import cad
 from ..project import Project
 from ..terrain.raster import read_geotiff
-from . import ponds
+from . import ponds, wells
 
 log = logging.getLogger(__name__)
 
@@ -248,6 +248,7 @@ def build(project: Project) -> Dict[str, Any]:
 
     layers = []
     pond_polys: List[Any] = []
+    well_pts: List[Any] = []
     for name, style, pieces in read:
         kind = style["kind"]
         feats = []
@@ -289,6 +290,8 @@ def build(project: Project) -> Dict[str, Any]:
             pieces = [(g, geo, {**info, "color": EDGE_COLOR[kind]}) for g, geo, info in pieces]
             if not surfaces:
                 notes.append("its lines do not enclose a surface, so only the edges are drawn.")
+        if kind == "recharge_well":   # existing wells: part of the existing site's flood model (wells.py)
+            well_pts += [(float(geo[0]), float(geo[1]), info.get("radius_m")) for g, geo, info in pieces if g == "point"]
         for g, geo, info in pieces:
             if g == "point":
                 x, y = geo
@@ -325,6 +328,7 @@ def build(project: Project) -> Dict[str, Any]:
             "features": feats,
         })
     ponds.record(project, pond_polys, ground, park_boundary(project))
+    wells.record(project, well_pts, ground, park_boundary(project))
     out = {"schema_version": "1.1", "style": STYLE, "drawing": f"survey/{drawing.name}", "extent": extent,
            "note": "Plan positions from the survey, heights from the ground model. Wall, building and tree "
                    "heights are display heights only.",
