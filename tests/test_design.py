@@ -155,3 +155,18 @@ def test_the_guided_checklist_is_kept_in_the_project(site):
     c.post(f"/projects/{pid}/close")
     with Project.open(site) as p:
         assert validate_package(p.root).get("onboarding.json") == []
+
+
+def test_analyse_site_is_its_own_step_and_site_setup_makes_it_stale(site):
+    """The flow and hotspots come from Analyse site (not from confirming the model); Site setup changes clear it."""
+    c = TestClient(app)
+    pid = c.post("/projects/open", json={"path": site}).json()["project"]
+    assert c.get(f"/projects/{pid}").json()["analysed"] is False
+    r = c.post(f"/projects/{pid}/analyse?wait=true").json()
+    assert r["status"] == "done", r.get("error")
+    out = r["result"]
+    assert out["flow"]["exits"] >= 1 and out["storms"] is False and "rainfall" in out["missing"]
+    assert c.get(f"/projects/{pid}").json()["analysed"] is True
+    assert c.put(f"/projects/{pid}/rainfall", json={"preset": "hsr_imd_24h"}).status_code == 200
+    assert c.get(f"/projects/{pid}").json()["analysed"] is False   # the rainfall changed: analyse again
+    c.post(f"/projects/{pid}/close")

@@ -57,7 +57,7 @@ namespace SpongePark
         /// The controls of the flow and design steps, placed by the workspace (Properties, Checks, Results, viewport).
         void BuildFlowAndDesignParts()
         {
-            flowText = Text("Confirm the site model to see where water runs.", "muted");
+            flowText = Text("Confirm the site model, answer Site setup, then Analyse site.", "muted");
             hotspotList = new VisualElement();
             hotspotList.AddToClassList("layer-list");
             floodText = Text("", "muted");
@@ -121,7 +121,7 @@ namespace SpongePark
             int exits = (int)s["exits"];
             flowText.text = $"Blue lines: where water runs (wider where more ground drains to it). " +
                             $"{(int)s["hotspots"]} place{((int)s["hotspots"] == 1 ? "" : "s")} where water collects (up to {(float)s["deepest_m"] * 100:0} cm deep, " +
-                            $"{(float)s["ponding_volume_m3"]:0.#} m³ in all); water leaves the park at {exits} point{(exits == 1 ? "" : "s")} (red). From the ground alone: no rainfall needed.";
+                            $"{(float)s["ponding_volume_m3"]:0.#} m³ in all); water leaves the park at {exits} point{(exits == 1 ? "" : "s")} (red). Worked out on the ground with the ponds and existing wells from Site setup; the storms are in Results.";
             hotspotList.Clear();
             foreach (var h in a["hotspots"].Take(8))
             {

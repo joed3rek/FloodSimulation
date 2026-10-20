@@ -93,7 +93,6 @@ namespace SpongePark
             BuildDialogs(ws.DialogHost);
             BuildProperties();
             ui.PanelRequested += OpenPanel;
-            ui.TabChanged += () => { if (ui.ActiveTab == Tab.Analyse && flowData != null) MarkStage("analyse_flow"); };
             CameraRig.BlockInput = () => !PointerInViewport();
         }
 
@@ -137,6 +136,8 @@ namespace SpongePark
                 C("flow-" + k, label, icon, $"Show or hide the {label.ToLower()} (from the ground alone)", () => SetFlow(key, !FlowOn(key)),
                   () => flowData != null, () => flowData != null && FlowOn(key));
             }
+            C("analyse", "Analyse site", "analyse", "Where water runs and collects on the ground (with the ponds and wells from Site setup), and SWMM on the existing park for every storm",
+              () => StartCoroutine(Run(AnalyseSite(), "Analysing the site")), () => Engine && siteConfirmed && FloodReady, visible: () => !bundle, primary: true);
             C("baseline", "Analyse existing", "baseline", "SWMM on the existing park for every storm (needed to compare options)",
               () => StartCoroutine(Run(Baseline(), "Analysing")), () => Engine && siteConfirmed && FloodReady, visible: () => !bundle);
             // Design
@@ -215,8 +216,8 @@ namespace SpongePark
             site.Group("Layers").Small(commands["layers-on"]).Small(commands["layers-off"]);
 
             var analyse = new RibbonTab(Tab.Analyse, "Analyse");
-            analyse.Group("Flow from the ground").Large(commands["flow-lines"]).Large(commands["flow-arrows"]).Large(commands["flow-ponding"]).Large(commands["flow-exits"]);
-            analyse.Group("Existing site (SWMM)").Large(commands["baseline"]);
+            analyse.Group("Analyse").Large(commands["analyse"]);
+            analyse.Group("Show").Large(commands["flow-lines"]).Large(commands["flow-arrows"]).Large(commands["flow-ponding"]).Large(commands["flow-exits"]);
 
             var design = new RibbonTab(Tab.Design, "Design");
             var draw = design.Group("Draw");
@@ -501,7 +502,7 @@ namespace SpongePark
         {
             props.Section("properties", "Selected element", propsBox, () => selectedId != null && propsBox.childCount > 0);
             props.Section("properties", "Site", siteText, () => selectedId == null);
-            props.Section("properties", "Flow from the ground", flowText, () => selectedId == null && siteConfirmed);
+            props.Section("properties", "Site analysis", flowText, () => selectedId == null && siteConfirmed);
             props.Section("properties", "Flood simulation", floodText, () => selectedId == null && siteConfirmed && !bundle);
             props.Section("properties", "Rainfall and ground", setupSummary = Text("", "muted"), () => selectedId == null && HasProject && !bundle);
             var cal = Text("", "muted");
@@ -629,10 +630,10 @@ namespace SpongePark
             new Stage { Id = "site_setup", Title = "Site setup (rainfall, ground, ponds)", Why = "How much rain falls, and how much of it soaks in, decide everything that follows.",
                         Missing = "Confirm the site model first.", Action = "Open Site setup",
                         State = () => FloodReady ? StageState.Done : siteConfirmed ? Next("site_setup") : StageState.Locked, Go = () => siteSetup.Open() },
-            new Stage { Id = "analyse_flow", Title = "Analyse flow", Why = "Where water runs and collects shows where NbS will catch it.",
-                        Missing = "Confirm the site model first.", Action = "Open the Analyse tab",
-                        State = () => StageDone("analyse_flow") ? StageState.Done : siteConfirmed ? Next("analyse_flow") : StageState.Locked,
-                        Go = () => { ui.ActiveTab = Tab.Analyse; rigLeft.Plan = true; } },
+            new Stage { Id = "analyse_flow", Title = "Analyse the site", Why = "Where water runs and collects, and how the existing park copes with each storm, show where NbS will catch it.",
+                        Missing = "Answer Site setup first (rainfall and ground).", Action = "Analyse site",
+                        State = () => StageDone("analyse_flow") && Analysed ? StageState.Done : siteConfirmed && FloodReady ? Next("analyse_flow") : StageState.Locked,
+                        Go = () => { ui.ActiveTab = Tab.Analyse; rigLeft.Plan = true; if (commands["analyse"].Enabled()) commands["analyse"].Run(); } },
             new Stage { Id = "flood_simulation", Title = "Run the flood simulation", Why = "Shows how deep the existing park floods in the design storm.",
                         Missing = "Needs the rainfall and the ground answers (Site setup).", Action = "Run it",
                         State = () => left.Frames != null || StageDone("flood_simulation") ? StageState.Done : siteConfirmed && FloodReady ? Next("flood_simulation") : StageState.Locked,

@@ -113,7 +113,8 @@ def info(pid: str) -> Dict[str, Any]:
             "has_rainfall": p.exists("rainfall/return_periods.csv"),
             "has_survey": any(p.path("survey").glob("*_SP.dxf")),
             "site_confirmed": bool(p.parameters.value_or("site.model_confirmed", False)),
-            "has_ground": p.exists("site/ground.json")}
+            "has_ground": p.exists("site/ground.json"),
+            "analysed": p.exists("site/analysis.json")}
 
 
 @app.post("/projects/{pid}/save")
@@ -183,6 +184,20 @@ def survey_import(pid: str, req: SurveyRequest, wait: bool = False) -> Dict[str,
     from spongepark.engine.terrain.survey import import_survey
 
     return _job(pid, "import_survey", lambda p: import_survey(p, Path(req.drawing), req.layer_map, req.park_area_m2), wait)
+
+
+@app.post("/projects/{pid}/analyse")
+def analyse_site(pid: str, wait: bool = False) -> Dict[str, Any]:
+    """Analyse the existing site with its Site setup: flow lines and ponding hotspots on the ground (ponds and
+    existing wells in), and SWMM on the existing park for every design storm once rainfall and ground are in."""
+    from spongepark.engine.site import analysis
+
+    def fn(p: Project):
+        out = analysis.run(p)
+        p.save()
+        return out
+
+    return _job(pid, "analyse site", fn, wait)
 
 
 @app.post("/projects/{pid}/baseline")
@@ -490,6 +505,7 @@ def ponds_put(pid: str, answers: List[Dict[str, Any]] = Body(..., embed=True)) -
     with _locks[pid]:
         try:
             out = ponds.apply(p, answers)
+            _analysis_stale(p)
         except ValueError as ex:
             raise HTTPException(400, str(ex))
         p.save()
@@ -515,10 +531,17 @@ def wells_put(pid: str, answers: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     with _locks[pid]:
         try:
             out = wells.apply(p, answers)
+            _analysis_stale(p)
         except ValueError as ex:
             raise HTTPException(400, str(ex))
         p.save()
     return out
+
+
+def _analysis_stale(p: Project) -> None:
+    from spongepark.engine.site import analysis
+
+    analysis.stale(p)
 
 
 @app.put("/projects/{pid}/site/ground")
@@ -530,6 +553,7 @@ def ground_put(pid: str, answers: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     with _locks[pid]:
         try:
             out = apply(p, answers)
+            _analysis_stale(p)
         except ValueError as ex:
             raise HTTPException(400, str(ex))
         p.save()
@@ -565,6 +589,7 @@ def rainfall_put(pid: str, body: RainfallSet) -> Dict[str, Any]:
     with _locks[pid]:
         try:
             out = apply(p, body.preset, body.rows, body.source)
+            _analysis_stale(p)
         except Exception as ex:
             raise HTTPException(400, str(ex))
         p.save()

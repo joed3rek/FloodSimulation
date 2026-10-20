@@ -323,8 +323,7 @@ namespace SpongePark
             yield return api.Send("POST", api.P("/site/confirm"), new { confirmed }, x => r = x);
             if (r == null) yield break;
             siteConfirmed = confirmed;
-            status = confirmed ? "Site model confirmed. The Analyse tab shows where water runs and collects." : "Site model reopened.";
-            if (confirmed) yield return LoadFlow();
+            status = confirmed ? "Site model confirmed. Next: Site setup (rainfall, ground, ponds, wells), then Analyse site." : "Site model reopened.";
         }
 
         IEnumerator Refresh()
@@ -339,6 +338,7 @@ namespace SpongePark
             yield return api.Get(api.P("/parameters?prefix=project.return_periods"), x => ps = x);
             if (ps != null && ps.Any()) returnPeriods = ps[0]["value"].ToObject<List<int>>();
             siteConfirmed = (bool?)r["site_confirmed"] == true;
+            if (!Analysed && flowData != null) ClearFlow();   // Site setup changed: the analysis is out of date
             calibration = (string)r["calibration"] == "uncalibrated"
                 ? "uncalibrated: suitable for scenario comparison, not absolute prediction" : (string)r["calibration"];
         }
@@ -366,6 +366,36 @@ namespace SpongePark
             yield return api.Send("PUT", api.P("/parameters/nbs.max_drawdown_hr"), new { value = maxDrawdownHr, unit = "hr" }, null);
             yield return api.Send("PUT", api.P("/parameters/optimise.target_return_period_yr"), new { value = targetRp, unit = "yr" }, null);
             status = "Targets saved as your decisions.";
+        }
+
+        bool Analysed => (bool?)info?["analysed"] == true;
+
+        /// Analyse site: the flow and ponding hotspots on the ground with the Site setup's ponds and wells, and SWMM
+        /// on the existing park for every storm (the engine's /analyse).
+        IEnumerator AnalyseSite()
+        {
+            JToken r = null;
+            yield return api.RunJob("POST", api.P("/analyse"), null, x => r = x, s => status = "analysing the site: " + s);
+            if (r == null) yield break;
+            yield return Refresh();
+            yield return LoadFlow();
+            ui.ActiveTab = SpongePark.UI.Tab.Analyse;
+            MarkStage("analyse_flow");
+            var f = r["flow"];
+            status = $"Site analysed: {(int)f["hotspots"]} place{((int)f["hotspots"] == 1 ? "" : "s")} where water collects ({(float)f["ponding_volume_m3"]:0.#} m³), " +
+                     $"{(int)f["exits"]} exit{((int)f["exits"] == 1 ? "" : "s")}" +
+                     ((bool)r["storms"] ? "; SWMM ran the existing park for every design storm." : ". Add the rainfall and the ground answers in Site setup to analyse the storms too.");
+        }
+
+        void ClearFlow()
+        {
+            flowData = null;
+            if (frame != null) { left.Flow.Build(null, frame, layerVisible); right.Flow.Build(null, frame, layerVisible); }
+            hotspotList?.Clear();
+            if (flowText != null)
+                flowText.text = !siteConfirmed ? "Confirm the site model, answer Site setup, then Analyse site."
+                    : "Not analysed yet" + (info?["has_ground"] != null && FloodReady ? "" : " (answer Site setup first)") +
+                      ": Analyse > Analyse site works out where water runs and collects with your Site setup.";
         }
 
         IEnumerator Baseline()
@@ -429,7 +459,8 @@ namespace SpongePark
             right.Terrain.SetContours(contours);
             left.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
             right.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
-            if (siteConfirmed && !bundle) yield return LoadFlow();
+            if (siteConfirmed && !bundle && Analysed) yield return LoadFlow();   // shown once Analyse site has run
+            else if (!bundle) ClearFlow();
             yield return LoadComparison();
             if (designFor == projectPath && designFc != null && siteConfirmed) { yield return ShowDesignGround(); RefreshDesign(); }
             // with nothing to compare yet (only the existing site), one full view of it
