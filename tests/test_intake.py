@@ -150,3 +150,12 @@ def test_a_missing_save_folder_is_reported_plainly(tmp_path):
     with pytest.raises(cad.CadError, match="does not exist"):
         intake.finish(p, {}, missing)
     assert not (tmp_path / "park survey_SP.dxf").exists()
+
+
+def test_start_says_plainly_when_the_drawing_is_missing(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from spongepark.api.server import app
+
+    r = TestClient(app).post("/intake/start", json={"path": str(tmp_path / "no such park.dxf")})
+    assert r.status_code == 400 and "not found" in r.json()["detail"]

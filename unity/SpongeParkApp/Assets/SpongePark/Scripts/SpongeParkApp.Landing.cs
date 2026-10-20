@@ -479,6 +479,16 @@ namespace SpongePark
         }
 
         // ------------------------------------------------------------ intake
+        /// The engine's own message from an error ("url: HTTP/1.1 400 Bad Request {"detail": "..."}"), not the address and code.
+        static string Plain(string error)
+        {
+            int i = error?.IndexOf('{') ?? -1;
+            if (i >= 0)
+                try { var d = JObject.Parse(error.Substring(i))["detail"]; if (d != null && d.Type == JTokenType.String) return (string)d; }
+                catch (Newtonsoft.Json.JsonException) { }
+            return error;
+        }
+
         IEnumerator StartIntake(string path)
         {
             if (string.IsNullOrEmpty(path)) yield break;
@@ -491,7 +501,7 @@ namespace SpongePark
             {
                 landingStatus.text = api.LastError.Contains("404")
                     ? "The running engine is older than this app: restart spongepark serve, then try again."
-                    : "Could not read the drawing: " + api.LastError;
+                    : "Could not read the drawing. " + Plain(api.LastError);
                 yield break;
             }
             PlayerPrefs.SetString("spongepark.lastsurvey", path);

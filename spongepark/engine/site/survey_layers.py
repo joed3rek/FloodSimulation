@@ -451,8 +451,8 @@ def _footprints(pieces):
 
 def _road_surfaces(pieces, boundary):
     """Road surface between the kerb lines. The loose ends of the kerbs (at the break symbols where the
-    survey stops) are joined across each road, then every band narrower than ROAD_MAX_WIDTH_M that is
-    not the park itself is road."""
+    survey stops) are joined across each road; where the park's edge is the kerb, the boundary closes the
+    road; then every band narrower than ROAD_MAX_WIDTH_M that is not the park itself is road."""
     from shapely.geometry import LineString
     from shapely.ops import polygonize, unary_union
 
@@ -477,7 +477,23 @@ def _road_surfaces(pieces, boundary):
         if best is not None:
             used |= {i, best[1]}
             joins.append(LineString([a, ends[best[1]]]))
-    faces = list(polygonize(unary_union(lines + joins)))
+    # where the park's own edge is the kerb, the survey draws no kerb line: the boundary closes the road there,
+    # and a kerb that stops short of it is carried on to it
+    edge = []
+    if boundary is not None:
+        from shapely.geometry import Point
+
+        rings = [g.exterior for g in getattr(boundary, "geoms", [boundary])]
+        edge = rings
+        ring = unary_union(rings)
+        for i, a in enumerate(ends):
+            if i in used:
+                continue
+            pt = Point(a)
+            if 0 < ring.distance(pt) <= ROAD_END_GAP_M:
+                q = ring.interpolate(ring.project(pt)) if ring.geom_type == "LineString" else                     min((r.interpolate(r.project(pt)) for r in rings), key=pt.distance)
+                joins.append(LineString([a, (q.x, q.y)]))
+    faces = list(polygonize(unary_union(lines + joins + edge)))
     park = boundary.representative_point() if boundary is not None else None
     out = []
     for f in faces:

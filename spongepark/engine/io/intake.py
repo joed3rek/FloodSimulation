@@ -82,6 +82,8 @@ def _choices() -> List[Dict[str, str]]:
 
 def start(path: Path) -> Dict[str, Any]:
     path = Path(path)
+    if not path.is_file():   # a clear message, not a server error
+        raise cad.CadError(f"the drawing was not found: {path}")
     doc = cad.read(path)
     inv = cad.inventory(doc)
     std = {l["name"]: l for l in _standard()["layers"]}
