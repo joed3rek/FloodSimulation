@@ -1,4 +1,5 @@
-// What follows each design change, and the pieces of Step 3 around it:
+// What follows a design change, and the pieces of Step 3 around it. Edits only carve the ground and check
+// it; the designer draws every element first, then Design done - run simulation does the rest:
 // - live water: the GPU storm restarts on the carved ground (existing beside design), an hour of storm a second;
 // - the design's flow lines are redone on the carved ground;
 // - SWMM checks the design for every storm in the background (results card);
@@ -50,7 +51,26 @@ namespace SpongePark
         }
 
         // ------------------------------------------------------------ after each design change
-        IEnumerator AfterDesignChange()
+        bool designDirty;   // the design changed since its last simulation
+
+        /// An edit: the old water and SWMM results no longer belong to the design, and nothing runs until Design done.
+        void AfterDesignEdit()
+        {
+            ++liveToken;   // drops the answer of a simulation still running on the old design
+            designDirty = true;
+            designVerified = false;
+            if (live) { live = false; playing = false; }
+            status += " Draw the rest, then press Design done – run simulation.";
+        }
+
+        /// Design done: flow lines on the carved ground, the live storm on both grounds and SWMM on the design.
+        IEnumerator RunDesign()
+        {
+            designDirty = false;
+            yield return SimulateDesign();
+        }
+
+        IEnumerator SimulateDesign()
         {
             int token = ++liveToken;
             // flow lines on the carved ground
@@ -59,7 +79,7 @@ namespace SpongePark
             if (token != liveToken) yield break;
             if (f != null) right.Flow.Build(f, frame, layerVisible);
             if (!ReadyToSimulate) { status += " Use the rainfall and answer the ground questions (Step 2) to see the water."; yield break; }
-            // live water on both grounds, an hour of storm per second, from dry
+            // live water on both grounds (the existing one shows in Split view), an hour of storm per second, from dry
             if (GpuWaterSim.Supported)
             {
                 yield return left.StartGpu(api, frame, CurrentRp);
@@ -69,7 +89,7 @@ namespace SpongePark
                 simT = 0;
                 speed = 3600;
                 playing = true;
-                sideBySide = true;
+                showProposed = true;   // the design's storm; Split view puts the existing site beside it when wanted
                 ApplyViewports();
             }
             // SWMM on the design, quietly in the background
@@ -187,7 +207,7 @@ namespace SpongePark
             yield return ShowDesignGround();
             RefreshDesign();
             status = "Option in the design: select an element to change its shape (drag a corner) or depth.";
-            StartCoroutine(AfterDesignChange());
+            AfterDesignEdit();
         }
 
         /// A tree's colour varies a little, by where it stands.

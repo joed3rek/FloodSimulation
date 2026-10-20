@@ -166,6 +166,8 @@ namespace SpongePark
             C("least-area", "Least area", "least-area", "The smallest layout that holds the target storm (optimiser)",
               () => StartCoroutine(Run(Generate(true, "inverse"), "Optimising")), () => Engine && siteConfirmed, visible: () => !bundle);
             C("targets", "Targets", "targets", "Area budget, drawdown and the design storms", () => targetsDialog.Open(), () => HasProject, visible: () => !bundle);
+            C("design-done", "Design done – run simulation", "simulate", "When every element is drawn: flow lines, the storm on the design and the SWMM check",
+              () => StartCoroutine(Run(RunDesign(), "Simulating the design")), () => Engine && HasDesign, () => designDirty, visible: () => !bundle, primary: true);
             C("verify", "Check in SWMM", "verify", "Check the design again in SWMM, every storm", CheckAgain, () => Engine && HasDesign, visible: () => !bundle);
             // Simulate
             C("flood", "Run flood simulation", "simulate", "The 2D flood model over the existing ground for the chosen storm",
@@ -221,6 +223,7 @@ namespace SpongePark
             foreach (var t in ToolTypes) draw.Large(commands["tool-" + t]);
             design.Group("Lines").Small(commands["draw-curve"]).Small(commands["draw-straight"]);
             design.Group("Edit").Small(commands["delete"]).Small(commands["undo"]).Small(commands["redo"]);
+            design.Group("Done").Large(commands["design-done"]);
             design.Group("Suggest layout").Large(commands["quick"]).Large(commands["optimise-design"]);
             design.Group("Options").Small(commands["generate"]).Small(commands["optimise-option"]).Small(commands["least-area"]);
             design.Group("Targets").Large(commands["targets"]);
@@ -636,10 +639,10 @@ namespace SpongePark
             new Stage { Id = "design_nbs", Title = "Design NbS", Why = "Rain gardens, swales, ponds and wells where the water collects.",
                         Missing = "Confirm the site model first.", Action = "Open the Design tab",
                         State = () => HasDesign ? StageState.Done : siteConfirmed ? Next("design_nbs") : StageState.Locked, Go = () => ui.ActiveTab = Tab.Design },
-            new Stage { Id = "verify", Title = "Verify in SWMM", Why = "SWMM checks how much of each storm the design keeps on site.",
-                        Missing = "Add NbS to the design first.", Action = "Check in SWMM",
+            new Stage { Id = "verify", Title = "Design done: run the simulation", Why = "When every element is drawn: the storm on the design, and SWMM checks how much of each storm it keeps on site.",
+                        Missing = "Add NbS to the design first.", Action = "Run the simulation",
                         State = () => designVerified || StageDone("verify") ? StageState.Done : HasDesign ? Next("verify") : StageState.Locked,
-                        Go = () => { OpenPanel("results"); if (commands["verify"].Enabled()) commands["verify"].Run(); } },
+                        Go = () => { OpenPanel("results"); if (commands["design-done"].Enabled()) commands["design-done"].Run(); } },
             new Stage { Id = "export", Title = "Export", Why = "The report, drawings and Rhino file for the team and the client.",
                         Missing = "Verify the design first.", Action = "Open the Export tab",
                         State = () => StageDone("export") ? StageState.Done : designVerified || StageDone("verify") ? Next("export") : StageState.Locked,

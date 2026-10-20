@@ -35,7 +35,7 @@ namespace SpongePark
         JObject info;
         JToken comparison;
         string calibration = "uncalibrated: suitable for scenario comparison, not absolute prediction";
-        bool sideBySide = true, showProposed = true, playing, live;
+        bool sideBySide, showProposed = true, playing, live;
         float simT, speed = 600;   // simulated seconds per real second
         string verify = "";
 
@@ -278,6 +278,7 @@ namespace SpongePark
             yield return Refresh();
             yield return LoadOnboarding();
             designVerified = false;
+            designDirty = false;
             Remember((string)r["path"] ?? projectPath, (string)r["name"]);   // the engine's resolved path
             status = $"Opened {(string)r["name"]}.";
             // show the site straight away: the ground model and what the survey drawing shows

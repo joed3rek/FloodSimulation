@@ -197,8 +197,7 @@ namespace SpongePark
         IEnumerator ShowDesignGround()
         {
             right.Option = DesignScenario;
-            sideBySide = false;
-            showProposed = true;
+            showProposed = true;   // split view stays as the user left it
             ApplyViewports();
             yield return right.Load(api, frame, CurrentRp, false);
             right.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
@@ -355,8 +354,8 @@ namespace SpongePark
             if (selectedId != null && Feature(selectedId) == null) selectedId = null;
             yield return ShowDesignGround();
             RefreshDesign();
-            status = $"{ActionWord(action)} {elementId}".Trim() + ". Ground carved and checked; the storm replays on it.";
-            StartCoroutine(AfterDesignChange());
+            status = $"{ActionWord(action)} {elementId}".Trim() + ". Ground carved and checked.";
+            AfterDesignEdit();
         }
 
         static string ActionWord(string a) => a switch
