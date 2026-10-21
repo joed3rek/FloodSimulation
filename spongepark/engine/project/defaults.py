@@ -183,13 +183,21 @@ _DEFAULTS: List[Tuple[str, object, str, Source, str]] = [
     ("layout.max_area_pct", 10.0, "%", D, "Area budget: generated elements may cover at most this share of the site."),
     ("layout.boundary_setback_m", 2.0, "m", D, "No element closer than this to the site boundary."),
     ("layout.building_setback_m", 3.0, "m", L,
-     "No infiltrating element closer than this to a building (foundation protection; 3 m / 10 ft is common)."),
-    ("layout.tree_protection_radius_m", 3.0, "m", D,
-     "Keep-out radius around existing trees without a mapped canopy (root protection; a mapped canopy is used "
-     "when larger)."),
+     "No infiltrating element closer than this to a building (HC 4.7 p.9: foundation setback min. 10 ft (3.0 m); "
+     "p.18: typically 3 m from buildings). The designer's minimum for structures is 1.2 m."),
+    ("layout.tree_protection_radius_m", 1.5, "m", D,
+     "Trees are never touched: keep-out radius around every tree, or its mapped canopy when larger (designer's "
+     "rule, 2026-10-20: at least 3 m diameter; the HC sheets give no tree buffer)."),
+    ("layout.path_buffer_m", 0.6, "m", D, "Keep-out half-width around footpaths (designer's rule: at least 0.6 m)."),
+    ("layout.wall_buffer_m", 1.2, "m", D,
+     "Keep-out half-width around walls, fences and other structures (designer's rule: at least 1.2 m)."),
+    ("layout.swale_path_crossing_max_m", 6.0, "m", D,
+     "A bioswale may cross a footpath (with its keep-out) up to this long, through a trench drain; the path stays "
+     "level and is not carved."),
     ("layout.avoid_context_kinds", ["buildings", "paths", "roads", "water", "walls", "drains"], "-", D,
      "Mapped features no element may overlap (closed polygons; lines are buffered by the setback below)."),
-    ("layout.line_feature_buffer_m", 1.0, "m", D, "Keep-out half-width around mapped line features (paths, walls)."),
+    ("layout.line_feature_buffer_m", 1.0, "m", D,
+     "Keep-out half-width around other mapped line features (roads, drains); paths and walls have their own."),
     ("layout.element_spacing_m", 3.0, "m", D, "Minimum gap between generated elements."),
     ("layout.growth_climb_weight", 10.0, "m/m", D,
      "Footprint growth: metres of extra distance equivalent to 1 m of climb (higher = follows low ground more)."),

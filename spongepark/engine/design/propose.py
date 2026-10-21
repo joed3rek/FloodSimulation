@@ -58,17 +58,40 @@ def _keep(project: Project, oid: str, method: str, extra: Dict[str, Any]) -> Dic
             "design_retention_storm_yr": cmp_.get("design_retention_storm_yr"), "features": fc}
 
 
-def suggest(project: Project, method: str = "quick", mode: str = "forward", effort: str = "normal") -> Dict[str, Any]:
-    """Suggested layouts, each checked in SWMM and kept as a proposal."""
+def _sizing_note(project: Project, rep: Dict[str, Any]) -> str:
+    """What the layout was sized for and, when the area budget stopped it, how much more the storm needs."""
+    rp = rep["design_storm"]["return_period_yr"]
+    els = [e for e in rep["elements"] if e["type"] != "bioswale"]
+    need = sum(float(e["target_m3"] or 0) for e in els)
+    held = sum(float(min(e["holds_m3_estimate"] or 0, e["target_m3"] or 0)) for e in els)
+    pct = float(project.parameters.value("layout.max_area_pct"))
+    note = f"Sized for the {rp}-year storm ({rep['design_storm']['runoff_depth_mm']:.0f} mm of runoff)."
+    if any(e["limited_by"] == "area budget" for e in rep["elements"]) and need > held * 1.02:
+        note += (f" The area budget ({pct:g} % of the park) stopped it: the elements hold about {held:.0f} m3 of the "
+                 f"{need:.0f} m3 that storm sends them. A larger storm gives the same layout until the budget is "
+                 "raised (Design > Targets).")
+    return note
+
+
+def suggest(project: Project, method: str = "quick", mode: str = "forward", effort: str = "normal",
+            scenario_id: str = "design") -> Dict[str, Any]:
+    """Suggested layouts, each checked in SWMM and kept as a proposal. The quick layout starts from the design's
+    own elements (drawn by the designer, or locked): they are kept as they are and the layout fills around them."""
     from ..layout.generate import generate
+    from ..nbs.components import load_elements, save_elements
     from ..optimise.run import optimise
 
     _ensure_baseline(project)
     out: List[Dict[str, Any]] = []
     if method == "quick":
-        generate(project, "_suggest")
+        locked = set(project.locked_ids(scenario_id)) if has_elements(project, scenario_id) else set()
+        own = [e for e in load_elements(project, scenario_id) if e.source == "designer" or e.locked or e.id in locked]             if has_elements(project, scenario_id) else []
+        save_elements(project, "_suggest", own)   # the generator keeps them and places around them
+        rep = generate(project, "_suggest")
         run_option(project, "_suggest")
-        out.append(_keep(project, "_suggest", "quick", {}))
+        prop = _keep(project, "_suggest", "quick", {})
+        prop["note"] = _sizing_note(project, rep)
+        out.append(prop)
     elif method == "optimise":
         sizes = {"quick": dict(n_initial=6, rounds=1, per_round=2, pop_size=16, n_gen=10, n_final=3),
                  "normal": dict(n_initial=8, rounds=2, per_round=3, pop_size=24, n_gen=20, n_final=3)}[effort]
@@ -96,6 +119,9 @@ def accept(project: Project, scenario_id: str, proposal_id: str, replace: bool =
     used = {f["properties"]["id"] for f in keep}
     for f in new:   # proposal elements keep their ids unless they clash with the designer's
         p = f["properties"]
+        if p.get("source") == "designer":   # the designer's own elements, kept by the layout: unchanged
+            used.add(p["id"])
+            continue
         p["source"] = "proposal"
         p["proposal_id"] = proposal_id
         base, k = p["id"], 1

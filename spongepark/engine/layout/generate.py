@@ -103,11 +103,24 @@ def load_grid(project: Project) -> Grid:
 
 def keep_out(project: Project, g: Grid) -> Tuple[np.ndarray, Dict[str, int]]:
     """Cells where no element may go, and how many cells each constraint removes."""
+    out, counts, _ = _keep_out(project, g)
+    return out, counts
+
+
+def crossable(project: Project, g: Grid) -> np.ndarray:
+    """Keep-out cells that are only footpath: a bioswale may cross them through a trench drain."""
+    _, _, path_only = _keep_out(project, g)
+    return path_only
+
+
+def _keep_out(project: Project, g: Grid) -> Tuple[np.ndarray, Dict[str, int], np.ndarray]:
     P = project.parameters
     setback = float(P.value("layout.boundary_setback_m"))
     line_buf = float(P.value("layout.line_feature_buffer_m"))
     bldg = float(P.value("layout.building_setback_m"))
     tree_r = float(P.value("layout.tree_protection_radius_m"))
+    buf = {"paths": float(P.value_or("layout.path_buffer_m", line_buf)),
+           "walls": float(P.value_or("layout.wall_buffer_m", line_buf))}
     avoid = set(P.value("layout.avoid_context_kinds"))
     area = float(g.mask.sum() * g.cell ** 2)
     _, enclosing, _ = context_surfaces(project, g.domain, area, set())
@@ -129,17 +142,23 @@ def keep_out(project: Project, g: Grid) -> Tuple[np.ndarray, Dict[str, int]]:
                 geom = geom.buffer(bldg)
             elif kind != "water" or (f["properties"].get("layer") in enclosing_layers and geom.area >= 0.9 * area):
                 # surveyors draw paths, walls and roads as closed loops around lawns: keep off the line only
-                geom = geom.exterior.buffer(line_buf)
+                geom = geom.exterior.buffer(buf.get(kind, line_buf))
         else:
-            geom = geom.buffer(bldg if kind == "buildings" else line_buf)
+            geom = geom.buffer(bldg if kind == "buildings" else buf.get(kind, line_buf))
         shapes.setdefault(kind, []).append(geom)
     out = np.zeros(g.mask.shape, bool)
     counts: Dict[str, int] = {}
+    masks: Dict[str, np.ndarray] = {}
     for name, gs in shapes.items():
         m = contains_xy(unary_union(gs), g.X, g.Y) & g.mask
+        masks[name] = m
         counts[name] = int((m & ~out).sum())
         out |= m
-    return out, counts
+    path_only = masks.get("paths", np.zeros(g.mask.shape, bool)).copy()
+    for name, m in masks.items():
+        if name != "paths":
+            path_only &= ~m
+    return out, counts, path_only
 
 
 def _norm(a: np.ndarray, m: np.ndarray) -> np.ndarray:
@@ -513,6 +532,10 @@ def _element_props(p: Placed, P, g: Grid, rp: int, runoff_mm: float) -> Dict[str
                     longitudinal_slope_pct=round(info["slope_pct"], 3),
                     notes=f"along a concentrated flow line draining {p.drainage_m2:.0f} m2; length "
                           f"{info['length_m']:.1f} m, slope {info['slope_pct']:.2f} %; cut {p.cut.cut_m3:.1f} m3")
+        if info.get("path_crossings"):
+            pts = ", ".join(f"({x:.1f}, {y:.1f})" for x, y in info["path_crossings"])
+            base["notes"] += (f"; crosses {len(info['path_crossings'])} footpath(s) at {pts} through a trench drain "
+                              "(the path stays level)")
         if info.get("underdrain"):
             base["notes"] += (f"; native soil {info['native_rate_mm_hr']:g} mm/h < "
                               f"{float(P.value_or('nbs.underdrain_below_native_mm_hr', 13.0)):g} mm/h: build with a "
@@ -598,6 +621,7 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
                   native_rate, max_dd, skipped) -> None:
     """Bioswales along concentrated flow lines: from a channel head down the D8 path while the ground
     is free, between ``min_length_m`` and ``max_length_m``, at a longitudinal slope within the limits."""
+    from scipy import ndimage
     from shapely.geometry import LineString
 
     P = project.parameters
@@ -608,6 +632,8 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
     smin = float(P.value("nbs.bioswale.min_longitudinal_slope_pct"))
     smax = float(P.value("nbs.bioswale.max_longitudinal_slope_pct"))
     live = float(P.value("nbs.bioswale.max_ponding_depth_m"))
+    max_cross = float(P.value_or("layout.swale_path_crossing_max_m", 0.0))
+    cross = crossable(project, g).ravel() if max_cross > 0 else np.zeros(g.mask.size, bool)
     rec = fl.downstream(g.dirs).ravel()
     d = g.dirs.ravel()
     k = 0
@@ -628,9 +654,28 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
         path = [head]
         length = 0.0
         j = head
+        crossings: List[List[int]] = []
+        # a line rejected as too short may still be part of a longer one from upstream: rejected cells only
+        # stop being swale heads, not swale ground
+        fr, tk = (g.mask & ~blocked & ~taken).ravel(), taken.ravel()
         while length < Lmax:
             nxt = rec[j]
-            if nxt < 0 or not free.ravel()[nxt]:
+            if nxt < 0:
+                break
+            if not fr[nxt]:
+                # a footpath: the swale passes under it through a trench drain when the path is narrow and open
+                # ground follows; the path cells stay level (not carved)
+                run, at, run_len, jj = [], nxt, 0.0, j
+                while at >= 0 and cross[at] and not tk[at] and run_len <= max_cross:
+                    run_len += float(fl.DIST[d[jj]]) * cell
+                    run.append(at)
+                    jj, at = at, rec[at]
+                if run and at >= 0 and fr[at] and run_len <= max_cross and length + run_len < Lmax:
+                    crossings.append(run)
+                    path += run
+                    length += run_len
+                    j = run[-1]
+                    continue
                 break
             length += float(fl.DIST[d[j]]) * cell
             path.append(nxt)
@@ -652,7 +697,11 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
         line = LineString(list(zip(g.X[rs, cs], g.Y[rs, cs]))).simplify(cell / 2)
         fp = line.buffer(W / 2, cap_style=2)
         region = contains_xy(fp, g.X, g.Y) & g.mask
-        if (region & (blocked | taken)).sum() > 0.1 * region.sum() or region.sum() * cell2 > budget_left():
+        crossed = np.zeros(g.mask.shape, bool)
+        if crossings:
+            crossed.ravel()[[i for run in crossings for i in run]] = True
+            crossed = ndimage.binary_dilation(crossed, iterations=int(np.ceil(W / cell))) & cross.reshape(g.mask.shape)
+        if (region & ((blocked & ~crossed) | taken)).sum() > 0.1 * region.sum() or region.sum() * cell2 > budget_left():
             reasons["footprint hits keep-out or budget"] = reasons.get("footprint hits keep-out or budget", 0) + 1
             rejected.ravel()[path] = True
             continue
@@ -663,7 +712,11 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
                    storage_swale(P, float(fp.area)), "conveyance")
         p.end = (int(rs[-1]), int(cs[-1]))
         native = native_rate(int(rs[0]), int(cs[0]))
-        p.notes.append({"line": line.__geo_interface__, "length_m": length, "slope_pct": slope,
+        xings = []
+        for run in crossings:
+            rr, cc = np.unravel_index(run, g.mask.shape)
+            xings.append([round(float(g.X[rr, cc].mean()), 2), round(float(g.Y[rr, cc].mean()), 2)])
+        p.notes.append({"line": line.__geo_interface__, "length_m": length, "slope_pct": slope, "path_crossings": xings,
                         "underdrain": native < float(P.value_or("nbs.underdrain_below_native_mm_hr", 13.0)),
                         "native_rate_mm_hr": native})
         accept(p)

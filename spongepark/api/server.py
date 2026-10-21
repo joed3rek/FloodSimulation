@@ -325,7 +325,7 @@ def design_suggest(pid: str, sid: str, req: SuggestRequest, wait: bool = False) 
     from spongepark.engine.design.propose import suggest
 
     def fn(p: Project):
-        out = suggest(p, req.method, req.mode, req.effort)
+        out = suggest(p, req.method, req.mode, req.effort, sid)
         p.save()
         return out
 

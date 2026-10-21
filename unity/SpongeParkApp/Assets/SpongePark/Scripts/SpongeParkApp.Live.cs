@@ -192,6 +192,14 @@ namespace SpongePark
                 b.tooltip = "Put this option into the design; then change it as you like.";
                 suggestList.Add(b);
             }
+            if (method == "quick" && n == 1)   // one layout: put it straight into the design (Undo takes it back)
+            {
+                var p = r["proposals"][0];
+                yield return Accept((string)p["id"]);
+                status = $"Quick layout placed {(int)p["elements"]} element{((int)p["elements"] == 1 ? "" : "s")} ({(float)p["area_m2"]:0} m²); your own elements are kept. " +
+                         "Undo takes it back; change any element by selecting it. " + (string)p["note"];
+                yield break;
+            }
             status = n == 0 ? "No layout fits: see the checks (soil drainage, space, budget)." : $"{n} option{(n == 1 ? "" : "s")} ready: click one to start from it.";
         }
 
