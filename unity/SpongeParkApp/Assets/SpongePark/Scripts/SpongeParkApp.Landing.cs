@@ -15,6 +15,7 @@ namespace SpongePark
     {
         VisualElement mainApp, mainOverlay, landing, intakeView, browser;
         bool engineLaunched;   // the landing starts the engine itself, once
+        bool engineRestarted;  // an out-of-date engine is restarted once
         Label landingStatus;
         JToken intake;
         readonly Dictionary<string, string> links = new Dictionary<string, string>();   // layer -> SP name ("" = not needed)
@@ -291,6 +292,17 @@ namespace SpongePark
             // before the engine is started one quick look is enough; after, allow it time to answer
             if (engineLaunched) yield return CheckEngine();
             else yield return api.Health(ok => engineUp = ok, 1);
+            // an engine still running code from before an update: restart it (it saves its open projects first)
+            if (engineUp && api.Stale && !engineRestarted && System.Array.IndexOf(api.Features, "shutdown") >= 0)
+            {
+                engineRestarted = true;
+                Debug.Log("engine is out of date (its code changed since it started): restarting it");
+                yield return api.Send("POST", "/shutdown", null, null, 10);
+                api.ClearError();
+                yield return new WaitForSecondsRealtime(1.5f);
+                engineUp = false;
+                engineLaunched = false;
+            }
             if (!engineUp && !engineLaunched) { engineLaunched = true; if (launcher.Launch()) engineLaunchAt = Time.realtimeSinceStartup; }
         }
 

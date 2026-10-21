@@ -22,6 +22,8 @@ namespace SpongePark
         /// What the running engine can do (empty for an engine older than this app).
         public string[] Features { get; private set; } = new string[0];
         public bool Current => Array.IndexOf(Features, "intake") >= 0;
+        /// The engine's code changed after it started (an update it has not loaded yet).
+        public bool Stale { get; private set; }
 
         public IEnumerator Get(string path, Action<JToken> done, int timeoutS = 600)
         {
@@ -100,8 +102,13 @@ namespace SpongePark
                 yield return req.SendWebRequest();
                 if (req.result == UnityWebRequest.Result.Success)
                 {
-                    try { Features = JToken.Parse(req.downloadHandler.text)["features"]?.ToObject<string[]>() ?? new string[0]; }
-                    catch (Exception) { Features = new string[0]; }
+                    try
+                    {
+                        var h = JToken.Parse(req.downloadHandler.text);
+                        Features = h["features"]?.ToObject<string[]>() ?? new string[0];
+                        Stale = (bool?)h["stale"] == true;
+                    }
+                    catch (Exception) { Features = new string[0]; Stale = false; }
                     if (reachable != true) Debug.Log("engine connected: " + baseUrl);
                     reachable = true;
                     done(true);

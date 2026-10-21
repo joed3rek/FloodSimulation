@@ -85,11 +85,40 @@ class OpenRequest(BaseModel):
     crs: str = "EPSG:32643"
 
 
+_STARTED = __import__("time").time()
+_CODE = Path(__file__).resolve().parents[1]
+
+
+def _stale() -> bool:
+    """The engine's code changed after it started (an update): a restart picks it up."""
+    try:
+        return any(f.stat().st_mtime > _STARTED for f in _CODE.rglob("*.py"))
+    except OSError:
+        return False
+
+
 @app.get("/health")
 def health() -> Dict[str, Any]:
-    # features let a client tell an engine started before an update from a current one
-    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan", "site_layers", "flow", "design", "ground", "rainfall", "suggest"],
-            "open_projects": list(_projects)}
+    # features let a client tell an engine started before an update from a current one; stale: the code
+    # changed after this engine started
+    return {"ok": True, "engine": __version__, "features": ["intake", "fs", "report", "calibrate", "sim2d", "plan", "site_layers", "flow", "design", "ground", "rainfall", "suggest", "outfalls", "shutdown"],
+            "open_projects": list(_projects), "stale": _stale()}
+
+
+@app.post("/shutdown")
+def shutdown() -> Dict[str, Any]:
+    """Stop this engine (the app restarts an out-of-date one). Open projects are saved first."""
+    import os
+    import threading
+
+    for pid, p in list(_projects.items()):
+        try:
+            with _locks[pid]:
+                p.save()
+        except Exception:  # a project that cannot be saved is left as it was on disk
+            log.exception("could not save %s before shutdown", pid)
+    threading.Timer(0.5, lambda: os._exit(0)).start()
+    return {"ok": True}
 
 
 @app.post("/projects/open")
