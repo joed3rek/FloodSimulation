@@ -288,7 +288,9 @@ namespace SpongePark
 
         IEnumerator EnsureEngine()
         {
-            yield return CheckEngine();
+            // before the engine is started one quick look is enough; after, allow it time to answer
+            if (engineLaunched) yield return CheckEngine();
+            else yield return api.Health(ok => engineUp = ok, 1);
             if (!engineUp && !engineLaunched) { engineLaunched = true; if (launcher.Launch()) engineLaunchAt = Time.realtimeSinceStartup; }
         }
 

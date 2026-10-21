@@ -295,7 +295,7 @@ def _place_symbols(survey: Path, targets: Dict[str, str]) -> Path:
     """Move the linked symbols on layer 0 to their standard layers, in a working copy (the original stays as is)."""
     if not targets:
         return survey
-    doc = cad.read(survey)
+    doc = cad.read(survey, fresh=True)
     for e in doc.modelspace().query("INSERT"):
         if e.dxf.layer == "0" and e.dxf.name in targets:
             e.dxf.layer = targets[e.dxf.name]

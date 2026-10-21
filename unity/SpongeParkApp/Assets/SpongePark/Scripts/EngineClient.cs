@@ -88,10 +88,12 @@ namespace SpongePark
             }
         }
 
-        public IEnumerator Health(Action<bool> done)
+        bool? reachable;   // the last health result, so the log says when it changes rather than every poll
+
+        /// attempts: 3 lets an engine busy with a long job answer; 1 for a quick look before starting one.
+        public IEnumerator Health(Action<bool> done, int attempts = 3)
         {
-            // the engine may be busy with a long job: give it time, and retry before declaring it down
-            for (int attempt = 0; attempt < 3; attempt++)
+            for (int attempt = 0; attempt < attempts; attempt++)
             {
                 using var req = UnityWebRequest.Get(baseUrl + "/health");
                 req.timeout = 5;
@@ -100,12 +102,16 @@ namespace SpongePark
                 {
                     try { Features = JToken.Parse(req.downloadHandler.text)["features"]?.ToObject<string[]>() ?? new string[0]; }
                     catch (Exception) { Features = new string[0]; }
+                    if (reachable != true) Debug.Log("engine connected: " + baseUrl);
+                    reachable = true;
                     done(true);
                     yield break;
                 }
                 LastError = $"{baseUrl}/health: {req.error}";
-                Debug.LogWarning("engine health check failed: " + LastError);
             }
+            // not running is normal before the app starts it; only losing a running engine is worth a warning
+            if (reachable == true) Debug.LogWarning("engine stopped answering: " + LastError);
+            reachable = false;
             done(false);
         }
 

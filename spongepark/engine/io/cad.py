@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import logging
 import re
-from collections import Counter, defaultdict
+import threading
+from collections import Counter, OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -52,12 +53,48 @@ class CadError(ValueError):
     pass
 
 
-def read(path: Path):
-    """Open a DXF, or a DWG through the ODA File Converter."""
+# Parsed drawings, kept so the intake steps (layers, plan, cleaning, ground, site layers) parse a large
+# survey once rather than once per step: a 55 MB drawing takes about half a minute to parse.
+# Keyed by file name, size and modification time, so the copy inside a .sponge file (shutil.copy2 keeps
+# the time) is the same drawing; any edit to the file is a new key. About 250 MB per 50 MB drawing.
+_DOCS: "OrderedDict[Tuple[str, int, int], Any]" = OrderedDict()
+_DOCS_MAX = 2
+_docs_lock = threading.Lock()
+
+
+def _doc_key(path: Path) -> Tuple[str, int, int]:
+    st = path.stat()
+    return path.name.lower(), st.st_size, st.st_mtime_ns
+
+
+def read(path: Path, fresh: bool = False):
+    """Open a DXF, or a DWG through the ODA File Converter.
+
+    The document is shared with other readers of the same file: do not change it. ``fresh=True`` returns
+    a private copy to change (and does not cache it)."""
+    path = Path(path)
+    if fresh or path.suffix.lower() == ".dwg":
+        return _parse(path)
+    k = _doc_key(path)
+    with _docs_lock:   # one parse per drawing, also when several requests ask at once
+        if k in _DOCS:
+            _DOCS.move_to_end(k)
+            return _DOCS[k]
+        doc = _parse(path)
+        _remember(k, doc)
+        return doc
+
+
+def _remember(k: Tuple[str, int, int], doc) -> None:
+    _DOCS[k] = doc
+    while len(_DOCS) > _DOCS_MAX:
+        _DOCS.popitem(last=False)
+
+
+def _parse(path: Path):
     import ezdxf
     from ezdxf import recover
 
-    path = Path(path)
     if path.suffix.lower() == ".dwg":
         from ezdxf.addons import odafc
 
@@ -555,7 +592,7 @@ def standardise(src: Path, renames: Dict[str, str], out: Path, dedupe: bool = Tr
     Old layers left empty are removed. ``src`` is never modified."""
     std = standard or layer_standard()
     spec = {s["name"]: s for s in std["layers"]}
-    doc = read(src)
+    doc = read(src, fresh=True)
     moved: Counter = Counter()
     for e in doc.entitydb.values():
         if e.is_alive and e.dxf.hasattr("layer") and e.dxf.layer in renames and renames[e.dxf.layer] != e.dxf.layer:
@@ -601,6 +638,8 @@ def standardise(src: Path, renames: Dict[str, str], out: Path, dedupe: bool = Tr
                 log.warning("could not remove layer %s", old)
     out = Path(out)
     doc.saveas(out)
+    with _docs_lock:   # the next steps read the cleaned copy: this is it, no need to parse it again
+        _remember(_doc_key(out), doc)
     return {
         "source": str(src), "output": str(out),
         "moved": [{"from": a, "to": b, "entities": n} for (a, b), n in sorted(moved.items())],
