@@ -60,13 +60,15 @@ def _hand_equivalent(tmp_project):
     sub = [(rect(0, 0, 50, 20), dict(id="SC1", outlet="OUT", pct_imperv=100, slope_pct=1, flow_length_m=20,
                                      dstore_imperv_mm=1.5, dstore_perv_mm=5, pct_zero_imperv=25))]
     els = [
-        (rect(50, 0, 55, 10), dict(id="RG1", type="rain_garden", inflow_from=["SC1"], outflow_to="DP")),
+        (rect(50, 0, 55, 10), dict(id="RG1", type="rain_garden", inflow_from=["SC1"], outflow_to="DP",
+                                   max_ponding_depth_m=0.2)),   # as in the hand-built model
         (rect(60, 0, 70, 10), dict(id="DP", type="detention_pond", invert_elev_m=100, side_slope_h_v=0,
                                    max_ponding_depth_m=0.5, outlet_diameter_m=0.05, weir_length_m=2.0,
                                    outflow_to="OUT", overflow_to="OUT")),
     ]
     p = tmp_project(sub, els, boundary=rect(0, 0, 50, 20), outfall_elev=99.0, post_storm_hr=6)
     p.parameters.set("guidelines.enforce_errors", False)  # 50 mm orifice is below the 75 mm guideline on purpose
+    p.parameters.set("nbs.rain_garden.media_ksat_mm_hr", 100.0)   # the hand-built model's media
     return p
 
 

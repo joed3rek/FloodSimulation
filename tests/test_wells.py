@@ -92,4 +92,4 @@ def test_a_design_keeps_the_existing_wells_without_credit(valley_wells):
     designed = sum(e.area_m2 or 0 for e in load_elements(p, "auto"))
     assert res["intervention_area_m2"] == pytest.approx(designed)   # only the design's own elements count
     assert not any(e.id.startswith("EW") for e in load_elements(p, "auto"))
-    assert "SC_EW2" in subs   # the well keeps its catchment on the graded ground
+    assert {"SC_EW1", "SC_EW2"} & subs   # wells keep their catchment on the graded ground (unless a design element took it)

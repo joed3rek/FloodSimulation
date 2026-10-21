@@ -143,7 +143,7 @@ def test_swale_follows_the_valley_line_and_feeds_the_pond(tmp_path):
     p, _ = _valley_project(tmp_path)
     with p:
         rep = generate(p, "train", ["detention_pond", "bioswale"],
-                       overrides={"nbs.bioswale.min_longitudinal_slope_pct": 0.5})
+                       overrides={"nbs.bioswale.min_longitudinal_slope_pct": 0.3})
         sw = [e for e in rep["elements"] if e["type"] == "bioswale"]
         assert sw, rep["skipped"]
         comps = {f["properties"]["id"]: f for f in elements_fc(p, "train")["features"]}
@@ -154,7 +154,7 @@ def test_swale_follows_the_valley_line_and_feeds_the_pond(tmp_path):
         assert all(e["outflow_to"].startswith(("BS_", "DP_", "OUT")) for e in sw)
         assert 0.5 <= comps[sw[0]["id"]]["properties"]["longitudinal_slope_pct"] <= 4
         # the override was not stored in the project
-        assert p.parameters.value("nbs.bioswale.min_longitudinal_slope_pct") == 1.0
+        assert p.parameters.value("nbs.bioswale.min_longitudinal_slope_pct") == 0.5
         run_option(p, "train")  # SWMM accepts the treatment train
 
 
@@ -181,8 +181,8 @@ def test_rain_gardens_rejected_when_they_drain_too_slowly(tmp_path):
 
     p, _ = _valley_project(tmp_path)
     with p:
-        # 0.2 m ponding at 8 mm/h takes 25 h, more than the 10 h allowed here; underdrains turned off
-        with pytest.raises(LayoutError, match="drawdown 25 h"):
+        # 0.15 m ponding at 8 mm/h takes 19 h, more than the 10 h allowed here; underdrains turned off
+        with pytest.raises(LayoutError, match="drawdown 19 h"):
             generate(p, "slow", ["rain_garden"], overrides={"nbs.max_drawdown_hr": 10.0,
                                                             "nbs.rain_garden.underdrain_on_slow_soil": False})
 
