@@ -12,6 +12,11 @@ Written to ``site/flow_analysis.json``:
 - ``arrows``: flow direction on a regular spacing (downhill on the smoothed ground);
 - ``hotspots``: depressions where water collects (outline, deepest point, depth, volume, the level
   water fills to), largest first, and the exits where flow leaves the surveyed park.
+
+The depressions are what the ground can hold. How full each one gets depends on the storm: once SWMM has
+run the storms (Analyse site), ``storms`` gives, per return period, each hollow filled with the runoff from
+the ground that drains to it (draining area x that storm's SWMM runoff depth), up to its brim. Upstream
+hollows are not subtracted, so a hollow fed through another one may be shown fuller than it would be.
 """
 
 from __future__ import annotations
@@ -28,7 +33,8 @@ from . import flow as fl
 log = logging.getLogger(__name__)
 
 REL = "site/flow_analysis.json"
-VERSION = 2
+VERSION = 3   # 3: stage-volume per hollow and per-storm filling
+STAGE_STEPS = 12
 
 
 def _ensure_flow(project: Project) -> None:
@@ -139,11 +145,18 @@ def analyse(project: Project, min_line_area_m2: float = 40.0, arrow_spacing_m: f
         poly = unary_union(polys.get(k, [])).simplify(cell * 0.3)
         level = float(np.nanmax(np.where(m, filled, np.nan)))
         outline = poly if poly.geom_type == "Polygon" else max(getattr(poly, "geoms", [poly]), key=lambda g: g.area)
-        catch = float(acc[r, c])
+        catch = float(np.nanmax(np.where(m, acc, np.nan)))   # all that drains in leaves through one cell of the hollow
+        # stage-volume: water h above the deepest point covers the cells deeper than (deepest - h)
+        d = depth[m]
+        dmax = float(d.max())
+        stage = []
+        for h in np.linspace(0.0, dmax, STAGE_STEPS):
+            w = np.clip(d - (dmax - h), 0.0, None)
+            stage.append([round(float(h), 4), round(float(w.sum() * cell * cell), 3), round(float((w > 0).sum() * cell * cell), 1)])
         hot.append({"kind": "ponding", "area_m2": round(float(m.sum() * cell * cell), 1),
                     "max_depth_m": round(float(depth[m].max()), 3),
                     "volume_m3": round(float(depth[m].sum() * cell * cell), 2),
-                    "water_level_m": round(level, 3), "draining_area_m2": round(catch, 1),
+                    "water_level_m": round(level, 3), "draining_area_m2": round(catch, 1), "stage": stage,
                     "x": round(float(X[r, c]), 2), "y": round(float(Y[r, c]), 2), "z": round(float(z[r, c]), 3),
                     "outline": np.round(np.asarray(outline.exterior.coords), 2).ravel().tolist()})
     # in a carved scenario, water held in an NbS element is storage, not a flooding hotspot
@@ -192,11 +205,64 @@ def analyse(project: Project, min_line_area_m2: float = 40.0, arrow_spacing_m: f
                      "not modelled yet."]}
     project.write_json(rel_for(scenario), out)
     project.history.log("flow_analysis", hotspots=len(hot), exits=len(exits))
-    return out
+    return with_storms(project, out, scenario)
 
 
 def load(project: Project, rebuild: bool = False, scenario: Optional[str] = None) -> Dict[str, Any]:
     rel = rel_for(scenario)
     if rebuild or not project.exists(rel) or project.read_json(rel).get("version") != VERSION:
         return analyse(project, scenario=scenario)
-    return project.read_json(rel)
+    return with_storms(project, project.read_json(rel), scenario)
+
+
+def storm_runoff_mm(project: Project, scenario: Optional[str] = None) -> Dict[str, float]:
+    """Runoff depth over the site per return period, from the scenario's SWMM runs (else the baseline's):
+    what leaves the site or floods, as a share of the rain, times the storm depth. Empty before SWMM has run."""
+    for s in ([scenario] if scenario and scenario != "baseline" else []) + ["baseline"]:
+        rel = f"scenarios/{s}/results/summary.json"
+        if project.exists(rel):
+            out = {}
+            for rp, r in project.read_json(rel).get("return_periods", {}).items():
+                wb = r.get("water_balance", {})
+                rain = float(wb.get("rainfall_total_m3") or 0.0)
+                if rain > 0:
+                    c = (float(wb.get("outflow_total_m3", 0.0)) + float(wb.get("flooding_m3", 0.0))) / rain
+                    out[str(rp)] = c * float(r["storm"]["depth_mm"])
+            return out
+    return {}
+
+
+def fill(stage: List[List[float]], inflow_m3: float) -> Dict[str, Any]:
+    """A hollow (stage: [height above its deepest point, volume, wet area]) filled with inflow_m3."""
+    h, v, a = (np.array([s[i] for s in stage], float) for i in range(3))
+    held = min(inflow_m3, float(v[-1]))
+    if held <= 0:
+        return {"volume_m3": 0.0, "max_depth_m": 0.0, "area_m2": 0.0, "full": False, "spill_m3": 0.0}
+    depth = float(np.interp(held, v, h))
+    return {"volume_m3": round(held, 2), "max_depth_m": round(depth, 3), "area_m2": round(float(np.interp(held, v, a)), 1),
+            "full": inflow_m3 >= float(v[-1]), "spill_m3": round(max(0.0, inflow_m3 - held), 1)}
+
+
+def with_storms(project: Project, out: Dict[str, Any], scenario: Optional[str] = None) -> Dict[str, Any]:
+    """Add how full each hollow gets in each design storm (``storms`` on each hotspot, ``storm_summary``)."""
+    runoff = storm_runoff_mm(project, scenario)
+    summary = {}
+    for rp, q in sorted(runoff.items(), key=lambda kv: int(kv[0])):
+        tot, deepest, wet, full, spill = 0.0, 0.0, 0, 0, 0.0
+        for hs in out.get("hotspots", []):
+            if "stage" not in hs:
+                continue
+            f = fill(hs["stage"], hs["draining_area_m2"] * q / 1000.0)
+            dmax = hs["stage"][-1][0]
+            f["water_level_m"] = round(hs["water_level_m"] - dmax + f["max_depth_m"], 3)
+            hs.setdefault("storms", {})[rp] = f
+            if hs["kind"] == "ponding" and f["volume_m3"] > 0:
+                tot += f["volume_m3"]
+                deepest = max(deepest, f["max_depth_m"])
+                wet += 1
+                full += f["full"]
+                spill += f["spill_m3"]
+        summary[rp] = {"runoff_mm": round(q, 1), "hotspots": wet, "full": full, "spill_m3": round(spill, 1),
+                       "ponding_volume_m3": round(tot, 2), "deepest_m": round(deepest, 3)}
+    out["storm_summary"] = summary
+    return out

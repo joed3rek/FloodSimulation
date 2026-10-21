@@ -81,7 +81,7 @@ namespace SpongePark
             JToken f = null;
             yield return api.Get(api.P($"/flow?scenario={DesignScenario}"), x => f = x, 120);
             if (token != liveToken) yield break;
-            if (f != null) right.Flow.Build(f, frame, layerVisible);
+            if (f != null) right.Flow.Build(f, frame, layerVisible, CurrentRp);
             if (!ReadyToSimulate) { status += " Use the rainfall and answer the ground questions (Step 2) to see the water."; yield break; }
             // live water on both grounds (the existing one shows in Split view), an hour of storm per second, from dry
             if (GpuWaterSim.Supported)

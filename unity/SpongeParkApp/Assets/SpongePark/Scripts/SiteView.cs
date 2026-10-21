@@ -63,7 +63,12 @@ namespace SpongePark
                 depth = new float[Frames.Rows * Frames.Cols];
                 Status = $"{Frames.Count} engine frames (indicative)";
             }
-            else Status = "no 2D run yet for this storm";
+            else
+            {
+                // no run for this storm: drop the last storm's water, or it would be shown as this one's
+                if (Frames != null) { Water.Show(new float[Frames.Rows * Frames.Cols]); Frames = null; }
+                Status = "no 2D run yet for this storm";
+            }
             if (retained != null)
             {
                 RetainedTime = retained["time_hr"].ToObject<float[]>();
@@ -71,6 +76,7 @@ namespace SpongePark
                 RainLitres = retained["rain_l"].ToObject<float[]>();
                 siteArea = (float)retained["site_area_m2"];
             }
+            else RetainedTime = RetainedLitres = RainLitres = null;
         }
 
         /// After a design edit: only the carved ground and the element footprints change. The survey objects

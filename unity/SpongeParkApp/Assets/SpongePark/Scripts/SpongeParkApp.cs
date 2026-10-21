@@ -193,6 +193,12 @@ namespace SpongePark
             yield return CheckEngine();
             if (Arg("-spSurvey") != null) yield return StartIntake(Arg("-spSurvey"));
             yield return new WaitForSecondsRealtime(float.TryParse(Arg("-spWait"), out var wait) ? wait : 6);   // -spWait s
+            // -spRp <years>: switch to that storm, as the storm buttons do
+            if (int.TryParse(Arg("-spRp"), out var shotRp) && returnPeriods.Contains(shotRp) && info != null)
+            {
+                rpIdx = returnPeriods.IndexOf(shotRp);
+                yield return Run(LoadViews(), "Loading the storm");
+            }
             // intake plan checks: -spZoomLayer <layer> highlights and zooms to it; -spPanelClosed hides the questions
             if (plan != null && Arg("-spZoomLayer") != null) { Focus(Arg("-spZoomLayer")); plan.ZoomToLayer(Arg("-spZoomLayer")); }
             if (plan != null && System.Environment.GetCommandLineArgs().Contains("-spPanelClosed")) SetPanel(false);

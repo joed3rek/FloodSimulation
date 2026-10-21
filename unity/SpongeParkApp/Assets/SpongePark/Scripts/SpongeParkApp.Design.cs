@@ -115,15 +115,24 @@ namespace SpongePark
             if (a == null) { flowText.text = "Could not work out the flow: " + api.LastError; yield break; }
             flowData = a;
             PlanFirst();
-            left.Flow.Build(a, frame, layerVisible);
-            right.Flow.Build(a, frame, layerVisible);
+            int rp = CurrentRp;
+            left.Flow.Build(a, frame, layerVisible, rp);
+            right.Flow.Build(a, frame, layerVisible, rp);
             var s = a["summary"];
+            var ss = rp > 0 ? a["storm_summary"]?[rp.ToString()] : null;   // how full the hollows get in this storm
             int exits = (int)s["exits"];
-            flowText.text = $"Blue lines: where water runs (wider where more ground drains to it). " +
-                            $"{(int)s["hotspots"]} place{((int)s["hotspots"] == 1 ? "" : "s")} where water collects (up to {(float)s["deepest_m"] * 100:0} cm deep, " +
-                            $"{(float)s["ponding_volume_m3"]:0.#} m³ in all); water leaves the park at {exits} point{(exits == 1 ? "" : "s")} (red). Worked out on the ground with the ponds and existing wells from Site setup; the storms are in Results.";
+            string collects = ss != null
+                ? $"In the {rp}-year storm water collects in {(int)ss["hotspots"]} place{((int)ss["hotspots"] == 1 ? "" : "s")} (up to {(float)ss["deepest_m"] * 100:0} cm deep, " +
+                  $"{(float)ss["ponding_volume_m3"]:0.#} m³ of the {(float)s["ponding_volume_m3"]:0.#} m³ the hollows can hold); {(int)ss["full"]} fill to the brim and " +
+                  $"{(float)ss["spill_m3"]:0} m³ spills on over their edges. "
+                : $"{(int)s["hotspots"]} place{((int)s["hotspots"] == 1 ? "" : "s")} where water can collect (up to {(float)s["deepest_m"] * 100:0} cm deep, " +
+                  $"{(float)s["ponding_volume_m3"]:0.#} m³ in all; how full they get in each storm shows once Analyse site has run the storms). ";
+            flowText.text = "Blue lines: where water runs (wider where more ground drains to it). " + collects +
+                            $"Water leaves the park at {exits} point{(exits == 1 ? "" : "s")} (red). Worked out on the ground with the ponds and existing wells from Site setup.";
             hotspotList.Clear();
-            foreach (var h in a["hotspots"].Take(8))
+            var wet = a["hotspots"].Where(h => FlowView.StormFill(h, rp) == null || (float)FlowView.StormFill(h, rp)["volume_m3"] > 0)
+                                   .OrderByDescending(h => (float)(FlowView.StormFill(h, rp)?["volume_m3"] ?? h["volume_m3"]));
+            foreach (var h in wet.Take(8))
             {
                 float x = (float)h["x"], y = (float)h["y"], z = (float)h["z"];
                 var b = new Button(() => FocusOn(x, y, z, 30));
@@ -134,8 +143,18 @@ namespace SpongePark
                 b.Add(sw);
                 var w = new VisualElement { pickingMode = PickingMode.Ignore };
                 w.AddToClassList("layer-words");
-                w.Add(Text($"{h["id"]} · ponding, {(float)h["max_depth_m"] * 100:0.#} cm deep", "layer-title"));
-                w.Add(Text($"{(float)h["area_m2"]:0} m² · holds {(float)h["volume_m3"]:0.##} m³ · {(float)h["draining_area_m2"]:0} m² drains to it", "layer-source"));
+                var f = FlowView.StormFill(h, rp);
+                if (f != null)
+                {
+                    w.Add(Text($"{h["id"]} · {(float)f["max_depth_m"] * 100:0.#} cm deep in the {rp}-yr storm{((bool)f["full"] ? ", full" : "")}", "layer-title"));
+                    w.Add(Text($"{(float)f["area_m2"]:0} m² under water · {(float)f["volume_m3"]:0.##} of {(float)h["volume_m3"]:0.##} m³" +
+                               ((float)f["spill_m3"] > 0 ? $" · {(float)f["spill_m3"]:0} m³ spills on" : "") + $" · {(float)h["draining_area_m2"]:0} m² drains to it", "layer-source"));
+                }
+                else
+                {
+                    w.Add(Text($"{h["id"]} · ponding, up to {(float)h["max_depth_m"] * 100:0.#} cm deep", "layer-title"));
+                    w.Add(Text($"{(float)h["area_m2"]:0} m² · holds {(float)h["volume_m3"]:0.##} m³ · {(float)h["draining_area_m2"]:0} m² drains to it", "layer-source"));
+                }
                 b.Add(w);
                 b.tooltip = "Show it";
                 hotspotList.Add(b);
@@ -210,7 +229,7 @@ namespace SpongePark
             yield return right.Load(api, frame, CurrentRp, false);
             right.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
             right.Terrain.SetContours(!layerVisible.TryGetValue(ContoursLayer, out var con) || con);
-            if (flowData != null) right.Flow.Build(flowData, frame, layerVisible);
+            if (flowData != null) right.Flow.Build(flowData, frame, layerVisible, CurrentRp);
         }
 
         float GroundZ(float x, float y)

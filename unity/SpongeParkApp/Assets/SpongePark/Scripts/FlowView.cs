@@ -29,7 +29,8 @@ namespace SpongePark
             return v;
         }
 
-        public void Build(JToken a, SiteFrame frame, IDictionary<string, bool> visible)
+        /// rp: the storm whose filling the pools show (the hollow's brim when the engine has no storms yet).
+        public void Build(JToken a, SiteFrame frame, IDictionary<string, bool> visible, int rp = 0)
         {
             foreach (var g in groups.Values) Destroy(g);
             groups.Clear();
@@ -66,12 +67,15 @@ namespace SpongePark
             }
             Add(Arrows, m, visible);
 
-            // ponding hotspots: a pool at the level the hollow fills to
+            // ponding hotspots: a pool at the level the hollow fills to in this storm (the ground hides the
+            // part of the outline above that level)
             m = new MeshBuilder();
             foreach (var h in a["hotspots"])
             {
                 var o = h["outline"].Values<float>().ToArray();
-                float level = (float)h["water_level_m"];
+                var st = StormFill(h, rp);
+                if (st != null && (float)st["volume_m3"] <= 0) continue;
+                float level = st != null ? (float)st["water_level_m"] : (float)h["water_level_m"];
                 var ring = new List<Vector3>();
                 for (int i = 0; i + 1 < o.Length; i += 2) ring.Add(frame.World(o[i], o[i + 1], level));
                 if (ring.Count >= 4) m.Fill(ring, lift * 0.5f, Pool);
@@ -92,6 +96,9 @@ namespace SpongePark
             }
             Add(Exits, m, visible);
         }
+
+        /// How full a hollow gets in storm rp (volume, depth, area, level, spill); null without storm results.
+        public static JToken StormFill(JToken hotspot, int rp) => rp > 0 ? hotspot["storms"]?[rp.ToString()] : null;
 
         void Add(string name, MeshBuilder m, IDictionary<string, bool> visible)
         {
