@@ -67,15 +67,11 @@ class SoilZone(BaseModel):
         raise SiteError(f"soil zone {self.id}: give hsg, texture, or a measured infiltration rate.")
 
     def native_rate(self, method: str) -> float:
-        """Long-term (saturated) infiltration rate, mm/hr."""
+        """Long-term (saturated) infiltration rate, mm/hr. A curve-number zone without a measured rate (soil
+        group D: 0-1.27 mm/h) gives 0: NbS get no infiltration credit until a percolation test gives one."""
         if "CURVE" in method:
             rate = self.ksat_mm_hr if self.ksat_mm_hr is not None else self.min_rate_mm_hr
-            if rate is None:
-                raise SiteError(
-                    f"soil zone {self.id}: a curve number gives no infiltration rate, but NbS seepage "
-                    "needs one. Give ksat_mm_hr (percolation test) for this zone."
-                )
-            return rate
+            return float(rate or 0.0)
         if "HORTON" in method:
             if self.min_rate_mm_hr is None:
                 raise SiteError(f"soil zone {self.id}: Horton needs min_rate_mm_hr.")

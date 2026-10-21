@@ -331,6 +331,12 @@ def _generate(project: Project, option_id: str, types: Optional[List[str]], writ
         except SiteError as ex:
             raise LayoutError(f"{ex} Layout sizing needs it to check drawdown.") from ex
 
+    # rain gardens on slow native soil get a stone layer and an underdrain (HC 4.2), if allowed
+    ud_ok = bool(P.value_or("nbs.rain_garden.underdrain_on_slow_soil", True))
+    ud_below = float(P.value_or("nbs.underdrain_below_native_mm_hr", 13.0))
+    ud_depth = float(P.value_or("nbs.rain_garden.underdrain_storage_depth_m", 0.6))
+    ud_void = float(P.value_or("nbs.rain_garden.storage_layer_void_ratio", 0.4))
+
     for t in types:
         if t == "bioswale":
             _place_swales(project, g, blocked, taken, rejected, wacc_now, accept, lambda: state["budget"], runoff_mm,
@@ -349,6 +355,7 @@ def _generate(project: Project, option_id: str, types: Optional[List[str]], writ
         allowed_t = g.mask & ~blocked & (np.nan_to_num(g.slope, nan=1e9) <= max_slope)
         k = 0
         n_dd = 0
+        n_ud = 0
         for _ in range(500):
             if state["budget"] < a_min:
                 break
@@ -363,13 +370,18 @@ def _generate(project: Project, option_id: str, types: Optional[List[str]], writ
             # (ponds with an outlet are checked on the SWMM drawdown)
             seep = 1.0 if t == "rain_garden" else float(P.value_or(f"nbs.{t}.seepage_fraction", 1.0) or 0.0)
             infiltration_only = t == "rain_garden" or (t == "detention_pond" and not P.value_or(f"nbs.{t}.outlet_diameter_m", None))
+            underdrain = False
             if infiltration_only and seep > 0:
-                rate = native_rate(r, c) * seep
+                native = native_rate(r, c)
+                rate = native * seep
                 if t == "rain_garden":
                     media = P.value_or("nbs.rain_garden.media_ksat_mm_hr", None)
                     rate = min(rate, media) if media else rate
                 dd = live * 1000 / rate if rate > 0 else float("inf")
-                if dd > max_dd:
+                if t == "rain_garden" and ud_ok and (native < ud_below or dd > max_dd):
+                    underdrain = True   # drains through the media into the gravel and the underdrain
+                    n_ud += 1
+                elif dd > max_dd:
                     rejected |= cand & (np.hypot(g.X - g.X[r, c], g.Y - g.Y[r, c]) <= 5 * cell)
                     n_dd += 1
                     if n_dd >= 3:  # the same soil everywhere: stop trying
@@ -380,17 +392,18 @@ def _generate(project: Project, option_id: str, types: Optional[List[str]], writ
                     continue
             contrib = float(wacc[r, c])
             cap = min(a_max, state["budget"])
+            k_el = (k_lid + ud_depth * ud_void) if underdrain and k_lid is not None else k_lid
             for _ in range(4):  # the footprint catches more than its seed: resize to what reaches it
                 target = runoff_mm / 1000 * contrib
-                if k_lid is not None:
-                    need_cells = int(np.ceil(min(max(target / k_lid, a_min), cap) / cell2))
+                if k_el is not None:
+                    need_cells = int(np.ceil(min(max(target / k_el, a_min), cap) / cell2))
                     done = lambda reg, n, _n=need_cells: n >= _n  # noqa: E731
                 else:
                     def done(reg, n, _cap=cap, _t=target):
                         return n * cell2 >= _cap or (n % 8 == 0 and flat_volume(reg, cell, depth, side) >= _t)
                 region = _grow(g, (r, c), free, climb, done)
                 a = float(region.sum() * cell2)
-                est = a * k_lid if k_lid is not None else flat_volume(region, cell, depth, side)
+                est = a * k_el if k_el is not None else flat_volume(region, cell, depth, side)
                 reach = float((fl.reaches(g.filled, g.mask, g.dirs, region) & ~captured).sum() * cell2)
                 if reach <= contrib * 1.02 or a >= cap - cell2:
                     contrib = max(contrib, reach)
@@ -404,11 +417,17 @@ def _generate(project: Project, option_id: str, types: Optional[List[str]], writ
                        "area budget" if a >= state["budget"] - cell2 else
                        "size limit" if a >= a_max - cell2 else "space")
             k += 1
-            accept(Placed(f"{PREFIX[t]}_{k}", t, region, (int(r), int(c)), contrib, target, est, limited))
+            p_new = Placed(f"{PREFIX[t]}_{k}", t, region, (int(r), int(c)), contrib, target, est, limited)
+            if underdrain:
+                p_new.notes.append({"underdrain": True, "native_rate_mm_hr": native})
+            accept(p_new)
+        if n_ud:
+            skipped.append(f"{t}: the native soil drains slower than {ud_below:g} mm/h, so rain gardens have a "
+                           f"{ud_depth:g} m stone layer and a perforated underdrain (HC 4.2); a percolation test "
+                           "may show they need none.")
 
     if not placed and not kept:
-        raise LayoutError("no element could be placed: check the keep-out areas, size thresholds and drawdown "
-                          f"(cells removed: {blocked_counts}; skipped: {skipped}).")
+        raise LayoutError(_nothing_fits(blocked_counts, skipped, cell2))
 
     # grading, in placement order; designer elements and keep-out areas are never altered
     zg = np.where(g.mask, g.dem.z, np.nan)
@@ -494,6 +513,11 @@ def _element_props(p: Placed, P, g: Grid, rp: int, runoff_mm: float) -> Dict[str
                     longitudinal_slope_pct=round(info["slope_pct"], 3),
                     notes=f"along a concentrated flow line draining {p.drainage_m2:.0f} m2; length "
                           f"{info['length_m']:.1f} m, slope {info['slope_pct']:.2f} %; cut {p.cut.cut_m3:.1f} m3")
+        if info.get("underdrain"):
+            base["notes"] += (f"; native soil {info['native_rate_mm_hr']:g} mm/h < "
+                              f"{float(P.value_or('nbs.underdrain_below_native_mm_hr', 13.0)):g} mm/h: build with a "
+                              f"perforated underdrain in a {float(P.value_or('nbs.bioswale.underdrain_gravel_depth_m', 0.45)):g} m "
+                              "gravel layer (HC 4.7)")
         return base
     if p.type == "recharge_well":
         base.pop("outflow_to")
@@ -511,6 +535,19 @@ def _element_props(p: Placed, P, g: Grid, rp: int, runoff_mm: float) -> Dict[str
                 notes=f"sized for the {rp}-yr storm: {p.drainage_m2:.0f} m2 draining here x {runoff_mm:.0f} mm = "
                       f"{p.target_m3:.1f} m3; holds ~{p.estimate_m3:.1f} m3 (limited by {p.limited_by}); "
                       f"rim {p.cut.rim_m:.2f} m, cut {p.cut.cut_m3:.1f} m3")
+    ud = next((n for n in p.notes if isinstance(n, dict) and n.get("underdrain")), None)
+    if p.type == "rain_garden" and ud:
+        # SWMM drain q = C h^0.5 (mm/h, h in mm): C = 2 sqrt(D) / T empties a water depth D in T hours.
+        # D: the stone layer full plus the media's drainable water; T: the drawdown limit (HC 4.2: 48 h)
+        stone = float(P.value_or("nbs.rain_garden.underdrain_storage_depth_m", 0.6))
+        media = float(P.value("nbs.rain_garden.soil_media_depth_m"))
+        drainable = float(P.value("nbs.rain_garden.media_porosity")) - float(P.value("nbs.rain_garden.media_field_capacity"))
+        depth_mm = 1000 * (stone * float(P.value("nbs.rain_garden.storage_layer_void_ratio")) + media * drainable)
+        C = 2 * depth_mm ** 0.5 / float(P.value("nbs.max_drawdown_hr"))
+        base.update(storage_layer_depth_m=stone, underdrain_coefficient=round(C, 3))
+        base["notes"] += (f"; underdrained (HC 4.2): native soil {ud['native_rate_mm_hr']:g} mm/h < "
+                          f"{float(P.value_or('nbs.underdrain_below_native_mm_hr', 13.0)):g} mm/h, {stone:g} m stone "
+                          f"layer, drain sized to empty it within {float(P.value('nbs.max_drawdown_hr')):g} h")
     if p.type != "rain_garden":
         base.update(invert_elev_m=round(p.cut.bottom_m, 3), overflow_to=p.overflow_to or p.outflow_to)
         if p.type == "retention_pond":
@@ -606,12 +643,8 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
             why = "flow line too short on free ground"
         elif not smin <= slope <= smax:
             why = f"longitudinal slope outside {smin:g}-{smax:g} %"
-        else:
-            rate = native_rate(int(rs[0]), int(cs[0]))
-            if rate <= 0 or live * 1000 / rate > max_dd:
-                skipped.append(f"bioswale: drawdown {live * 1000 / max(rate, 1e-9):.0f} h at {rate:g} mm/h exceeds "
-                               f"nbs.max_drawdown_hr = {max_dd:g} h.")
-                return
+        # no drawdown rejection: a swale empties along its grade (SWMM's vegetative swale); on slow native soil
+        # HC 4.7 calls for an underdrain, recorded on the element (SWMM credits only the surface infiltration)
         if why:
             reasons[why] = reasons.get(why, 0) + 1
             rejected.ravel()[path] = True
@@ -629,10 +662,26 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
         p = Placed(f"BS_{k}", "bioswale", region, (int(rs[0]), int(cs[0])), contrib, runoff_mm / 1000 * contrib,
                    storage_swale(P, float(fp.area)), "conveyance")
         p.end = (int(rs[-1]), int(cs[-1]))
-        p.notes.append({"line": line.__geo_interface__, "length_m": length, "slope_pct": slope})
+        native = native_rate(int(rs[0]), int(cs[0]))
+        p.notes.append({"line": line.__geo_interface__, "length_m": length, "slope_pct": slope,
+                        "underdrain": native < float(P.value_or("nbs.underdrain_below_native_mm_hr", 13.0)),
+                        "native_rate_mm_hr": native})
         accept(p)
     if reasons and k == 0:
         skipped.append("bioswale: none placed (" + ", ".join(f"{v} x {r}" for r, v in reasons.items()) + ").")
+
+
+def _nothing_fits(blocked_counts: Dict[str, int], skipped: List[str], cell2: float) -> str:
+    """Why no element was placed, in plain words, and what would let the engine place more."""
+    lost = sorted(((k, v * cell2) for k, v in blocked_counts.items() if v), key=lambda kv: -kv[1])
+    kept_out = ", ".join(f"{k} {a:.0f} m²" for k, a in lost[:4])
+    lines = ["No element could be placed on this park."]
+    if kept_out:
+        lines.append(f"Ground kept free: {kept_out}.")
+    lines += [s[0].upper() + s[1:] for s in skipped]
+    lines.append("To place more: draw elements yourself in Design, lower the keep-out distances, or add a "
+                 "percolation test (Site setup > Ground) and borehole data for recharge wells (Site setup > Wells).")
+    return " ".join(lines)
 
 
 def storage_swale(P, area_m2: float) -> float:

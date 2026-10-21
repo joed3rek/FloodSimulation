@@ -31,6 +31,7 @@ class GuidelineRule(BaseModel):
     section: str
     page: Optional[int] = None
     note: str = ""
+    unless: Optional[str] = None   # element field that, when set, means the rule is met another way
 
     def citation(self, sources: Dict[str, str]) -> str:
         page = f", p.{self.page}" if self.page else ""
@@ -82,7 +83,7 @@ def check_element(el: NbSElement, rule_set: Optional[Iterable[GuidelineRule]] = 
         if el.type not in r.applies_to:
             continue
         v = getattr(el, r.field, None)
-        if v is None:
+        if v is None or (r.unless and getattr(el, r.unless, None)):
             continue
         low = r.min is not None and v < r.min - 1e-12
         high = r.max is not None and v > r.max + 1e-12

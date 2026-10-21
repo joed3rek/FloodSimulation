@@ -492,7 +492,7 @@ def _write_lid(inp: InpFile, e: NbSElement, em: ElementSwmm, params: ParameterSe
     else:
         t = e.type
         storage_mm = (e.storage_layer_depth_m or 0.0) * 1000.0
-        lid_type = "BC" if storage_mm > 0 else "RG"
+        lid_type = "BC" if storage_mm > 0 or e.underdrain_coefficient else "RG"
         inp.add("LID_CONTROLS", name, lid_type, comment=f"{e.type} {e.id}")
         inp.add("LID_CONTROLS", name, "SURFACE", pond_mm, veg, 0.1, 0.0, 0.0)
         inp.add("LID_CONTROLS", name, "SOIL", (e.soil_media_depth_m or 0.0) * 1000.0,
@@ -502,7 +502,10 @@ def _write_lid(inp: InpFile, e: NbSElement, em: ElementSwmm, params: ParameterSe
         inp.add("LID_CONTROLS", name, "STORAGE", storage_mm,
                 params.value(f"nbs.{t}.storage_layer_void_ratio"), e.infiltration_rate_mm_hr, 0,
                 comment="seepage to native soil = element infiltration rate")
-        if lid_type == "BC":
+        if lid_type == "BC" and e.underdrain_coefficient:
+            inp.add("LID_CONTROLS", name, "DRAIN", e.underdrain_coefficient, 0.5, 0, 6, 0, 0,
+                    comment="underdrain from the bottom of the gravel layer")
+        elif lid_type == "BC":
             inp.add("LID_CONTROLS", name, "DRAIN", 0, 0.5, 0, 6, 0, 0, comment="no underdrain")
         width = 0
     inp.add("LID_USAGE", em.subcatchment, name, 1, em.area_m2, width, init_sat, 0, 0)

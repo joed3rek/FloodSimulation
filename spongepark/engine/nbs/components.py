@@ -61,6 +61,7 @@ class NbSElement(BaseModel):
     manning_n: Optional[float] = None
     vegetation_volume_fraction: Optional[float] = None
     storage_layer_depth_m: Optional[float] = None
+    underdrain_coefficient: Optional[float] = None  # SWMM drain coefficient (mm/h per mm^0.5); None = no underdrain
     well_diameter_m: Optional[float] = None
     well_depth_m: Optional[float] = None
     dam_height_m: Optional[float] = None
@@ -279,6 +280,8 @@ def analytic_drawdown_hr(el: NbSElement, params: ParameterSet) -> Optional[float
     if sp.swmm == LID_BIORETENTION:
         media = params.value_or(f"nbs.{el.type}.media_ksat_mm_hr", None)
         rate = min(el.infiltration_rate_mm_hr, media) if media else el.infiltration_rate_mm_hr
+        if el.underdrain_coefficient and media:
+            rate = media   # with an underdrain the surface drains through the media, whatever the soil below
         return el.max_ponding_depth_m * 1000.0 / rate if rate > 0 else None
     if sp.swmm == LID_SWALE:
         r = el.infiltration_rate_mm_hr
@@ -295,6 +298,7 @@ def analytic_drawdown_hr(el: NbSElement, params: ParameterSet) -> Optional[float
 _RENAMED = {"top_width_m": "width_m", "max_ponding_depth_m": "depth_m", "well_diameter_m": "diameter_m",
             "weir_length_m": "overflow_weir_length_m"}
 _PARAMS = ["top_width_m", "max_ponding_depth_m", "side_slope_h_v", "soil_media_depth_m", "storage_layer_depth_m",
+           "underdrain_coefficient",
            "permanent_pool_depth_m", "freeboard_m", "safety_bench_width_m", "invert_elev_m", "longitudinal_slope_pct", "manning_n",
            "vegetation_volume_fraction", "check_dam_spacing_m", "dam_height_m", "pool_area_m2", "well_diameter_m", "well_depth_m",
            "seepage_rate_mm_hr", "weir_length_m",

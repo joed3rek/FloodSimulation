@@ -181,6 +181,18 @@ def test_rain_gardens_rejected_when_they_drain_too_slowly(tmp_path):
 
     p, _ = _valley_project(tmp_path)
     with p:
-        # 0.2 m ponding at 8 mm/h takes 25 h, more than the 10 h allowed here
+        # 0.2 m ponding at 8 mm/h takes 25 h, more than the 10 h allowed here; underdrains turned off
         with pytest.raises(LayoutError, match="drawdown 25 h"):
-            generate(p, "slow", ["rain_garden"], overrides={"nbs.max_drawdown_hr": 10.0})
+            generate(p, "slow", ["rain_garden"], overrides={"nbs.max_drawdown_hr": 10.0,
+                                                            "nbs.rain_garden.underdrain_on_slow_soil": False})
+
+
+def test_rain_gardens_underdrained_on_slow_soil(tmp_path):
+    """HC 4.2: native soil under 13 mm/h gets a 600 mm stone layer and a perforated underdrain."""
+    p, _ = _valley_project(tmp_path)
+    with p:
+        generate(p, "slow", ["rain_garden"])   # the valley's soil drains 8 mm/h
+        rgs = [f["properties"] for f in elements_fc(p, "slow")["features"]]
+        assert rgs and all(r["underdrain_coefficient"] > 0 and r["storage_layer_depth_m"] == 0.6 for r in rgs)
+        res = run_option(p, "slow")
+        assert abs(res["return_periods"]["5"]["water_balance"]["closure_error_pct"]) < 1

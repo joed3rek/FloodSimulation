@@ -106,6 +106,17 @@ _DEFAULTS: List[Tuple[str, object, str, Source, str]] = [
     ("nbs.rain_garden.storage_layer_depth_m", 0.0, "m", D,
      "Gravel storage layer under the media. 0 -> SWMM Rain Garden; >0 -> Bio-Retention Cell."),
     ("nbs.rain_garden.storage_layer_void_ratio", 0.4, "fraction", L, "Gravel void ratio."),
+    ("nbs.rain_garden.underdrain_on_slow_soil", True, "-", D,
+     "On slow native soil, place rain gardens with a stone layer and a perforated underdrain (HC 4.2 Material "
+     "Specification: HSG C/D partial infiltration with underdrain; HSG A/B full infiltration, no underdrain)."),
+    ("nbs.underdrain_below_native_mm_hr", 13.0, "mm/hr", D,
+     "Native soil slower than this needs an underdrain (HC 4.2: if native soil < 13 mm/hr, underdrain may be "
+     "needed; HC 4.7: infiltration capacity > 13 mm/hr, target native rate >= 12.7 mm/hr)."),
+    ("nbs.rain_garden.underdrain_storage_depth_m", 0.6, "m", D,
+     "Stone base (drainage layer) of an underdrained rain garden (HC 4.2: 600 mm without tree, 750 mm with tree; "
+     "min. 450 mm)."),
+    ("nbs.bioswale.underdrain_gravel_depth_m", 0.45, "m", D,
+     "Drainage layer of a bioswale on poor soil with an underdrain (HC 4.7: 300-450 mm)."),
     # --- bioswale ------------------------------------------------------------------
     ("nbs.bioswale.max_ponding_depth_m", 0.3, "m", D, "Swale berm height (max flow depth)."),
     ("nbs.bioswale.longitudinal_slope_pct", 2.0, "%", D, "Longitudinal slope (1-4 % preferred)."),
