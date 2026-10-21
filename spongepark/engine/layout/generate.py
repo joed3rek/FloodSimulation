@@ -619,8 +619,11 @@ def _route(placed: List[Placed], g: Grid, sub_lab, sub_props) -> None:
 
 def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, budget_left, runoff_mm,
                   native_rate, max_dd, skipped) -> None:
-    """Bioswales along concentrated flow lines: from a channel head down the D8 path while the ground
-    is free, between ``min_length_m`` and ``max_length_m``, at a longitudinal slope within the limits."""
+    """Bioswales across the slope, along the contours: each starts where water gathers (the head of a flow line)
+    and runs across the ground with its bed falling at ``layout.swale_grade_pct`` (HC 4.7: 0.5-2 %), so it
+    catches the water running down the slope and carries it gently to its end. It is never filled and never cut
+    deeper than ``layout.swale_max_depth_m`` (HC 4.7: 0.6 m); it may cross a footpath through a trench drain.
+    Between ``min_length_m`` and ``max_length_m`` long."""
     from scipy import ndimage
     from shapely.geometry import LineString
 
@@ -634,8 +637,9 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
     live = float(P.value("nbs.bioswale.max_ponding_depth_m"))
     max_cross = float(P.value_or("layout.swale_path_crossing_max_m", 0.0))
     cross = crossable(project, g).ravel() if max_cross > 0 else np.zeros(g.mask.size, bool)
+    grade = float(np.clip(float(P.value_or("layout.swale_grade_pct", 1.0)), smin, smax)) / 100.0
+    extra = max(float(P.value_or("layout.swale_max_depth_m", 0.6)) - live, 0.0)
     rec = fl.downstream(g.dirs).ravel()
-    d = g.dirs.ravel()
     k = 0
     reasons: Dict[str, int] = {}
     for _ in range(200):
@@ -651,48 +655,18 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
         donors[rr[rr >= 0]] = True
         heads = [i for i in ci if not donors[i]]
         head = max(heads, key=lambda i: wacc.ravel()[i])
-        path = [head]
-        length = 0.0
-        j = head
-        crossings: List[List[int]] = []
-        # a line rejected as too short may still be part of a longer one from upstream: rejected cells only
-        # stop being swale heads, not swale ground
-        fr, tk = (g.mask & ~blocked & ~taken).ravel(), taken.ravel()
-        while length < Lmax:
-            nxt = rec[j]
-            if nxt < 0:
-                break
-            if not fr[nxt]:
-                # a footpath: the swale passes under it through a trench drain when the path is narrow and open
-                # ground follows; the path cells stay level (not carved)
-                run, at, run_len, jj = [], nxt, 0.0, j
-                while at >= 0 and cross[at] and not tk[at] and run_len <= max_cross:
-                    run_len += float(fl.DIST[d[jj]]) * cell
-                    run.append(at)
-                    jj, at = at, rec[at]
-                if run and at >= 0 and fr[at] and run_len <= max_cross and length + run_len < Lmax:
-                    crossings.append(run)
-                    path += run
-                    length += run_len
-                    j = run[-1]
-                    continue
-                break
-            length += float(fl.DIST[d[j]]) * cell
-            path.append(nxt)
-            j = nxt
+        # rejected cells only stop being swale heads, not swale ground
+        ground_ok = g.mask & ~blocked & ~taken
+        path, crossings, length = _contour_path(g, head, ground_ok, cross.reshape(g.mask.shape) & ~taken, grade,
+                                                extra, Lmax, max_cross)
         rs, cs = np.unravel_index(path, g.mask.shape)
-        drop = float(g.z[rs[0], cs[0]] - g.z[rs[-1], cs[-1]])
-        slope = 100 * drop / length if length > 0 else 0.0
-        why = None
-        if length < Lmin:
-            why = "flow line too short on free ground"
-        elif not smin <= slope <= smax:
-            why = f"longitudinal slope outside {smin:g}-{smax:g} %"
+        slope = 100 * grade
         # no drawdown rejection: a swale empties along its grade (SWMM's vegetative swale); on slow native soil
         # HC 4.7 calls for an underdrain, recorded on the element (SWMM credits only the surface infiltration)
-        if why:
-            reasons[why] = reasons.get(why, 0) + 1
-            rejected.ravel()[path] = True
+        if length < Lmin:
+            reasons["too little open ground across the slope"] = reasons.get("too little open ground across the slope", 0) + 1
+            r0, c0 = np.unravel_index(head, g.mask.shape)
+            rejected[max(r0 - 1, 0):r0 + 2, max(c0 - 1, 0):c0 + 2] = True   # try the next head
             continue
         line = LineString(list(zip(g.X[rs, cs], g.Y[rs, cs]))).simplify(cell / 2)
         fp = line.buffer(W / 2, cap_style=2)
@@ -706,7 +680,8 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
             rejected.ravel()[path] = True
             continue
         region &= ~(blocked | taken)
-        contrib = float(wacc.ravel()[path[-1]])
+        # the swale catches what runs down the slope into it, along all its length
+        contrib = float((fl.reaches(g.filled, g.mask, g.dirs, region) & ~captured).sum() * cell2)
         k += 1
         p = Placed(f"BS_{k}", "bioswale", region, (int(rs[0]), int(cs[0])), contrib, runoff_mm / 1000 * contrib,
                    storage_swale(P, float(fp.area)), "conveyance")
@@ -716,12 +691,75 @@ def _place_swales(project, g: Grid, blocked, taken, rejected, wacc_now, accept, 
         for run in crossings:
             rr, cc = np.unravel_index(run, g.mask.shape)
             xings.append([round(float(g.X[rr, cc].mean()), 2), round(float(g.Y[rr, cc].mean()), 2)])
-        p.notes.append({"line": line.__geo_interface__, "length_m": length, "slope_pct": slope, "path_crossings": xings,
+        p.notes.append({"line": line.__geo_interface__, "length_m": length, "slope_pct": slope, "grade_pct": slope,
+                        "path_crossings": xings,
                         "underdrain": native < float(P.value_or("nbs.underdrain_below_native_mm_hr", 13.0)),
                         "native_rate_mm_hr": native})
         accept(p)
     if reasons and k == 0:
         skipped.append("bioswale: none placed (" + ", ".join(f"{v} x {r}" for r, v in reasons.items()) + ").")
+
+
+def _contour_path(g: Grid, head: int, ground_ok: np.ndarray, cross: np.ndarray, grade: float, extra: float,
+                  Lmax: float, max_cross: float) -> Tuple[List[int], List[List[int]], float]:
+    """A swale line from ``head`` across the slope: each step goes to the neighbouring cell whose ground is closest
+    to a bed falling at ``grade`` from the head, staying within [bed - 5 cm, bed + extra] (never filled, never
+    cut too deep) and turning at most 90 degrees. Footpath cells (``cross``) may be crossed for up to ``max_cross``
+    m at a time. Returns (cells, crossing runs, length m)."""
+    rows, cols = ground_ok.shape
+    z, cell = g.z, g.cell
+    r, c = divmod(int(head), cols)
+    z0 = float(z[r, c])
+    path, seen = [int(head)], {int(head)}
+    crossings: List[List[int]] = []
+    run: List[int] = []
+    run_len = 0.0
+    s, heading = 0.0, None
+    steps = [(dr, dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if dr or dc]
+    while s < Lmax:
+        best, best_score = None, None
+        for dr, dc in steps:
+            rr, cc = r + dr, c + dc
+            if not (0 <= rr < rows and 0 <= cc < cols):
+                continue
+            i = rr * cols + cc
+            if i in seen or not (ground_ok[rr, cc] or cross[rr, cc]) or not np.isfinite(z[rr, cc]):
+                continue
+            if heading is not None and dr * heading[0] + dc * heading[1] < 0:   # no sharp turns back
+                continue
+            ds = cell * (1.4142 if dr and dc else 1.0)
+            bed = z0 - grade * (s + ds)
+            zi = float(z[rr, cc])
+            if not ground_ok[rr, cc]:   # a footpath: crossed level, the bed goes under it
+                score = abs(zi - bed) + 0.5
+            elif bed - 0.05 <= zi <= bed + extra:
+                score = abs(zi - bed)
+            else:
+                continue
+            if heading is not None and (dr, dc) != heading:
+                score += 0.02   # prefer straight runs
+            if best_score is None or score < best_score:
+                best, best_score = (rr, cc, ds, i), score
+        if best is None:
+            break
+        rr, cc, ds, i = best
+        if not ground_ok[rr, cc]:
+            run.append(i)
+            run_len += ds
+            if run_len > max_cross:
+                break
+        elif run:
+            crossings.append(run)
+            run, run_len = [], 0.0
+        heading = (rr - r, cc - c)
+        r, c = rr, cc
+        s += ds
+        path.append(i)
+        seen.add(i)
+    if run:   # never end on a footpath
+        path = path[:len(path) - len(run)]
+        s -= run_len
+    return path, crossings, s
 
 
 def _nothing_fits(blocked_counts: Dict[str, int], skipped: List[str], cell2: float) -> str:
@@ -761,6 +799,9 @@ def _grade_swale(z: np.ndarray, g: Grid, p: Placed, P, protect: np.ndarray) -> T
     c = np.clip(((shapely.get_x(pts) - g.dem.origin[0]) / g.cell).astype(int), 0, z.shape[1] - 1)
     ground = np.where(np.isfinite(z[r, c]), z[r, c], np.nanmin(z))
     invert = np.minimum.accumulate(ground - D)
+    g_pct = p.notes[-1].get("grade_pct")
+    if g_pct:   # a generated swale: the bed falls evenly at its grade
+        invert = np.minimum(invert, ground[0] - D - s * float(g_pct) / 100.0)
     region = p.region & ~protect
     rr, cc = np.nonzero(region)
     cells = shapely.points(g.X[rr, cc], g.Y[rr, cc])

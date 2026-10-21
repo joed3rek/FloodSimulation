@@ -118,6 +118,7 @@ def check(project: Project, elements: List[NbSElement], rows: List[Dict[str, Any
     for w in regrade_warnings:
         eid = w.split(" ", 1)[0]
         warnings.append({"element": eid, "kind": "keep_out", "text": w})
+    warnings += _swale_grade_checks(project, elements)
     warnings += _bridge_checks(project, elements)
     # a bridge's deck lies on its swale: it adds no area of its own
     used = sum(r.get("area_m2") or 0.0 for r in rows if r.get("type") != "green_bridge")
@@ -128,6 +129,59 @@ def check(project: Project, elements: List[NbSElement], rows: List[Dict[str, Any
         warnings.append({"element": "", "kind": "budget",
                          "text": f"The elements cover {budget['used_pct']:.1f} % of the park; the area budget is {limit_pct:g} %."})
     return {"warnings": warnings, "budget": budget}
+
+
+def _swale_grade_checks(project: Project, elements: List[NbSElement]) -> List[Dict[str, str]]:
+    """Bioswales should run across the slope at a gentle grade (HC 4.7 p.6, 12: 0.5-2 % preferred, up to 6 % with
+    check dams; below 0.5 % water stands). Warn when the ground along one falls too steeply, and say when it runs
+    straight down the slope."""
+    import numpy as np
+
+    from ..terrain.raster import read_geotiff
+
+    swales = [e for e in elements if e.type == "bioswale" and e.geometry.get("type") == "LineString"]
+    if not swales or not project.exists("terrain/existing.tif"):
+        return []
+    dem = read_geotiff(project.path("terrain/existing.tif"))
+    z = np.where(dem.z == dem.nodata, np.nan, dem.z)
+    gy, gx = np.gradient(z, dem.cell_size)
+    fall = 100 * np.hypot(gx, gy)
+
+    def at(arr, x, y):
+        c = int((x - dem.origin[0]) / dem.cell_size)
+        r = int((dem.origin[1] - y) / dem.cell_size)
+        return float(arr[r, c]) if 0 <= r < arr.shape[0] and 0 <= c < arr.shape[1] else float("nan")
+
+    P = project.parameters
+    lo = float(P.value_or("nbs.bioswale.min_longitudinal_slope_pct", 0.5))
+    hi = float(P.value_or("layout.swale_grade_preferred_max_pct", 2.0))
+    top = float(P.value_or("nbs.bioswale.max_longitudinal_slope_pct", 4.0))
+    out: List[Dict[str, str]] = []
+    for e in swales:
+        line = shape(e.geometry)
+        if line.length < 1.0:
+            continue
+        pts = [line.interpolate(d) for d in np.linspace(0, line.length, max(2, int(line.length) + 1))]
+        zs = np.array([at(z, p.x, p.y) for p in pts])
+        if np.isnan(zs).any():
+            continue
+        grade = 100 * abs(zs[0] - zs[-1]) / line.length
+        steepest = float(np.nanmean([at(fall, p.x, p.y) for p in pts]))
+        downhill = steepest > 1.0 and grade >= 0.8 * steepest
+        how = " It runs straight down the slope: turn it across the slope, along the contours." if downhill else ""
+        if grade > top:
+            out.append({"element": e.id, "kind": "grade",
+                        "text": f"{e.id}: the ground along it falls {grade:.1f} %, more than {top:g} % (HC 4.11: drop "
+                                f"structures needed; HC 4.7: 0.5-2 % preferred, up to 6 % with check dams)." + how})
+        elif grade > hi:
+            out.append({"element": e.id, "kind": "grade",
+                        "text": f"{e.id}: the ground along it falls {grade:.1f} %; HC 4.7 prefers 0.5-{hi:g} % "
+                                f"(faster water erodes and soaks in less; add check dams every 10-15 m)." + how})
+        elif grade < lo:
+            out.append({"element": e.id, "kind": "grade",
+                        "text": f"{e.id}: the ground along it is almost level ({grade:.2f} %); it is carved to fall "
+                                f"at least {lo:g} % (HC 4.7: below 0.5 % water stands), so it gets deeper towards its end."})
+    return out
 
 
 def _bridge_checks(project: Project, elements: List[NbSElement]) -> List[Dict[str, str]]:

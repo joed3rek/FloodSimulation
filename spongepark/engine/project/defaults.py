@@ -216,6 +216,15 @@ _DEFAULTS: List[Tuple[str, object, str, Source, str]] = [
     ("nbs.bioswale.min_longitudinal_slope_pct", 0.5, "%", D,
      "Flattest swale (HC 4.7 p.6, 12: 0.5-2 % preferred, below 0.5 % water stagnates; HC 4.11 also 0.5 %)."),
     ("nbs.bioswale.max_longitudinal_slope_pct", 4.0, "%", D, "Steepest swale without drop structures (HC-4.11)."),
+    ("layout.swale_grade_pct", 1.0, "%", D,
+     "Generated bioswales run across the slope, along the contours, with their bed falling at this grade "
+     "(HC 4.7 p.6, 12: 0.5-2 % preferred)."),
+    ("layout.swale_grade_preferred_max_pct", 2.0, "%", D,
+     "Bioswales steeper than this get a warning to add check dams or turn them across the slope (HC 4.7 p.6, 12: "
+     "0.5-2 % preferred)."),
+    ("layout.swale_max_depth_m", 0.6, "m", D,
+     "Deepest a generated bioswale is cut below the ground anywhere along it (HC 4.7 p.9: total depth rarely "
+     "exceeds 0.6 m)."),
     ("nbs.retention_pond.max_ground_slope_pct", 10.0, "%", D, "Retention ponds only where the ground is flatter."),
     ("nbs.retention_pond.min_contributing_area_m2", 400.0, "m2", D, "Smallest drainage area worth a retention pond."),
     ("nbs.retention_pond.max_area_m2", 600.0, "m2", D, "Largest single retention pond."),

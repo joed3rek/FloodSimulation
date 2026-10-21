@@ -113,6 +113,7 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
     g = DEM(z, cell, dem.origin, dem.crs, dem.nodata)
     X, Y = g.cell_centres()
     mask = valid & contains_xy(site.boundary, X, Y)
+    _close_exits(project, g, mask, X, Y)
 
     # roughness and infiltration per cell
     imperv_kinds = set(P.value("terrain.impervious_context_kinds"))
@@ -152,6 +153,26 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
     return Inputs2D(g, mask, n, f, infil_fn, infil_note, infil_params, els, storm.intensity_mm_hr.astype(float),
                     storm.dt_min * 60, storm.duration_hr * 3600 + float(P.value("sim2d.extra_time_hr")) * 3600,
                     float(P.value("sim2d.courant")), float(P.value("sim2d.max_time_step_s")))
+
+
+def _close_exits(project: Project, g: DEM, mask: np.ndarray, X: np.ndarray, Y: np.ndarray) -> None:
+    """Exits with no way out (Site setup > Outfalls): the park's edge cells whose ground drains to such an exit
+    are raised by its edge height (the wall or kerb), so water ponds against the edge and spills over it only
+    above that height, as in SWMM. Changes ``g.z`` in place."""
+    from scipy import ndimage
+
+    from ..site import outfalls
+
+    closed = {e["id"]: float(e["edge_height_m"]) for e in outfalls.status(project)["exits"]
+              if e["state"] == "closed" and e["confirmed"]}
+    if not closed or not project.exists("site/subcatchments.geojson"):
+        return
+    ring = mask & ~ndimage.binary_erosion(mask, structure=np.ones((3, 3)), border_value=0)
+    for f in project.read_geojson("site/subcatchments.geojson")["features"]:
+        h = closed.get(f["properties"].get("outlet"))
+        if h:
+            edge = ring & contains_xy(shape(f["geometry"]).buffer(g.cell_size), X, Y)
+            g.z[edge] += h
 
 
 def _engine(P) -> str:
