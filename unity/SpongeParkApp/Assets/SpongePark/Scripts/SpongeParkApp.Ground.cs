@@ -1,4 +1,4 @@
-// Site setup (a dialog from the Site tab, pages Rainfall, Ground and Ponds): the design rainfall and the ground
+// Site setup (a dialog from the Site tab, pages Rainfall, Ground, Ponds, Wells and Outfalls): the design rainfall and the ground
 // questionnaire, before the flood simulation.
 // Rainfall: the IMD 24-hour design depths (a preset kept with its source) become the design storms.
 // Ground: soil type, what covers the open park and in what condition, and the footpaths; the engine looks up
@@ -145,6 +145,7 @@ namespace SpongePark
             JToken wells = null;
             yield return api.Get(api.P("/site/wells"), x => wells = x);
             FillWells(wells);
+            yield return LoadOutfalls();
         }
 
         // ------------------------------------------------------------ existing recharge wells

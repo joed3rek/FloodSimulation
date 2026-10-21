@@ -512,6 +512,32 @@ def ponds_put(pid: str, answers: List[Dict[str, Any]] = Body(..., embed=True)) -
     return out
 
 
+@app.get("/projects/{pid}/site/outfalls")
+def outfalls_get(pid: str) -> Dict[str, Any]:
+    """Where water leaves the park: every exit the drainage found, with the designer's answer (open, or closed
+    with the edge height) and whether all are confirmed."""
+    from spongepark.engine.site import outfalls
+
+    return outfalls.status(_project(pid))
+
+
+@app.put("/projects/{pid}/site/outfalls")
+def outfalls_put(pid: str, answers: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """``all``: one answer for every exit (e.g. no outfall anywhere: closed, with the wall height); ``exits``:
+    [{id, state: open|closed, edge_height_m}]. Closed exits hold water against the edge in every scenario."""
+    from spongepark.engine.site import outfalls
+
+    p = _project(pid)
+    with _locks[pid]:
+        try:
+            out = outfalls.apply(p, answers)
+            _analysis_stale(p)
+        except ValueError as ex:
+            raise HTTPException(400, str(ex))
+        p.save()
+    return out
+
+
 @app.get("/projects/{pid}/site/wells")
 def wells_get(pid: str) -> Dict[str, Any]:
     """The existing recharge wells on the survey and whether each is in the flood model (needs its depth,

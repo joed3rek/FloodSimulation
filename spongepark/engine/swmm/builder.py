@@ -179,7 +179,9 @@ def build_spec(
                 raise BuildError(f"subcatchment {sid} drains to both {assigned[sid]} and {e.id}.")
             assigned[sid] = e.id
 
-    footprints = unary_union([e.footprint() for e in elements]) if elements else None
+    # an edge pond is water standing on the existing ground: the ground stays as it is under it
+    on_ground = [e for e in elements if e.type != "edge_pond"]
+    footprints = unary_union([e.footprint() for e in on_ground]) if on_ground else None
     subs: List[SubcatchSpec] = []
 
     def surface(s: Subcatchment, geom: BaseGeometry, kind: str) -> Optional[SubcatchSpec]:
@@ -262,12 +264,13 @@ def build_spec(
             emap[e.id] = ElementSwmm(e.id, e.type, True, f"LID_{eid}", area_m2=float(fp.area))
         else:
             node = f"ST_{eid}"
-            subs.append(SubcatchSpec(
-                id=f"DR_{eid}", geom=fp, area_m2=float(fp.area), outlet=node,
-                pct_imperv=100.0, width_m=float(np.sqrt(fp.area)), slope_pct=0.5, soil_zone=zone_id,
-                n_imperv=0.011, n_perv=0.011, dstore_imperv_mm=0.0, dstore_perv_mm=0.0, pct_zero=100.0,
-                canopy=cov, kind="direct", element_id=e.id,
-            ))
+            if e.type != "edge_pond":   # rain on an edge pond falls on its subcatchments' ground
+                subs.append(SubcatchSpec(
+                    id=f"DR_{eid}", geom=fp, area_m2=float(fp.area), outlet=node,
+                    pct_imperv=100.0, width_m=float(np.sqrt(fp.area)), slope_pct=0.5, soil_zone=zone_id,
+                    n_imperv=0.011, n_perv=0.011, dstore_imperv_mm=0.0, dstore_perv_mm=0.0, pct_zero=100.0,
+                    canopy=cov, kind="direct", element_id=e.id,
+                ))
             em = ElementSwmm(e.id, e.type, False, f"DR_{eid}", node=node, pool_depth_m=e.pool_depth_m,
                              crest_depth_m=e.crest_depth_m, area_m2=float(fp.area))
             for target, role in ((e.outflow_to, "controlled"), (e.overflow_to, "overflow")):

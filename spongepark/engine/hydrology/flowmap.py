@@ -216,8 +216,10 @@ def load(project: Project, rebuild: bool = False, scenario: Optional[str] = None
 
 
 def storm_runoff_mm(project: Project, scenario: Optional[str] = None) -> Dict[str, float]:
-    """Runoff depth over the site per return period, from the scenario's SWMM runs (else the baseline's):
-    what leaves the site or floods, as a share of the rain, times the storm depth. Empty before SWMM has run."""
+    """Runoff depth over the site per return period, from the scenario's SWMM runs (else the baseline's): the
+    runoff the ground surfaces produce (rain less interception, infiltration into them, water held on them and
+    evaporation from them), whether it then leaves the park or reaches an edge pond, a well or an NbS element,
+    as a share of the rain, times the storm depth. Empty before SWMM has run."""
     for s in ([scenario] if scenario and scenario != "baseline" else []) + ["baseline"]:
         rel = f"scenarios/{s}/results/summary.json"
         if project.exists(rel):
@@ -226,7 +228,11 @@ def storm_runoff_mm(project: Project, scenario: Optional[str] = None) -> Dict[st
                 wb = r.get("water_balance", {})
                 rain = float(wb.get("rainfall_total_m3") or 0.0)
                 if rain > 0:
-                    c = (float(wb.get("outflow_total_m3", 0.0)) + float(wb.get("flooding_m3", 0.0))) / rain
+                    evap_surfaces = float(wb.get("evaporation_m3") or 0.0) - sum(
+                        float(e.get("evaporation_m3") or 0.0) for e in r.get("elements", []))
+                    runoff = rain - sum(float(wb.get(k) or 0.0) for k in (
+                        "interception_m3", "infiltration_surfaces_m3", "storage_change_surface_m3")) - evap_surfaces
+                    c = max(runoff, 0.0) / rain
                     out[str(rp)] = c * float(r["storm"]["depth_mm"])
             return out
     return {}
@@ -244,7 +250,15 @@ def fill(stage: List[List[float]], inflow_m3: float) -> Dict[str, Any]:
 
 
 def with_storms(project: Project, out: Dict[str, Any], scenario: Optional[str] = None) -> Dict[str, Any]:
-    """Add how full each hollow gets in each design storm (``storms`` on each hotspot, ``storm_summary``)."""
+    """Add how full each hollow gets in each design storm (``storms`` on each hotspot, ``storm_summary``), and
+    the designer's answer for each exit (Site setup > Outfalls: open, or closed with the edge height)."""
+    from ..site import outfalls
+
+    answered = {e["id"]: e for e in outfalls.status(project)["exits"]}
+    for ex in out.get("exits", []):
+        a = answered.get(ex.get("id"), {})
+        ex["state"] = a.get("state") if a.get("confirmed") else None
+        ex["edge_height_m"] = a.get("edge_height_m")
     runoff = storm_runoff_mm(project, scenario)
     summary = {}
     for rp, q in sorted(runoff.items(), key=lambda kv: int(kv[0])):

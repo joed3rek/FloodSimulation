@@ -62,6 +62,7 @@ class NbSElement(BaseModel):
     vegetation_volume_fraction: Optional[float] = None
     storage_layer_depth_m: Optional[float] = None
     underdrain_coefficient: Optional[float] = None  # SWMM drain coefficient (mm/h per mm^0.5); None = no underdrain
+    stage_curve: Optional[List[List[float]]] = None  # [[depth m, area m2]] from the ground (edge ponds), else from banks
     well_diameter_m: Optional[float] = None
     well_depth_m: Optional[float] = None
     dam_height_m: Optional[float] = None
@@ -134,6 +135,9 @@ class NbSElement(BaseModel):
         fp = self.footprint()
         top = self.crest_depth_m
         ymax = top + (self.freeboard_m or 0.0)
+        if self.stage_curve:   # measured on the ground; above the last point the area stays the same
+            pts = [(float(h), float(a)) for h, a in self.stage_curve]
+            return pts + ([(ymax, pts[-1][1])] if ymax > pts[-1][0] + 1e-9 else [])
         if self.type == "recharge_well":
             a = fp.area
             return [(0.0, a), (ymax, a)]

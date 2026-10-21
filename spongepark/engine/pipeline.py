@@ -77,12 +77,17 @@ def load_hyetographs(project: Project) -> Dict[int, Hyetograph]:
 # --------------------------------------------------------------------------- option
 def prepare_option(project: Project, option_id: str, site: Optional[Site] = None) -> tuple:
     """Resolve elements against parameters and soils, run guideline checks, write them back."""
-    from .site import wells
+    from .site import outfalls, wells
 
     site = site or Site.load(project, option_id)
     # the existing recharge wells (survey, answered in Site setup) are in every scenario, the existing site too
     existing = wells.resolved(project, site)
+    # exits with no way out (Site setup > Outfalls): water ponds against the edge, then spills to the road
+    soil = site.soil_lookup(str(project.parameters.value("swmm.infiltration_method")).upper())
+    edges = [resolve_element(e, project.parameters, soil) for e in outfalls.edge_elements(project, site)]
     if option_id == BASELINE:
+        outfalls.wire(existing, edges)
+        existing += edges
         _contributing_areas(existing, site)
         return existing, []
     if not has_elements(project, option_id):
@@ -99,6 +104,8 @@ def prepare_option(project: Project, option_id: str, site: Optional[Site] = None
     findings = check_elements(elements)
     save_elements(project, option_id, elements)
     existing = [e for e in existing if e.id not in {x.id for x in elements}]
+    outfalls.wire(elements + existing, edges)
+    existing += edges
     _contributing_areas(existing, site)   # nothing is routed to or from them
     elements += existing
     project.write_json(f"scenarios/{option_id}/guideline_findings.json", [f.model_dump() for f in findings])

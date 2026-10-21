@@ -167,11 +167,13 @@ namespace SpongePark
                 b.AddToClassList("layer-row");
                 var sw = new VisualElement { pickingMode = PickingMode.Ignore };
                 sw.AddToClassList("layer-swatch");
-                sw.style.backgroundColor = new Color(0.76f, 0.29f, 0.23f);
+                bool held = (string)e["state"] == "closed";
+                sw.style.backgroundColor = held ? new Color(0.85f, 0.6f, 0.17f) : new Color(0.76f, 0.29f, 0.23f);
                 b.Add(sw);
                 var w = new VisualElement { pickingMode = PickingMode.Ignore };
                 w.AddToClassList("layer-words");
-                w.Add(Text($"{e["id"]} · water leaves the park", "layer-title"));
+                w.Add(Text(held ? $"{e["id"]} · no way out: held by a {(float)e["edge_height_m"]:0.##} m edge"
+                                : $"{e["id"]} · water leaves the park" + (e["state"] == null || e["state"].Type == JTokenType.Null ? " (not confirmed)" : ""), "layer-title"));
                 w.Add(Text($"{(float)e["draining_area_m2"]:0} m² of the park drains here", "layer-source"));
                 b.Add(w);
                 hotspotList.Add(b);

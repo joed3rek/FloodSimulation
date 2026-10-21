@@ -44,6 +44,12 @@
       "description": "Low gabion check dam (0.3-0.6 m) or baffle inside a storm water drain, creating a pool upstream with overflow notch; usually paired with separators, NSBBs or floating wetlands.",
       "modelling_note": "Hydrology: small storage pool behind the dam with a notch weir. Separators, NSBBs and floating wetlands treat water quality and are not credited with volume reduction."
     },
+    "edge_pond": {
+      "label": "Water held at the park edge (no outfall)", "chapter": null, "functions": ["detention"],
+      "scales": ["park"], "swmm": "storage", "geometry": ["Polygon"],
+      "description": "Where the ground drains to a wall or kerb with no way out (Site setup > Outfalls), water ponds against the edge and spills over it to the road. Part of the existing site, not a design element.",
+      "modelling_note": "SWMM: a storage node whose stage-area curve is the ground draining to the exit up to the edge height, with an overflow weir at the edge height into the outfall. No seepage: the ground under it already infiltrates in its subcatchments."
+    },
     "green_bridge": {
       "label": "Green bridge (check dam across a swale)", "chapter": null, "functions": ["detention", "infiltration", "access"],
       "scales": ["park"], "swmm": "storage", "geometry": ["LineString"],

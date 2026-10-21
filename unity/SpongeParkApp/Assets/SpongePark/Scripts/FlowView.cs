@@ -18,6 +18,7 @@ namespace SpongePark
         static readonly Color DeepWater = new Color32(0x1F, 0x4E, 0x79, 0xFF);
         static readonly Color Pool = new Color32(0x4A, 0x9C, 0xC9, 0xFF);
         static readonly Color Exit = new Color32(0xC1, 0x4B, 0x3A, 0xFF);
+        static readonly Color HeldExit = new Color32(0xD9, 0x9A, 0x2B, 0xFF);   // no way out: held against the edge
 
         public static FlowView Create(string name, Transform parent, int layer)
         {
@@ -91,8 +92,9 @@ namespace SpongePark
             {
                 if (e["z"] == null || e["z"].Type == JTokenType.Null) continue;
                 var c = frame.World((float)e["x"], (float)e["y"], (float)e["z"]);
-                m.Prism(c, 0.1f, 3f, 6, Exit);
-                m.RoundCrown(c + Vector3.up * 3.2f, 0.4f, Exit);
+                var col = (string)e["state"] == "closed" ? HeldExit : Exit;
+                m.Prism(c, 0.1f, 3f, 6, col);
+                m.RoundCrown(c + Vector3.up * 3.2f, 0.4f, col);
             }
             Add(Exits, m, visible);
         }
