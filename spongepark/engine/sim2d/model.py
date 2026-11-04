@@ -216,11 +216,12 @@ class Result2D:
 def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarray, rain_dt_s: float,
              duration_s: float, n_manning: np.ndarray, infil_mm_hr: np.ndarray,
              elements: Optional[Elements2D] = None, frame_every_s: float = 300.0, alpha: float = 0.7,
-             dt_max: float = 10.0, edge_drop_fraction: float = 0.01, infil_fn=None) -> Result2D:
+             dt_max: float = 10.0, edge_drop_fraction: float = 0.01, infil_fn=None, inlets=None) -> Result2D:
     """Run the 2D model. ``rain_mm_hr[i]`` applies from ``i * rain_dt_s``; depths start dry.
 
     ``infil_fn(t_s, rain_mm_hr, cum_rain_mm) -> mm/hr grid`` replaces the constant rates when given
-    (curve number or Horton, to match the SWMM infiltration method)."""
+    (curve number or Horton, to match the SWMM infiltration method). ``inlets``: (row, col, area m2) cells where the
+    rain on an area outside the site arrives."""
     nr, nc = z.shape
     z = np.where(mask, z, 0.0).astype(np.float64)
     h = np.zeros((nr, nc))
@@ -237,7 +238,7 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
     cell_area = cell * cell
     el_cells = np.array([float(((el == k) & mask).sum()) for k in range(len(elements.ids))])
     t = 0.0
-    rain_tot = infil_tot = el_inf_tot = out_tot = 0.0
+    rain_tot = infil_tot = el_inf_tot = out_tot = inlet_tot = 0.0
     frames, times = [h.astype(np.float32)], [0.0]
     hmax = np.zeros((nr, nc))
     next_frame = frame_every_s
@@ -258,6 +259,9 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
         out_tot += _limit_and_update(h, mask, qx, qy, dt, cell)
         inf, ein = _sources(h, mask, rain_m, f_rate, el, cap, store, el_rate, el_area, el_cells, dt, cell_area)
         rain_tot += rain_m * cell_area * mask.sum()
+        for r_in, c_in, area_in in inlets or ():
+            h[r_in, c_in] += rain_m * area_in / cell_area
+            inlet_tot += rain_m * area_in
         infil_tot += inf
         el_inf_tot += ein
         np.maximum(hmax, h, out=hmax)
@@ -268,11 +272,11 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
             next_frame += frame_every_s
     surface = float(h[mask].sum() * cell_area)
     stored = float(store.sum())
-    err = rain_tot - (infil_tot + el_inf_tot + out_tot + surface + stored)
+    err = rain_tot + inlet_tot - (infil_tot + el_inf_tot + out_tot + surface + stored)
     balance = {
-        "rainfall_m3": rain_tot, "infiltration_ground_m3": infil_tot, "infiltration_elements_m3": el_inf_tot,
+        "rainfall_m3": rain_tot, "inlet_m3": inlet_tot, "infiltration_ground_m3": infil_tot, "infiltration_elements_m3": el_inf_tot,
         "outflow_m3": out_tot, "surface_remaining_m3": surface, "element_storage_remaining_m3": stored,
-        "continuity_error_m3": err, "continuity_error_pct": 100 * err / rain_tot if rain_tot else 0.0,
+        "continuity_error_m3": err, "continuity_error_pct": 100 * err / (rain_tot + inlet_tot) if rain_tot + inlet_tot else 0.0,
     }
     return Result2D(np.array(times), np.stack(frames), hmax, balance,
                     {i: float(s) for i, s in zip(elements.ids, store)})

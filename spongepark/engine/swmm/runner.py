@@ -137,6 +137,10 @@ def run(spec: ModelSpec, inp_path: Path, sample_step_s: int = 60) -> RunResult:
             first[f"depth_{eid}_m"] = em.pool_depth_m
     res.timeseries = pd.concat([pd.DataFrame([first]), res.timeseries], ignore_index=True)
     ts = res.timeseries
+    for oid in res.peak_outfall_inflow_cms:   # SWMM's statistic stays 0 for an outfall fed directly by subcatchments
+        col = f"outfall_{oid}_cms"
+        if col in ts:
+            res.peak_outfall_inflow_cms[oid] = max(res.peak_outfall_inflow_cms[oid], float(ts[col].max()))
     t_s = ts["time_hr"].to_numpy() * 3600.0
     for col in ts.columns:
         if col.startswith(("controlled_", "overflow_")):

@@ -36,7 +36,9 @@ namespace SpongePark
             if (planting != null) Destroy(planting);
             if (payload == null) return;
             var kit = LowPolyKit.Kit;
-            var dressing = kit != null && ground != null && inPark != null ? new LowPolyDressing(frame, ground, inPark) : null;
+            // (a 3D model brings its own surfaces: nothing is planted on it)
+            bool plant = payload["planting"] == null || (bool)payload["planting"];
+            var dressing = plant && kit != null && ground != null && inPark != null ? new LowPolyDressing(frame, ground, inPark) : null;
             foreach (var L in payload["layers"])
             {
                 var name = (string)L["name"];
@@ -50,7 +52,8 @@ namespace SpongePark
                 float h = L["height_m"]?.Type == JTokenType.Float || L["height_m"]?.Type == JTokenType.Integer ? (float)L["height_m"] : 0;
                 float w = L["width_m"]?.Type == JTokenType.Float || L["width_m"]?.Type == JTokenType.Integer ? (float)L["width_m"] : 0.15f;
                 // surfaces lie just above the ground; more lift when heights are exaggerated
-                float lift = 0.03f + 0.02f * frame.Exaggeration;
+                bool model = kind == "model";   // a 3D model is the ground itself: nothing lies under it to clear
+                float lift = model ? 0 : 0.03f + 0.02f * frame.Exaggeration;
                 foreach (var f in L["features"])
                 {
                     var a = f["xyz"].Values<float>().ToArray();
@@ -60,9 +63,10 @@ namespace SpongePark
                     if (g == "mesh")
                     {
                         var vs = new List<Vector3>(a.Length / 3);
-                        for (int i = 0; i + 2 < a.Length; i += 3) vs.Add(frame.World(a[i], a[i + 1], a[i + 2]) + Vector3.up * lift);
+                        for (int i = 0; i + 2 < a.Length; i += 3) vs.Add(frame.World(a[i], a[i + 1], a[i + 2]) + Vector3.up * (model ? 0 : lift + 0.02f * frame.Exaggeration));   // clear of the ground's own triangles
                         var tri = f["tri"].Values<int>().ToArray();
-                        mesh.Surface(vs, tri, fc);
+                        if (f["smooth"] != null && (bool)f["smooth"]) mesh.SmoothSurface(vs, tri, fc);
+                        else mesh.Surface(vs, tri, fc);
                         dressing?.KeepClear(a, tri, f["water"] != null && (bool)f["water"]);
                     }
                     else if (g == "point")
@@ -86,7 +90,8 @@ namespace SpongePark
                         bool closed = f["closed"] != null && (bool)f["closed"];
                         if (kind == "building" || kind == "water") dressing?.KeepClear(a, null, false);
                         if (kind == "fence" || kind == "boundary") dressing?.Fence(a);
-                        if (f["on_ground"] != null && (bool)f["on_ground"]) mesh.Ribbon(pts, 0.12f, lift + 0.02f, new Color(0.6f, 0.58f, 0.52f));
+                        if (kind == "contours") mesh.Ribbon(pts, 0.1f, lift + 0.06f, col);
+                        else if (f["on_ground"] != null && (bool)f["on_ground"]) mesh.Ribbon(pts, 0.12f, lift + 0.02f, new Color(0.6f, 0.58f, 0.52f));
                         else AddLine(mesh, kind, pts, closed, h, w, fc, lift + 0.02f);
                     }
                 }
@@ -489,6 +494,25 @@ namespace SpongePark
                 nn.Normalize();
                 if (nn.y < 0) nn = -nn;
                 SmoothTri(a, b, d, nn, nn, nn, col, col, col);
+            }
+        }
+
+        /// The same triangles shaded smoothly across their shared corners: no heavier, and no facets.
+        public void SmoothSurface(List<Vector3> verts, int[] tris, Color col)
+        {
+            var normals = new Vector3[verts.Count];
+            for (int i = 0; i + 2 < tris.Length; i += 3)
+            {
+                var nn = Vector3.Cross(verts[tris[i + 1]] - verts[tris[i]], verts[tris[i + 2]] - verts[tris[i]]);
+                if (nn.y < 0) nn = -nn;
+                normals[tris[i]] += nn; normals[tris[i + 1]] += nn; normals[tris[i + 2]] += nn;
+            }
+            for (int i = 0; i < normals.Length; i++) normals[i] = normals[i].sqrMagnitude > 0 ? normals[i].normalized : Vector3.up;
+            for (int i = 0; i + 2 < tris.Length; i += 3)
+            {
+                int a = tris[i], b = tris[i + 1], d = tris[i + 2];
+                if (Vector3.Cross(verts[b] - verts[a], verts[d] - verts[a]).sqrMagnitude < 1e-12f) continue;
+                SmoothTri(verts[a], verts[b], verts[d], normals[a], normals[b], normals[d], col, col, col);
             }
         }
 

@@ -37,25 +37,73 @@ namespace SpongePark
         public IEnumerator Load(EngineClient api, SiteFrame frame, int rp, bool bundle)
         {
             Status = "loading terrain";
-            JToken terrain = null, comps = null, frames = null, retained = null;
+            JToken terrain = null, comps = null;
             string opt = Option == "baseline" ? null : Option;
             if (bundle)
             {
                 yield return api.LoadBundleFile(opt == null ? "terrain_existing.json" : $"terrain_{opt}.json", r => terrain = r);
                 if (opt != null) yield return api.LoadBundleFile($"components_{opt}.json", r => comps = r);
-                yield return api.LoadBundleFile($"frames_{Option}_rp{rp}.json", r => frames = r);
-                yield return api.LoadBundleFile($"retained_{Option}_rp{rp}.json", r => retained = r);
             }
             else
             {
                 yield return api.Get(api.P("/terrain" + (opt == null ? "" : "?option=" + opt)), r => terrain = r);
                 if (opt != null) yield return api.Get(api.P($"/options/{opt}/components"), r => comps = r);
+            }
+            if (terrain == null) { Status = "no terrain: " + api.LastError; yield break; }
+            Terrain.Build(HeightGrid.FromPayload(terrain), frame, comps);
+            yield return LoadStorm(api, frame, rp, bundle);
+        }
+
+        readonly System.Collections.Generic.Dictionary<int, float[]> peaks = new System.Collections.Generic.Dictionary<int, float[]>();
+        int peakCells;
+
+        /// Each storm's highest water (2D flood run), kept here so that changing the storm shows it at once.
+        public IEnumerator LoadPeaks(EngineClient api, SiteFrame frame, System.Collections.Generic.IEnumerable<int> rps)
+        {
+            peaks.Clear();
+            foreach (var rp in rps)
+            {
+                JToken t = null;
+                yield return api.Get(api.P($"/options/{Option}/sim2d/{rp}/peak"), r => t = r);
+                if (t == null) continue;
+                var f = DepthFrames.FromPayload(t);
+                var d = new float[f.Rows * f.Cols];
+                f.Sample(0, d);
+                if (peaks.Count == 0) Water.Build(f.Rows, f.Cols, f.Cell, f.Origin, Terrain, frame);
+                peakCells = d.Length;
+                peaks[rp] = d;
+            }
+            api.ClearError();   // a storm without a run is not an error
+        }
+
+        public void ClearPeaks()
+        {
+            if (peaks.Count > 0) Water.Show(new float[peakCells]);
+            peaks.Clear();
+        }
+
+        /// The highest water of storm rp, or none when it has no 2D run or the layer is off.
+        public void ShowPeak(int rp, bool on)
+        {
+            if (peaks.Count == 0) return;
+            Water.Show(on && peaks.TryGetValue(rp, out var d) ? d : new float[peakCells]);
+        }
+
+        /// This view's water for storm rp; the ground and everything else stay as they are.
+        public IEnumerator LoadStorm(EngineClient api, SiteFrame frame, int rp, bool bundle)
+        {
+            JToken frames = null, retained = null;
+            if (bundle)
+            {
+                yield return api.LoadBundleFile($"frames_{Option}_rp{rp}.json", r => frames = r);
+                yield return api.LoadBundleFile($"retained_{Option}_rp{rp}.json", r => retained = r);
+            }
+            else
+            {
                 yield return api.Get(api.P($"/options/{Option}/sim2d/{rp}/frames"), r => frames = r);
                 yield return api.Get(api.P($"/options/{Option}/retained/{rp}"), r => retained = r);
             }
-            if (terrain == null) { Status = "no terrain: " + api.LastError; yield break; }
             api.ClearError();   // storm frames and results are optional: none yet is not an error
-            Terrain.Build(HeightGrid.FromPayload(terrain), frame, comps);
             if (frames != null)
             {
                 Frames = DepthFrames.FromPayload(frames);

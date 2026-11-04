@@ -17,7 +17,6 @@ namespace SpongePark
         static readonly string[] ExitStates = { null, "open", "closed" };
         VisualElement outfallCard, outfallRows, outfallAll;
         Label outfallText;
-        Button outfallSave;
         DropdownField outfallAllState;
         TextField outfallAllHeight;
         class ExitRow { public string Id; public DropdownField State; public TextField Height; }
@@ -25,6 +24,7 @@ namespace SpongePark
 
         void BuildOutfalls(VisualElement page)
         {
+            BuildOpenings(page);
             outfallCard = new VisualElement();
             outfallCard.Add(Text("WHERE WATER LEAVES THE PARK", "eyebrow"));
             outfallText = Text("", "muted");
@@ -36,6 +36,9 @@ namespace SpongePark
             outfallAllState.AddToClassList("input");
             outfallAllState.AddToClassList("field-stack");
             outfallAllHeight = Field("Edge height (m)");
+            // the answer for every exit goes onto each exit's own row, which can then differ
+            outfallAllState.RegisterValueChangedCallback(_ => { if (outfallAllState.index > 0) foreach (var r in exitFields) r.State.index = outfallAllState.index; });
+            outfallAllHeight.RegisterValueChangedCallback(e => { foreach (var r in exitFields) r.Height.value = e.newValue; });
             outfallAllHeight.tooltip = "Height of the wall or kerb above the ground where the water reaches it";
             line.Add(outfallAllState);
             line.Add(outfallAllHeight);
@@ -44,8 +47,6 @@ namespace SpongePark
             outfallCard.Add(Text("Or exit by exit (largest first):", "field-label"));
             outfallRows = new VisualElement();
             outfallCard.Add(outfallRows);
-            outfallSave = Btn("Save the outfalls", () => StartCoroutine(Run(SaveOutfalls(), "Saving where water leaves the park")), "btn--wide");
-            outfallCard.Add(outfallSave);
             page.Add(outfallCard);
         }
 
@@ -55,6 +56,7 @@ namespace SpongePark
             yield return api.Get(api.P("/site/outfalls"), x => st = x);
             api.ClearError();   // a project analysed before outfalls existed simply has none to answer yet
             FillOutfalls(st);
+            yield return LoadOpenings();
         }
 
         void FillOutfalls(JToken st)
@@ -63,10 +65,11 @@ namespace SpongePark
             outfallRows.Clear();
             exitFields.Clear();
             int count = (int?)st?["count"] ?? 0;
-            foreach (var e in new VisualElement[] { outfallAll, outfallRows, outfallSave }) SpongePark.UI.Kit.Show(e, count > 0);
+            exitCount = count;
+            foreach (var e in new VisualElement[] { outfallAll, outfallRows }) SpongePark.UI.Kit.Show(e, count > 0);
             if (count == 0)
             {
-                outfallText.text = "Analyse the site first: the points where the ground drains to the park edge come from it.";
+                outfallText.text = "Nothing to answer yet: the points where the ground drains to the park edge come from Analyse site. Answer them here afterwards.";
                 return;
             }
             int closed = (int?)st["closed"] ?? 0;
@@ -103,19 +106,21 @@ namespace SpongePark
             }
         }
 
-        IEnumerator SaveOutfalls()
+        JObject OutfallBody()
         {
             var body = new JObject();
             if (outfallAllState.index > 0)
                 body["all"] = new JObject { ["state"] = ExitStates[outfallAllState.index], ["edge_height_m"] = Num(outfallAllHeight) };
             body["exits"] = new JArray(exitFields.Where(r => r.State.index > 0)
                 .Select(r => new JObject { ["id"] = r.Id, ["state"] = ExitStates[r.State.index], ["edge_height_m"] = Num(r.Height) }));
+            return body;
+        }
+
+        IEnumerator SaveOutfalls()
+        {
             JToken r2 = null;
-            yield return api.Send("PUT", api.P("/site/outfalls"), body, x => r2 = x);
-            if (r2 == null) yield break;
-            siteSetup.Close();   // saved: the dialog closes; the result shows as a toast
-            FillOutfalls(r2);
-            status = $"Outfalls saved: {(int)r2["closed"]} of {(int)r2["count"]} exits have no way out; water ponds there and spills to the road above the edge. Analyse site again to see it.";
+            yield return api.Send("PUT", api.P("/site/outfalls"), OutfallBody(), x => r2 = x);
+            if (r2 != null) FillOutfalls(r2);
         }
     }
 }

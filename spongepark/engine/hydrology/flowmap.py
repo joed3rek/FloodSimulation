@@ -14,9 +14,14 @@ Written to ``site/flow_analysis.json``:
   water fills to), largest first, and the exits where flow leaves the surveyed park.
 
 The depressions are what the ground can hold. How full each one gets depends on the storm: once SWMM has
-run the storms (Analyse site), ``storms`` gives, per return period, each hollow filled with the runoff from
-the ground that drains to it (draining area x that storm's SWMM runoff depth), up to its brim. Upstream
-hollows are not subtracted, so a hollow fed through another one may be shown fuller than it would be.
+run the storms (Analyse site), ``storms`` gives, per return period, each hollow filled with the runoff from its
+own ground (draining area less the hollows upstream, x that storm's SWMM runoff depth) and what spills from the
+hollows upstream, up to its brim.
+
+Per storm, all from SWMM: the peak flow at each exit; a closed exit's water held against the edge
+(``exits[].held``: SWMM's peak depth in its edge pond, spread over the ground it reaches) and what goes over the
+edge; and the peak runoff per m2 of each exit's catchment. A flow line's flow is that rate x the area draining to
+it: the catchment's peak shared out by area, so an estimate along the line and SWMM's figure at the exit.
 """
 
 from __future__ import annotations
@@ -33,7 +38,7 @@ from . import flow as fl
 log = logging.getLogger(__name__)
 
 REL = "site/flow_analysis.json"
-VERSION = 3   # 3: stage-volume per hollow and per-storm filling
+VERSION = 4   # 3: stage-volume per hollow and per-storm filling; 4: where each hollow spills and each line ends
 STAGE_STEPS = 12
 
 
@@ -42,6 +47,21 @@ def _ensure_flow(project: Project) -> None:
         from .delineate import delineate
 
         delineate(project)
+
+
+def _downstream(dirs: np.ndarray, mask: np.ndarray, r: int, c: int, labels: Optional[np.ndarray] = None, own: int = 0):
+    """Follow the flow from a cell: (the other hollow it reaches or 0, the last cell before it stops)."""
+    for _ in range(mask.size):
+        k = dirs[r, c]
+        if k < 0:
+            break
+        r2, c2 = r + fl.D8[k][0], c + fl.D8[k][1]
+        if not (0 <= r2 < mask.shape[0] and 0 <= c2 < mask.shape[1] and mask[r2, c2]):
+            break
+        r, c = r2, c2
+        if labels is not None and labels[r, c] not in (0, own):
+            return int(labels[r, c]), (r, c)
+    return 0, (r, c)
 
 
 def rel_for(scenario: Optional[str]) -> str:
@@ -107,9 +127,11 @@ def analyse(project: Project, min_line_area_m2: float = 40.0, arrow_spacing_m: f
         rr = np.clip(((acc_r.origin[1] - xy[:, 1]) / cell).astype(int), 0, mask.shape[0] - 1)
         cc = np.clip(((xy[:, 0] - acc_r.origin[0]) / cell).astype(int), 0, mask.shape[1] - 1)
         zz = np.nan_to_num(z[rr, cc], nan=float(np.nanmin(z)))
+        most = int(np.argmax(acc[rr, cc]))
         flow_lines.append({"xyz": np.round(np.c_[xy, zz], 3).ravel().tolist(),
-                           "area_m2": np.round(acc[rr, cc], 1).tolist()})
+                           "area_m2": np.round(acc[rr, cc], 1).tolist(), "_seed": (int(rr[most]), int(cc[most]))})
     flow_lines.sort(key=lambda f: -max(f["area_m2"]))
+    line_seeds = [f.pop("_seed") for f in flow_lines]
 
     # ---- arrows: downhill on the ground smoothed over about a metre
     zs = ndimage.gaussian_filter(np.where(mask, z, np.nanmean(z)), sigma=max(1.0, 1.0 / cell))
@@ -145,7 +167,13 @@ def analyse(project: Project, min_line_area_m2: float = 40.0, arrow_spacing_m: f
         poly = unary_union(polys.get(k, [])).simplify(cell * 0.3)
         level = float(np.nanmax(np.where(m, filled, np.nan)))
         outline = poly if poly.geom_type == "Polygon" else max(getattr(poly, "geoms", [poly]), key=lambda g: g.area)
+        # for the eye: rounded off the grid's steps (the volumes above come from the cells)
+        round_off = outline.buffer(cell, quad_segs=3).buffer(-2 * cell, quad_segs=3).buffer(cell, quad_segs=3)
+        if round_off.geom_type == "Polygon" and not round_off.is_empty:
+            outline = round_off.simplify(cell * 0.05)
         catch = float(np.nanmax(np.where(m, acc, np.nan)))   # all that drains in leaves through one cell of the hollow
+        out_r, out_c = np.unravel_index(np.argmax(np.where(m, acc, -1.0)), m.shape)
+        into, last = _downstream(dirs, mask, int(out_r), int(out_c), lab, k)
         # stage-volume: water h above the deepest point covers the cells deeper than (deepest - h)
         d = depth[m]
         dmax = float(d.max())
@@ -157,6 +185,7 @@ def analyse(project: Project, min_line_area_m2: float = 40.0, arrow_spacing_m: f
                     "max_depth_m": round(float(depth[m].max()), 3),
                     "volume_m3": round(float(depth[m].sum() * cell * cell), 2),
                     "water_level_m": round(level, 3), "draining_area_m2": round(catch, 1), "stage": stage,
+                    "_label": k, "_into": into, "_last": last,
                     "x": round(float(X[r, c]), 2), "y": round(float(Y[r, c]), 2), "z": round(float(z[r, c]), 3),
                     "outline": np.round(np.asarray(outline.exterior.coords), 2).ravel().tolist()})
     # in a carved scenario, water held in an NbS element is storage, not a flooding hotspot
@@ -191,6 +220,18 @@ def analyse(project: Project, min_line_area_m2: float = 40.0, arrow_spacing_m: f
             e["draining_area_m2"] = round(float(win.max()) if win.size else 0.0, 1)
     exits.sort(key=lambda e: -e["draining_area_m2"])
 
+    def exit_at(cell_rc) -> Optional[str]:
+        x, y = float(X[cell_rc]), float(Y[cell_rc])
+        return min(exits, key=lambda e: (e["x"] - x) ** 2 + (e["y"] - y) ** 2)["id"] if exits else None
+
+    id_of = {h["_label"]: h["id"] for h in hot}
+    for h in hot:
+        h["spills_to"] = id_of.get(h.pop("_into"))
+        h["exit"] = exit_at(h.pop("_last"))
+        del h["_label"]
+    for f, seed in zip(flow_lines, line_seeds):
+        f["exit"] = exit_at(_downstream(dirs, mask, *seed)[1])
+
     out = {"version": VERSION, "cell_m": cell, "min_line_area_m2": thr,
            "flow_lines": flow_lines, "arrows": arrows, "hotspots": hot, "exits": exits,
            "scenario": scenario or "baseline",
@@ -201,8 +242,8 @@ def analyse(project: Project, min_line_area_m2: float = 40.0, arrow_spacing_m: f
                        "exits": len(exits)},
            "notes": ["From the ground model alone: where water runs and where it collects. How deep and for "
                      "how long comes from the storm simulation, which needs rainfall and infiltration.",
-                     "Water leaves wherever flow reaches the edge of the surveyed park; walls and gates are "
-                     "not modelled yet."]}
+                     "Water reaches the edge of the surveyed park at the exits; Site setup says whether it can "
+                     "leave there or is held by a wall or kerb."]}
     project.write_json(rel_for(scenario), out)
     project.history.log("flow_analysis", hotspots=len(hot), exits=len(exits))
     return with_storms(project, out, scenario)
@@ -238,6 +279,15 @@ def storm_runoff_mm(project: Project, scenario: Optional[str] = None) -> Dict[st
     return {}
 
 
+def _storm_results(project: Project, scenario: Optional[str] = None) -> Dict[str, Any]:
+    """The SWMM results of the scenario, else the baseline's, with the elements they ran with."""
+    for s in ([scenario] if scenario and scenario != "baseline" else []) + ["baseline"]:
+        rel = f"scenarios/{s}/results/summary.json"
+        if project.exists(rel):
+            return project.read_json(rel)
+    return {}
+
+
 def fill(stage: List[List[float]], inflow_m3: float) -> Dict[str, Any]:
     """A hollow (stage: [height above its deepest point, volume, wet area]) filled with inflow_m3."""
     h, v, a = (np.array([s[i] for s in stage], float) for i in range(3))
@@ -247,6 +297,80 @@ def fill(stage: List[List[float]], inflow_m3: float) -> Dict[str, Any]:
     depth = float(np.interp(held, v, h))
     return {"volume_m3": round(held, 2), "max_depth_m": round(depth, 3), "area_m2": round(float(np.interp(held, v, a)), 1),
             "full": inflow_m3 >= float(v[-1]), "spill_m3": round(max(0.0, inflow_m3 - held), 1)}
+
+
+def route_hollows(hollows: List[Dict[str, Any]], runoff_mm: float) -> Dict[str, Dict[str, Any]]:
+    """Each hollow filled, upstream first, with the runoff from its own ground and the spill of the hollows above
+    it. The draining area of a hollow includes theirs, so it is taken off: no water is counted twice."""
+    feeders: Dict[str, List[Dict[str, Any]]] = {}
+    for h in hollows:
+        if h.get("spills_to"):
+            feeders.setdefault(h["spills_to"], []).append(h)
+    filled: Dict[str, Dict[str, Any]] = {}
+    for h in sorted(hollows, key=lambda x: x["draining_area_m2"]):   # area only grows downstream
+        ups = feeders.get(h["id"], [])
+        own = max(h["draining_area_m2"] - sum(u["draining_area_m2"] for u in ups), 0.0)
+        inflow = own * runoff_mm / 1000.0 + sum(filled[u["id"]]["spill_m3"] for u in ups if u["id"] in filled)
+        filled[h["id"]] = fill(h["stage"], inflow)
+    return filled
+
+
+def _held_at_exit(ex: Dict[str, Any], results: Dict[str, Any], dem, subs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """A closed exit: what SWMM's edge pond held in each storm. ``needs_analysis`` when the results are not from
+    this answer (the edge was answered or changed after the last Analyse site)."""
+    from rasterio.features import shapes
+    from rasterio.transform import from_origin
+    from shapely import contains_xy
+    from shapely.geometry import shape
+    from shapely.ops import unary_union
+
+    from ..site.outfalls import exit_cell, held_cells
+
+    eid = "EDGE_" + ex["id"].split("_", 1)[-1]
+    height = float(ex["edge_height_m"])
+    ran = next((e for e in results.get("elements", []) if e.get("id") == eid), None)
+    catch = [shape(f["geometry"]) for f in subs if f["properties"].get("outlet") == ex["id"]]
+    if ran is None or not catch or abs(float(ran.get("max_ponding_depth_m") or 0.0) - height) > 0.001:
+        return {"needs_analysis": True, "storms": {}}
+    X, Y = dem.cell_centres()
+    cell = dem.cell_size
+    inside = contains_xy(unary_union(catch), X, Y) & (dem.z != dem.nodata)
+    z = np.where(inside, dem.z, np.nan)
+    inv = float(ex["z"])
+    r, c = exit_cell(dem, ex["x"], ex["y"])
+    t = from_origin(dem.origin[0], dem.origin[1], cell, cell)
+    storms = {}
+    for rp, res in results.get("return_periods", {}).items():
+        row = next((e for e in res.get("elements", []) if e.get("id") == eid), None)
+        if row is None:
+            continue
+        d = float(row.get("max_depth_m") or 0.0)
+        wet = held_cells(inside, z, inv + d, r, c) if d > 0 else np.zeros_like(inside)
+        s = {"max_depth_m": round(d, 3), "water_level_m": round(inv + d, 3),
+             "area_m2": round(float(wet.sum() * cell * cell), 1),
+             "volume_m3": round(float(np.nansum(np.where(wet, inv + d - z, 0.0)) * cell * cell), 1),
+             "full": d >= height - 0.001, "over_edge_m3": round(float(row.get("overflow_m3") or 0.0), 1)}
+        if wet.any():
+            polys = [shape(g) for g, v in shapes(wet.astype("int32"), mask=wet, transform=t)]
+            u = unary_union(polys).buffer(cell * 0.5, quad_segs=3).buffer(-cell * 0.5, quad_segs=3).simplify(cell * 0.3)
+            big = max(getattr(u, "geoms", [u]), key=lambda g: g.area)
+            s["outline"] = np.round(np.asarray(big.exterior.coords), 2).ravel().tolist()
+        storms[rp] = s
+    return {"needs_analysis": False, "storms": storms}
+
+
+def _exit_rates(subs: List[Dict[str, Any]], peaks: Dict[str, float]) -> Dict[str, Any]:
+    """Each exit's catchment: its peak runoff (m3/s) and that per m2, from SWMM's peak for each subcatchment."""
+    from shapely.geometry import shape
+
+    area: Dict[str, float] = {}
+    peak: Dict[str, float] = {}
+    for sc in subs:
+        sid, o = sc["properties"].get("id"), sc["properties"].get("outlet")
+        if sid in peaks:
+            area[o] = area.get(o, 0.0) + float(shape(sc["geometry"]).area)
+            peak[o] = peak.get(o, 0.0) + float(peaks[sid])
+    return {"peak": peak, "per_m2": {o: peak[o] / area[o] for o in peak if area[o] > 0}}
 
 
 def with_storms(project: Project, out: Dict[str, Any], scenario: Optional[str] = None) -> Dict[str, Any]:
@@ -259,14 +383,22 @@ def with_storms(project: Project, out: Dict[str, Any], scenario: Optional[str] =
         a = answered.get(ex.get("id"), {})
         ex["state"] = a.get("state") if a.get("confirmed") else None
         ex["edge_height_m"] = a.get("edge_height_m")
+    results = _storm_results(project, scenario)
+    per_rp = results.get("return_periods", {})
+    subs = project.read_geojson("site/subcatchments.geojson")["features"] if project.exists("site/subcatchments.geojson") else []
+    closed = [e for e in out.get("exits", []) if e["state"] == "closed" and e.get("z") is not None]
+    if closed and per_rp:
+        dem = read_geotiff(project.path("terrain/existing.tif"))
+        for ex in closed:
+            ex["held"] = _held_at_exit(ex, results, dem, subs)
     runoff = storm_runoff_mm(project, scenario)
+    hollows = [h for h in out.get("hotspots", []) if "stage" in h]
     summary = {}
     for rp, q in sorted(runoff.items(), key=lambda kv: int(kv[0])):
         tot, deepest, wet, full, spill = 0.0, 0.0, 0, 0, 0.0
-        for hs in out.get("hotspots", []):
-            if "stage" not in hs:
-                continue
-            f = fill(hs["stage"], hs["draining_area_m2"] * q / 1000.0)
+        filled = route_hollows(hollows, q)
+        for hs in hollows:
+            f = filled[hs["id"]]
             dmax = hs["stage"][-1][0]
             f["water_level_m"] = round(hs["water_level_m"] - dmax + f["max_depth_m"], 3)
             hs.setdefault("storms", {})[rp] = f
@@ -275,8 +407,34 @@ def with_storms(project: Project, out: Dict[str, Any], scenario: Optional[str] =
                 deepest = max(deepest, f["max_depth_m"])
                 wet += 1
                 full += f["full"]
-                spill += f["spill_m3"]
+                if not hs.get("spills_to"):     # otherwise the rest runs on into the next hollow
+                    spill += f["spill_m3"]
+        r = per_rp.get(rp, {})
+        rates = _exit_rates(subs, r.get("subcatchment_peak_cms") or {})
+        for ex in out.get("exits", []):
+            ex.setdefault("peak_cms", {})[rp] = round(sum(float(v) for k, v in (r.get("peak_outfall_inflow_cms") or {}).items()
+                                                          if k == ex["id"] or k.startswith(ex["id"] + "__")), 4)   # __: over its edge
+        held = [e["held"]["storms"][rp] for e in closed if (e.get("held") or {}).get("storms", {}).get(rp)]
+        wb = r.get("water_balance", {})
         summary[rp] = {"runoff_mm": round(q, 1), "hotspots": wet, "full": full, "spill_m3": round(spill, 1),
-                       "ponding_volume_m3": round(tot, 2), "deepest_m": round(deepest, 3)}
+                       "ponding_volume_m3": round(tot, 2), "deepest_m": round(deepest, 3),
+                       "rain_mm": round(float(r.get("storm", {}).get("depth_mm", 0.0)), 1),
+                       "runoff_peak_cms": round(sum(rates["peak"].values()), 3) if rates["peak"] else None,
+                       "line_cms_per_m2": rates["per_m2"] or None,
+                       "left_m3": round(float(wb.get("outflow_total_m3") or 0.0), 1),
+                       "held_m3": round(sum(h["volume_m3"] for h in held), 1),
+                       "held_deepest_m": round(max((h["max_depth_m"] for h in held), default=0.0), 3),
+                       "over_edge_m3": round(sum(h["over_edge_m3"] for h in held), 1)}
+        for s in ([scenario] if scenario and scenario != "baseline" else []) + ["baseline"]:   # the 2D flood run
+            rel = f"scenarios/{s}/sim2d/rp{rp}_summary.json"
+            if project.exists(rel):
+                d2 = project.read_json(rel)
+                summary[rp]["flood_area_m2"] = round(float(d2["flooded_area_m2"]), 0)
+                summary[rp]["flood_depth_m"] = round(float(d2["max_depth_m"]), 3)
+                break
     out["storm_summary"] = summary
+    rates = [s["line_cms_per_m2"] for s in summary.values() if s["line_cms_per_m2"]]
+    # one scale across the storms, so a bigger storm draws wider lines
+    out["flow_peak_cms"] = round(max((max(f["area_m2"]) * max(rate.get(f.get("exit"), 0.0) for rate in rates)
+                                      for f in out.get("flow_lines", [])), default=0.0), 4) if rates else None
     return out

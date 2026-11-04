@@ -20,15 +20,13 @@ namespace SpongePark
     {
         VisualElement rainCard, groundCard, coverRows, pondCard, pondRows;
         Label pondText;
-        Button pondSave;
         class PondRow { public string Id; public TextField Depth, Water; }
         readonly List<PondRow> pondFields = new List<PondRow>();
         VisualElement wellCard, wellCommon, wellRows;
         Label wellText;
-        Button wellSave;
         TextField wellDepth, wellDia, wellRate;
         Foldout wellSingles;
-        class WellRow { public string Id; public TextField Depth, Diameter; }
+        class WellRow { public string Id; public TextField Depth, Diameter; public bool Drawn; }
         readonly List<WellRow> wellFields = new List<WellRow>();
         Label rainText, groundResult;
         Button rainButton;
@@ -47,7 +45,7 @@ namespace SpongePark
             rainCard.Add(Text("DESIGN RAINFALL", "eyebrow"));
             rainText = Text("", "muted");
             rainCard.Add(rainText);
-            rainButton = Btn("Use this rainfall", () => StartCoroutine(Run(UsePresetRain(), "Making the design storms")), "btn--wide");
+            rainButton = Btn("Use this rainfall", ChooseRain, "btn--wide");
             rainCard.Add(rainButton);
             rainPage.Add(rainCard);
 
@@ -68,7 +66,6 @@ namespace SpongePark
             pathsField.AddToClassList("input");
             pathsField.AddToClassList("field-stack");
             groundCard.Add(pathsField);
-            groundCard.Add(Btn("Save the answers", () => StartCoroutine(Run(SaveGround(), "Looking up the curve numbers")), "btn--wide"));
             groundResult = Text("", "muted");
             groundCard.Add(groundResult);
             groundPage.Add(groundCard);
@@ -79,8 +76,8 @@ namespace SpongePark
             pondCard.Add(pondText);
             pondRows = new VisualElement();
             pondCard.Add(pondRows);
-            pondSave = Btn("Save the ponds", () => StartCoroutine(Run(SavePonds(), "Cutting the ponds into the ground model")), "btn--wide");
-            pondCard.Add(pondSave);
+            pondLater = new Toggle("Not known yet: leave the ponds out of the flood model for now");
+            pondCard.Add(pondLater);
             pondPage.Add(pondCard);
 
             wellCard = new VisualElement();
@@ -101,8 +98,8 @@ namespace SpongePark
             wellRows = new VisualElement();
             wellSingles.Add(wellRows);
             wellCard.Add(wellSingles);
-            wellSave = Btn("Save the wells", () => StartCoroutine(Run(SaveWells(), "Adding the wells to the flood model")), "btn--wide");
-            wellCard.Add(wellSave);
+            wellLater = new Toggle("Not known yet: leave the wells out of the flood model for now");
+            wellCard.Add(wellLater);
             wellPage.Add(wellCard);
         }
 
@@ -146,6 +143,7 @@ namespace SpongePark
             yield return api.Get(api.P("/site/wells"), x => wells = x);
             FillWells(wells);
             yield return LoadOutfalls();
+            RememberSetup();
         }
 
         // ------------------------------------------------------------ existing recharge wells
@@ -154,7 +152,8 @@ namespace SpongePark
             wellRows.Clear();
             wellFields.Clear();
             int count = (int?)st?["count"] ?? 0;
-            foreach (var e in new VisualElement[] { wellCommon, wellSingles, wellSave }) SpongePark.UI.Kit.Show(e, count > 0);
+            wellCount = count;
+            foreach (var e in new VisualElement[] { wellCommon, wellSingles, wellLater }) SpongePark.UI.Kit.Show(e, count > 0);
             if (count == 0)
             {
                 wellText.text = "The survey shows no recharge wells in this park. Nothing to answer here; add new wells on the Design tab.";
@@ -173,7 +172,7 @@ namespace SpongePark
             wellRate.value = Fmt(a?["infiltration_rate_mm_hr"]);
             foreach (var w in st["wells"])
             {
-                var row = new WellRow { Id = (string)w["id"], Depth = Field("Depth (m)", Fmt(w["depth_m"])), Diameter = Field("Diameter (m)", Fmt(w["diameter_m"])) };
+                var row = new WellRow { Id = (string)w["id"], Depth = Field("Depth (m)", Fmt(w["depth_m"])), Diameter = Field("Diameter (m)", Fmt(w["diameter_m"])), Drawn = w["drawn_diameter_m"] != null && w["drawn_diameter_m"].Type != JTokenType.Null };
                 var box = new VisualElement();
                 box.AddToClassList("cover-row");
                 var miss = w["missing"]?.Select(x => (string)x).ToList() ?? new List<string>();
@@ -188,20 +187,17 @@ namespace SpongePark
             }
         }
 
-        IEnumerator SaveWells()
-        {
-            var body = new JObject
+        JObject WellBody() => new JObject
             {
                 ["depth_m"] = Num(wellDepth), ["diameter_m"] = Num(wellDia), ["infiltration_rate_mm_hr"] = Num(wellRate),
                 ["wells"] = new JArray(wellFields.Select(r => new JObject { ["id"] = r.Id, ["depth_m"] = Num(r.Depth), ["diameter_m"] = Num(r.Diameter) })),
             };
+
+        IEnumerator SaveWells()
+        {
             JToken r2 = null;
-            yield return api.Send("PUT", api.P("/site/wells"), body, x => r2 = x);
-            if (r2 == null) yield break;
-            siteSetup.Close();   // saved: the dialog closes; the result shows as a toast
-            FillWells(r2);
-            status = $"Wells saved: {(int)r2["in_model"]} of {(int)r2["count"]} in the flood model of the existing site and every design; the drainage is redone around them.";
-            yield return LoadViews();
+            yield return api.Send("PUT", api.P("/site/wells"), WellBody(), x => r2 = x);
+            if (r2 != null) FillWells(r2);
         }
 
         // ------------------------------------------------------------ ponds
@@ -210,7 +206,8 @@ namespace SpongePark
             pondRows.Clear();
             pondFields.Clear();
             bool any = ponds is JArray a && a.Count > 0;
-            pondSave.style.display = any ? DisplayStyle.Flex : DisplayStyle.None;
+            pondCount = any ? ponds.Count() : 0;
+            SpongePark.UI.Kit.Show(pondLater, any);
             if (!any)
             {
                 pondText.text = "The survey shows no ponds in this park (closed outlines on its water layer). Nothing to answer here.";
@@ -240,16 +237,16 @@ namespace SpongePark
             }
         }
 
+        JObject PondBody() => new JObject
+        {
+            ["answers"] = new JArray(pondFields.Select(r => new JObject { ["id"] = r.Id, ["depth_m"] = Num(r.Depth), ["water_m"] = Num(r.Water) })),
+        };
+
         IEnumerator SavePonds()
         {
-            var answers = new JArray(pondFields.Select(r => new JObject { ["id"] = r.Id, ["depth_m"] = Num(r.Depth), ["water_m"] = Num(r.Water) }));
             JToken r2 = null;
-            yield return api.Send("PUT", api.P("/site/ponds"), new JObject { ["answers"] = answers }, x => r2 = x);
-            if (r2 == null) yield break;
-            siteSetup.Close();   // saved: the dialog closes; the result shows as a toast
-            FillPonds(r2["ponds"]);
-            status = $"Ponds saved: {(float)r2["room_m3"]:0} m³ of room cut into the ground model; the flow lines are redone on it.";
-            yield return LoadViews();
+            yield return api.Send("PUT", api.P("/site/ponds"), PondBody(), x => r2 = x);
+            if (r2 != null) FillPonds(r2["ponds"]);
         }
 
         // ------------------------------------------------------------ rainfall
@@ -260,29 +257,29 @@ namespace SpongePark
             {
                 var rows = rainSaved["rows"].Where(x => (float)x["duration_hr"] >= 24).Select(x => $"{(int)x["return_period_yr"]} yr {(float)x["depth_mm"]:0} mm");
                 rainText.text = $"In use: {string.Join(" · ", rows)}.\nDesign storms for {string.Join(", ", rainSaved["return_periods"].Select(x => (string)x))} years ({rainSaved["method"]?.ToString().Replace('_', ' ')}, 24 h).\nSource: {rainSaved["source"]}";
-                rainButton.text = "Use the HSR rainfall again";
-                rainButton.EnableInClassList("btn--ghost", true);
+                SpongePark.UI.Kit.Show(rainButton, false);
             }
             else if (preset != null)
             {
                 var rows = preset["rows"].Select(x => $"{(int)x["return_period_yr"]} yr {(float)x["depth_mm"]:0} mm");
-                rainText.text = $"{preset["label"]}: {string.Join(" · ", rows)}.\nSource: {preset["source"]} {preset["note"]}";
+                rainText.text = $"{preset["label"]}: {string.Join(" · ", rows)}.\nSource: {preset["source"]} {preset["note"]}\nNext uses this rainfall.";
+                SpongePark.UI.Kit.Show(rainButton, true);
                 rainButton.text = "Use this rainfall";
                 rainButton.EnableInClassList("btn--ghost", false);
             }
+        }
+
+        void ChooseRain()
+        {
+            rainChosen = true;
+            rainButton.text = "This rainfall is chosen";
+            rainButton.EnableInClassList("btn--ghost", true);
         }
 
         IEnumerator UsePresetRain()
         {
             JToken r = null;
             yield return api.Send("PUT", api.P("/rainfall"), new { preset = "hsr_imd_24h" }, x => r = x);
-            if (r == null) yield break;
-            siteSetup.Close();   // saved: the dialog closes; the result shows as a toast
-            yield return Refresh();
-            yield return LoadGroundAndRain();
-            var peak = r["storms"].Last();
-            status = $"Design storms made for {string.Join(", ", r["return_periods"].Select(x => (string)x))} years " +
-                     $"(the {peak["return_period_yr"]}-year storm: {peak["depth_mm"]} mm in 24 h, peak {peak["peak_mm_hr"]} mm/h over 5 min).";
         }
 
         // ------------------------------------------------------------ ground questionnaire
@@ -330,9 +327,7 @@ namespace SpongePark
             covers.Add(row);
         }
 
-        IEnumerator SaveGround()
-        {
-            var answers = new JObject
+        JObject GroundBody() => new JObject
             {
                 ["soil"] = IdOf(groundQuestions["soils"], soilField.value),
                 ["paths"] = IdOf(groundQuestions["paths"], pathsField.value),
@@ -343,14 +338,14 @@ namespace SpongePark
                     ["share_pct"] = float.TryParse(c.Share.value, out var s) ? s : (covers.Count == 1 ? 100 : 0),
                 })),
             };
+
+        IEnumerator SaveGround()
+        {
             JToken r = null;
-            yield return api.Send("PUT", api.P("/site/ground"), answers, x => r = x);
+            yield return api.Send("PUT", api.P("/site/ground"), GroundBody(), x => r = x);
             if (r == null) yield break;
-            siteSetup.Close();   // saved: the dialog closes; the result shows as a toast
             groundSaved = r;
             ShowGroundResult();
-            yield return Refresh();
-            status = $"Ground saved: curve number {(float)r["curve_number"]:0.#} (TR-55). The flood simulation can run.";
         }
 
         void ShowGroundResult()

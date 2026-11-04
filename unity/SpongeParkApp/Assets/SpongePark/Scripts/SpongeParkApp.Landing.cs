@@ -90,8 +90,7 @@ namespace SpongePark
             // the two ways in: a new project starts from the site survey; or open a saved one
             var actions = new VisualElement();
             actions.AddToClassList("land-actions");
-            actions.Add(ActionCard("plus", "New Project", "Start a new park design from its survey (DXF)", true,
-                () => PickFile("Choose the site survey (DXF)", "Site survey", "dxf,dwg", f => StartCoroutine(StartIntake(f)))));
+            actions.Add(ActionCard("plus", "New Project", "Study the existing site, or a proposed design", true, OpenNewProject));
             var open = ActionCard("folder", "Open Project", "Browse your files for a .sponge project", false,
                 () => PickFile("Open a Sponge Park project", "Sponge Park project", "sponge", f => StartCoroutine(OpenExisting(f))));
             open.AddToClassList("land-action--next");
@@ -795,6 +794,23 @@ namespace SpongePark
             status = $"Ground model built. {r["cleaning"]["duplicates_removed_total"]} duplicate objects removed" +
                      (qc != null && qc.Type != JTokenType.Null ? $"; spot levels agree to {(float)qc["rmse_m"]:0.000} m." : ".");
             projectPath = (string)r["project"];
+            if (!string.IsNullOrEmpty(pendingModel))   // the survey is done: now the design, on its coordinates
+            {
+                // step 1 of a proposal: the existing site, as any survey; the design's files wait on its project
+                var files = new JObject { ["model"] = pendingModel, ["design_plan"] = modelPlan };
+                pendingModel = null;
+                loadingWhat = "Opening the project";
+                loadingStep = System.IO.Path.GetFileName(projectPath);
+                yield return OpenProject(false);
+                JToken kept = null;
+                yield return api.Send("PUT", api.P("/proposal"), files, x => kept = x);
+                if (info != null) info["proposal"] = kept;
+                HideLoading();
+                yield return StartGuide();
+                ShowMain();
+                status = "Step 1 of the proposal: study the existing site. When it is analysed, Analyse > Go to the design.";
+                yield break;
+            }
             loadingWhat = "Opening the project";
             loadingStep = System.IO.Path.GetFileName(projectPath);
             yield return OpenProject(false);

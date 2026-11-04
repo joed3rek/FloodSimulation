@@ -31,6 +31,29 @@ from ..project import Project
 REL = "site/outfall_answers.json"
 MATCH_M = 3.0
 STATES = ("open", "closed")
+WALLS = "terrain/walls.tif"   # the top of a modelled boundary wall (design model projects): the real edge height
+WALL_REACH_M = 2.0            # how far from the site's edge the wall's top is looked for (a plinth may stand in front)
+
+
+def wall_tops(project: Project, like=None):
+    """The wall's top over the grid ``like`` (its coarser cells take the highest part of the wall in them) within
+    ``WALL_REACH_M`` of each cell, -inf where no wall is near (a gap); None when the project has no modelled wall."""
+    from scipy import ndimage
+
+    from ..terrain.raster import read_geotiff
+
+    if not project.exists(WALLS):
+        return None
+    w = read_geotiff(project.path(WALLS))
+    top = np.where(w.z != w.nodata, w.z, -np.inf)
+    cell = w.cell_size
+    if like is not None:
+        k = max(1, int(round(like.cell_size / w.cell_size)))
+        nr, nc = like.z.shape
+        top = top[:nr * k, :nc * k].reshape(nr, k, nc, k).max((1, 3))
+        cell = like.cell_size
+    reach = max(1, int(np.ceil(WALL_REACH_M / cell)))
+    return ndimage.maximum_filter(top, size=2 * reach + 1)
 
 
 def _answers(project: Project) -> Dict[str, Any]:
@@ -68,12 +91,30 @@ def _answer_for(ex: Dict[str, Any], ans: Dict[str, Any]) -> Dict[str, Any]:
     return {"state": a.get("state"), "edge_height_m": a.get("edge_height_m")}
 
 
-def status(project: Project) -> Dict[str, Any]:
-    """Every exit with its answer, and whether all are confirmed."""
+def status(project: Project, option: Optional[str] = None, with_outlets: bool = True) -> Dict[str, Any]:
+    """Every exit with its answer, and whether all are confirmed. An outlet the designer placed in an exit's
+    catchment (:mod:`.openings`) lets the water out there, at its own level: the exit holds no higher than that."""
+    from . import openings
+
     ans = _answers(project)
+    levels = openings.outlet_levels(project, option) if with_outlets else {}
     rows = []
+    tops = None
+    if project.exists(WALLS) and ans.get("all", {}).get("state") == "closed":
+        from ..terrain.raster import read_geotiff
+
+        tops = (read_geotiff(project.path(WALLS)), wall_tops(project))
     for ex in _exits(project):
         a = _answer_for(ex, ans)
+        if tops and a["state"] == "closed" and ex.get("ground_m") is not None:   # the wall as modelled, here
+            r = int((tops[0].origin[1] - ex["y"]) / tops[0].cell_size)
+            c = int((ex["x"] - tops[0].origin[0]) / tops[0].cell_size)
+            if 0 <= r < tops[1].shape[0] and 0 <= c < tops[1].shape[1] and np.isfinite(tops[1][r, c]):
+                a = {"state": "closed", "edge_height_m": round(float(np.clip(tops[1][r, c] - float(ex["ground_m"]), 0.1, 3.0)), 3)}
+        if ex["id"] in levels and ex.get("ground_m") is not None:
+            rise = levels[ex["id"]] - float(ex["ground_m"])
+            a = {"state": "open", "edge_height_m": None} if rise <= 0.02 else \
+                {"state": "closed", "edge_height_m": round(min(rise, 3.0), 3)}
         rows.append({**ex, **a, "confirmed": a["state"] == "open" or (a["state"] == "closed" and bool(a["edge_height_m"]))})
     return {"exits": rows, "all": ans.get("all", {}), "count": len(rows),
             "confirmed": bool(rows) and all(r["confirmed"] for r in rows),
@@ -121,7 +162,28 @@ def apply(project: Project, answers: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ------------------------------------------------------------------ the flood model
-def edge_elements(project: Project, site) -> List[Any]:
+def held_cells(inside: np.ndarray, z: np.ndarray, level: float, r: int, c: int) -> np.ndarray:
+    """The ground under water at ``level`` behind the exit at cell (r, c): only what the water reaches from the exit,
+    not a hollow further up the catchment that happens to lie below that level."""
+    from scipy import ndimage
+
+    wet = inside & (z <= level)
+    lab, n = ndimage.label(wet, structure=np.ones((3, 3)))
+    if n == 0:
+        return wet
+    if lab[r, c]:
+        return lab == lab[r, c]
+    rr, cc = np.nonzero(wet)
+    i = int(np.argmin((rr - r) ** 2 + (cc - c) ** 2))
+    return lab == lab[rr[i], cc[i]]
+
+
+def exit_cell(dem, x: float, y: float) -> tuple:
+    return (int(np.clip((dem.origin[1] - y) / dem.cell_size, 0, dem.z.shape[0] - 1)),
+            int(np.clip((x - dem.origin[0]) / dem.cell_size, 0, dem.z.shape[1] - 1)))
+
+
+def edge_elements(project: Project, site, option: Optional[str] = None) -> List[Any]:
     """The closed exits as ``edge_pond`` elements (source "existing", locked), wired: the subcatchments that
     drained to the exit drain into the pond, which spills over the edge into the outfall."""
     from rasterio.features import shapes
@@ -133,7 +195,7 @@ def edge_elements(project: Project, site) -> List[Any]:
     from ..nbs.components import NbSElement
     from ..terrain.raster import read_geotiff
 
-    st = status(project)
+    st = status(project, option)
     closed = [e for e in st["exits"] if e["state"] == "closed" and e["confirmed"]]
     if not closed or not project.exists("terrain/existing.tif"):
         return []
@@ -151,11 +213,12 @@ def edge_elements(project: Project, site) -> List[Any]:
         catch = unary_union([s.shape() for s in subs])
         m = contains_xy(catch, X, Y) & (dem.z != dem.nodata)
         z = np.where(m, dem.z, np.nan)
+        r, c = exit_cell(dem, ex["x"], ex["y"])
         stage = []
         for h in np.linspace(0.0, H, 12):
-            wet = m & (z <= inv + h)
-            stage.append([round(float(h), 4), max(round(float(wet.sum() * cell * cell), 2), cell * cell)])
-        wet = (m & (z <= inv + H)).astype("int32")
+            area = float(held_cells(m, z, inv + h, r, c).sum() * cell * cell)
+            stage.append([round(float(h), 4), max(round(area, 2), stage[-1][1] if stage else cell * cell)])
+        wet = held_cells(m, z, inv + H, r, c).astype("int32")
         polys = [shape(g) for g, v in shapes(wet, mask=wet > 0, transform=t)]
         fp = unary_union(polys) if polys else catch.centroid.buffer(cell)
         if fp.geom_type != "Polygon":

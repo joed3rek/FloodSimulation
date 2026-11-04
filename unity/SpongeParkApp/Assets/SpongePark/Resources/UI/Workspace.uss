@@ -557,3 +557,9 @@ Toggle Label { color: var(--text-primary); font-size: 12px; }
 .splash-fact { flex-grow: 1; flex-shrink: 1; }
 .splash-fact-head { color: #B1C99A; font-size: 14px; margin: 0 0 10px 0; padding: 0; -unity-font: resource("UI/Fonts/Mulish-SemiBold"); }
 .splash-fact-text { color: #E3E7E1; font-size: 16px; margin: 0; padding: 0; white-space: normal; -unity-font: resource("UI/Fonts/Mulish-Regular"); }
+
+/* a compulsory answer not filled (Site setup, after Next) */
+.input--missing .unity-base-text-field__input, .input--missing .unity-base-field__input, .input--missing .unity-base-popup-field__input, .input--missing .unity-popup-field__input { border-width: 1px; border-color: var(--danger); }
+.input--missing > .unity-label { color: var(--danger); }
+Button.input--missing { border-width: 1px; border-color: var(--danger); }
+.note--missing { color: var(--danger); }

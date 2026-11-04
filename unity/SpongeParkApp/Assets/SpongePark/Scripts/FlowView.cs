@@ -39,19 +39,24 @@ namespace SpongePark
             float lift = 0.06f + 0.03f * frame.Exaggeration;
             float thr = a["min_line_area_m2"] != null ? (float)a["min_line_area_m2"] : 40f;
 
-            // flow lines: width and colour grow with the area draining to each point
+            // flow lines: width and colour grow with the peak flow in this storm, on one scale across the storms
+            // (with the area draining to each point until SWMM has run)
             var m = new MeshBuilder();
             float maxA = a["flow_lines"].SelectMany(f => f["area_m2"].Values<float>()).DefaultIfEmpty(thr).Max();
+            var rates = rp > 0 ? a["storm_summary"]?[rp.ToString()]?["line_cms_per_m2"] as JObject : null;
+            float maxQ = a["flow_peak_cms"]?.Type == JTokenType.Float ? (float)a["flow_peak_cms"] : 0f;
             foreach (var f in a["flow_lines"])
             {
                 var xyz = f["xyz"].Values<float>().ToArray();
                 var area = f["area_m2"].Values<float>().ToArray();
+                float rate = rates != null && maxQ > 0 && rates[(string)f["exit"] ?? ""] != null ? (float)rates[(string)f["exit"]] : -1f;
                 for (int i = 0; i + 1 < area.Length; i++)
                 {
                     var p0 = frame.World(xyz[3 * i], xyz[3 * i + 1], xyz[3 * i + 2]) + Vector3.up * lift;
                     var p1 = frame.World(xyz[3 * i + 3], xyz[3 * i + 4], xyz[3 * i + 5]) + Vector3.up * lift;
-                    float t = Mathf.Clamp01(Mathf.Log(area[i] / thr + 1, 2) / Mathf.Log(maxA / thr + 1, 2));
-                    m.Ribbon(new List<Vector3> { p0, p1 }, Mathf.Lerp(0.25f, 1.2f, t), 0, Color.Lerp(Water, DeepWater, t));
+                    float t = rate >= 0 ? Mathf.Sqrt(Mathf.Clamp01(area[i] * rate / maxQ))
+                                        : Mathf.Clamp01(Mathf.Log(area[i] / thr + 1, 2) / Mathf.Log(maxA / thr + 1, 2));
+                    m.Ribbon(new List<Vector3> { p0, p1 }, Mathf.Lerp(0.2f, rate >= 0 ? 1.6f : 1.2f, t), 0, Color.Lerp(Water, DeepWater, t));
                 }
             }
             Add(Lines, m, visible);
@@ -83,6 +88,16 @@ namespace SpongePark
                 var c = frame.World((float)h["x"], (float)h["y"], (float)h["z"]);
                 m.Prism(c, 0.08f, 2.5f, 6, Pool);                                     // a pin to find it from afar
                 m.RoundCrown(c + Vector3.up * 2.7f, 0.35f, Pool);
+            }
+            // water held against a closed edge, at SWMM's peak level in this storm
+            foreach (var e in a["exits"])
+            {
+                var o = rp > 0 ? e["held"]?["storms"]?[rp.ToString()]?["outline"]?.Values<float>().ToArray() : null;
+                if (o == null) continue;
+                float level = (float)e["held"]["storms"][rp.ToString()]["water_level_m"];
+                var ring = new List<Vector3>();
+                for (int i = 0; i + 1 < o.Length; i += 2) ring.Add(frame.World(o[i], o[i + 1], level));
+                if (ring.Count >= 4) m.Fill(ring, lift * 0.5f, Pool);
             }
             Add(Ponding, m, visible);
 

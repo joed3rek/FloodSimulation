@@ -13,6 +13,7 @@ the 3D view only (the survey gives plan positions, not heights); nothing hydrolo
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -26,7 +27,7 @@ from . import ponds, wells
 log = logging.getLogger(__name__)
 
 REL = "site/survey_layers.json"
-STYLE = 5   # how the layers are modelled; a file made with an older style is rebuilt on load
+STYLE = 6   # how the layers are modelled; a file made with an older style is rebuilt on load
 
 # SP layer (or prefix) -> how the viewer draws it. height_m: display height above the ground (m).
 KINDS: List[Tuple[str, Dict[str, Any]]] = [
@@ -67,11 +68,11 @@ GATE_MAX_M = 15.0          # a "gate" longer than this is something else drawn o
 GATE_WIDTH_M = (1.0, 8.0)  # a gate symbol's long side, clamped to a sensible gate width
 MAX_OTHER_FEATURES = 3000  # unsorted layers (title blocks, hatching) are capped so the viewer stays quick
 MIN_SURFACE_M2 = 1.0      # smaller road or path surfaces are slivers between drawn lines
-PATH_MAX_WIDTH_M = 5.0     # a band between path lines this narrow (on average) is path surface
-PATH_MAX_BETWEEN_M = 8.0   # ground between beds (outlined by path edges) up to this wide is path
-PATH_MIN_AREA_M2 = 6.0     # smaller leftovers between beds are slivers, not path
 ROAD_MAX_WIDTH_M = 25.0    # a band between road lines narrower than this is road surface
 ROAD_END_GAP_M = 30.0      # loose road ends this close are joined (the break symbols at a road's ends)
+TOUCH_M = 1e-6             # an end this close to another line already meets it
+BED_WIDTH_JUMP = 2.0       # beds are at least this many times wider than the paths around them (a ratio, not a width)
+BED_MIN_ROUNDNESS = 0.3    # 4 pi area / perimeter^2; a band is well under this, however wide
 EDGE_COLOR = {"road": "#8A8A85", "path": "#B9A27A"}   # kerb and path edge lines
 
 
@@ -284,7 +285,7 @@ def build(project: Project) -> Dict[str, Any]:
         elif kind in ("road", "path"):
             surfaces = _road_surfaces(pieces, park_boundary(project)) if kind == "road"                 else _path_surfaces(pieces, park_boundary(project))
             for poly in surfaces:
-                m = _drape_polygon(poly, ground, step)
+                m = _drape_polygon(poly, ground, ground.cell)   # every ground cell: coarser sinks under the bumps
                 if m:
                     feats.append(m)
             pieces = [(g, geo, {**info, "color": EDGE_COLOR[kind]}) for g, geo, info in pieces]
@@ -505,38 +506,86 @@ def _road_surfaces(pieces, boundary):
 
 
 def _path_surfaces(pieces, boundary=None):
-    """Path surface, from either way of drawing paths:
+    """Path surface: only what the path's own polylines enclose, at whatever width they are drawn.
 
-    - two edge lines a path's width apart: the narrow bands between them;
-    - beds (lawns, planting) outlined by the path edges, the paths being the ground between the beds and the
-      park's edge: the lines and the boundary are joined, the enclosed beds found, and what is left between
-      them, where it is no wider than a path (``PATH_MAX_BETWEEN_M``), is path."""
+    Open ends are closed first (``_end_joins``), then each enclosed face is either path or a bed (a lawn or planting
+    outlined by the path edges). Nothing here is a set width: the faces are compared with each other, and where the
+    paths are only the ground between closed beds, the gap between the beds as drawn says how wide they are."""
     from shapely.geometry import LineString
     from shapely.ops import polygonize, unary_union
 
-    lines = [LineString(geo) for g, geo, _ in pieces if g == "line" and len(geo) >= 2]
+    lines = [LineString(geo) for g, geo, _ in pieces if g == "line" and len(geo) >= 2 and LineString(geo).length > 0]
     if not lines:
         return []
-    faces = list(polygonize(unary_union(lines)))
-    # a face with a hole is a band between two rings (the hole is a separate face)
-    out = [f for f in faces if 2 * f.area / f.length <= PATH_MAX_WIDTH_M]
-    if boundary is None:
-        return out
-    half = PATH_MAX_BETWEEN_M / 2
+    faces = [f for f in polygonize(unary_union(lines + _end_joins(lines))) if f.area >= MIN_SURFACE_M2]
+    beds = _beds(faces)
+    out = [f for f in faces if not any(f is b for b in beds)]
+    if len(beds) >= 2:
+        whole = unary_union(beds)
+        # no path edge is drawn outside the beds: the park's edge is the polyline that closes the paths there
+        if boundary is not None and not any(_roundness(f) < BED_MIN_ROUNDNESS for f in faces):
+            whole = unary_union([whole, boundary.buffer(boundary.length).difference(boundary)])
+        # the gap between neighbouring beds, as drawn: far pairs of beds are the other side of the biggest jump
+        gaps = sorted(a.distance(b) for i, a in enumerate(beds) for b in beds[i + 1:])
+        steps = [(gaps[i + 1] / gaps[i], gaps[i]) for i in range(len(gaps) - 1) if gaps[i] > 0]
+        r = (max(steps)[1] if steps and max(steps)[0] >= BED_WIDTH_JUMP else gaps[-1]) / 2 * 1.01
+        if r > 0:
+            between = whole.buffer(r, join_style="mitre").buffer(-r, join_style="mitre").difference(whole)
+            out += _polygons(between)
+    if not out:
+        return []
+    return [g for g in _polygons(unary_union([s.buffer(0) for s in out])) if g.area >= MIN_SURFACE_M2]
 
-    def wide_share(f):   # how much of a face is wider than a path (a bed is mostly wide, a path network not)
-        return f.buffer(-half).buffer(half).area / f.area if f.area > 0 else 0
 
-    edge = boundary.exterior
-    beds = [f for f in polygonize(unary_union(lines + [LineString(edge.coords)]))
-            if not f.interiors and wide_share(f) >= 0.5 and f.area < 0.6 * boundary.area]   # with holes: the network
-    if len(beds) < 2:
-        return out
-    ground = boundary.difference(unary_union(beds + out))
-    narrow = ground.difference(ground.buffer(-half).buffer(half))
-    parts = list(narrow.geoms) if hasattr(narrow, "geoms") else [narrow]
-    out += [g for g in parts if g.geom_type == "Polygon" and g.area >= PATH_MIN_AREA_M2]
-    return out
+def _end_joins(lines) -> List[Any]:
+    """Short lines that close the open ends of a drawing: each end that touches nothing goes to the nearest other open
+    end (across a path's mouth), or onto the nearest line if that is nearer (a side path meeting the main one)."""
+    from shapely.geometry import LineString, Point
+    from shapely.ops import nearest_points, unary_union
+
+    others = [unary_union(lines[:i] + lines[i + 1:]) for i in range(len(lines))]
+    ends = [(i, Point(c)) for i, ln in enumerate(lines) if not ln.is_ring for c in (ln.coords[0], ln.coords[-1])
+            if others[i].is_empty or Point(c).distance(others[i]) > TOUCH_M]
+    joins, used = [], set()
+    for a, (i, p) in enumerate(ends):
+        if a in used or others[i].is_empty:
+            continue
+        free = [(p.distance(q), b) for b, (j, q) in enumerate(ends) if b != a and b not in used and j != i]
+        d, b = min(free) if free else (float("inf"), None)
+        if b is not None and d <= p.distance(others[i]):
+            used |= {a, b}
+            joins.append(LineString([p, ends[b][1]]))
+        else:
+            used.add(a)
+            q = nearest_points(p, others[i])[1]
+            v = np.array([q.x - p.x, q.y - p.y])
+            joins.append(LineString([(p.x, p.y), tuple(np.array([q.x, q.y]) + v * TOUCH_M)]))   # just across the line
+    return joins
+
+
+def _roundness(f) -> float:
+    return 4 * math.pi * f.area / f.length ** 2
+
+
+def _beds(faces) -> List[Any]:
+    """Which enclosed faces are beds. Long thin faces are path, and a rounder face wider than the widest of them is a
+    bed. With no such band to compare with: the wide side of the biggest jump in mean width between the faces, or,
+    with no clear jump, all of them (closed outlines side by side, the paths being the ground between them)."""
+    def width(f):
+        return 2 * f.area / f.length
+
+    bands = [width(f) for f in faces if _roundness(f) < BED_MIN_ROUNDNESS]
+    if bands:
+        return [f for f in faces if _roundness(f) >= BED_MIN_ROUNDNESS and width(f) > max(bands)]
+    w = sorted(width(f) for f in faces)
+    if len(w) < 2:
+        return []
+    jump, cut = max((w[i + 1] / w[i], w[i + 1]) for i in range(len(w) - 1))
+    return [f for f in faces if width(f) >= cut] if jump >= BED_WIDTH_JUMP else list(faces)
+
+
+def _polygons(geom) -> List[Any]:
+    return [g for g in getattr(geom, "geoms", [geom]) if g.geom_type == "Polygon" and not g.is_empty]
 
 
 def _drape_polygon(poly, ground, step: float) -> Optional[Dict[str, Any]]:
@@ -619,4 +668,4 @@ def load(project: Project, rebuild: bool = False) -> Dict[str, Any]:
     if rebuild or not project.exists(REL):
         return build(project)
     out = project.read_json(REL)
-    return out if out.get("style") == STYLE else build(project)
+    return out if out.get("style") == STYLE or out.get("from_model") else build(project)

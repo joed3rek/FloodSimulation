@@ -119,11 +119,14 @@ namespace SpongePark.UI
         readonly System.Collections.Generic.Dictionary<string, (Button tab, VisualElement page)> pages =
             new System.Collections.Generic.Dictionary<string, (Button, VisualElement)>();
         readonly VisualElement tabs;
+        public bool CloseOnBack = true;
+        public string Current { get; private set; }
+        public readonly VisualElement Footer;
 
         public Dialog(string title, VisualElement host)
         {
             Root = Kit.Box("dialog-back");
-            Root.RegisterCallback<PointerDownEvent>(e => { if (e.target == Root) Close(); });
+            Root.RegisterCallback<PointerDownEvent>(e => { if (e.target == Root && CloseOnBack) Close(); });
             var box = Kit.Box("dialog");
             Root.Add(box);
             var head = Kit.Box("dialog-head");
@@ -137,6 +140,16 @@ namespace SpongePark.UI
             sv.AddToClassList("dialog-body");
             body = sv;
             box.Add(sv);
+            Footer = new VisualElement();
+            Footer.style.flexDirection = FlexDirection.Row;
+            Footer.style.alignItems = Align.Center;
+            Footer.style.flexShrink = 0;
+            Footer.style.paddingTop = 10;
+            Footer.style.paddingBottom = 12;
+            Footer.style.paddingLeft = 16;
+            Footer.style.paddingRight = 16;
+            box.Add(Footer);
+            Kit.Show(Footer, false);
             host.Add(Root);
             Kit.Show(Root, false);
         }
@@ -150,7 +163,7 @@ namespace SpongePark.UI
             Kit.Show(tabs, true);
             body.Add(page);
             pages[key] = (b, page);
-            ShowPage(pages.Count == 1 ? key : null);
+            ShowPage(Current ?? key);   // the first page stays the one shown; a page added later starts hidden
             return page;
         }
 
@@ -159,6 +172,7 @@ namespace SpongePark.UI
         public void ShowPage(string key)
         {
             if (key == null) return;
+            Current = key;
             foreach (var kv in pages)
             {
                 kv.Value.tab.EnableInClassList("props-tab--on", kv.Key == key);

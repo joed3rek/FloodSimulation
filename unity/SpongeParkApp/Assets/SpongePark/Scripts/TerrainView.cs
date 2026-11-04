@@ -27,6 +27,8 @@ namespace SpongePark
         public float ContourInterval { get; private set; } = 0.5f;
 
         public void SetContours(bool on) => material.SetFloat("_Opacity", on ? 0.85f : 0f);
+        /// Off under a 3D model: the grid stays for the levels and the picking, the model is what is seen.
+        public void SetDrawn(bool on) => GetComponent<MeshRenderer>().enabled = on;
         /// Lowest and highest level of the park (m), for legends.
         public float ParkLow { get; private set; }
         public float ParkHigh { get; private set; }

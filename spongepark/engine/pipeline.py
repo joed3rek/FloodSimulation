@@ -84,7 +84,7 @@ def prepare_option(project: Project, option_id: str, site: Optional[Site] = None
     existing = wells.resolved(project, site)
     # exits with no way out (Site setup > Outfalls): water ponds against the edge, then spills to the road
     soil = site.soil_lookup(str(project.parameters.value("swmm.infiltration_method")).upper())
-    edges = [resolve_element(e, project.parameters, soil) for e in outfalls.edge_elements(project, site)]
+    edges = [resolve_element(e, project.parameters, soil) for e in outfalls.edge_elements(project, site, option_id)]
     if option_id == BASELINE:
         outfalls.wire(existing, edges)
         existing += edges
@@ -186,6 +186,7 @@ def run_option(
             "water_balance": wb,
             "hydrograph": peak_and_time(res.timeseries),
             "peak_outfall_inflow_cms": res.peak_outfall_inflow_cms,
+            "subcatchment_peak_cms": {sid: float(st["peak_runoff_rate"]) for sid, st in res.subcatch.items()},
             "elements": element_summary(spec, res, threshold),
             "timing": overflow_timing(spec, res),
             "flooded_locations": flooded_locations(spec, res, elements),

@@ -59,6 +59,17 @@ def frames_payload(project: Project, option: str, rp: int, start: int = 0, count
             "frames": b64(frames, "<f2")}
 
 
+def peak_payload(project: Project, option: str, rp: int) -> Dict[str, Any]:
+    """The storm's highest water from the 2D run, as one depth frame: only where it reaches the flood depth, so the
+    map shows the area the summary counts."""
+    r = read_geotiff(project.path(f"scenarios/{option}/sim2d/max_depth_rp{rp}.tif"))
+    s = project.read_json(f"scenarios/{option}/sim2d/rp{rp}_summary.json")
+    d = np.where((r.z != r.nodata) & (r.z >= float(s["flood_depth_threshold_m"])), r.z, 0.0)
+    return {"label": "indicative", "option": option, "return_period_yr": rp, "times_s": [0.0], "rows": int(d.shape[0]),
+            "cols": int(d.shape[1]), "cell_m": float(r.cell_size), "origin": list(r.origin),
+            "flooded_area_m2": s["flooded_area_m2"], "max_depth_m": s["max_depth_m"], "frames": b64(d[None, ...], "<f2")}
+
+
 def retained_payload(project: Project, option: str, rp: int, every: int = 5) -> Dict[str, Any]:
     """Running litres retained on site from the SWMM time series: rainfall so far - water that left."""
     import pandas as pd

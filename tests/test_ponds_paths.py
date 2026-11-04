@@ -68,6 +68,35 @@ def test_paths_between_beds_become_path_surface(park, tmp_path):
     assert surface.intersection(Polygon([(10, 10), (40, 10), (40, 40), (10, 40)])).area < 1   # not the beds
 
 
+def test_path_lines_that_never_close_still_make_a_surface():
+    """Two edge lines 3 m apart with open ends enclose nothing, but the ground between them is path."""
+    from spongepark.engine.site.survey_layers import _path_surfaces
+
+    edge = lambda y: ("line", np.array([[0.0, y], [40.0, y]]), {})
+    assert sum(s.area for s in _path_surfaces([edge(0.0), edge(3.0)])) == pytest.approx(120, rel=0.01)
+
+
+def test_a_path_is_as_wide_as_its_lines_are_drawn():
+    """No set widths: two open edge lines 20 m apart are a 20 m path; one line alone encloses nothing."""
+    from spongepark.engine.site.survey_layers import _path_surfaces
+
+    edge = lambda y: ("line", np.array([[0.0, y], [40.0, y]]), {})
+    assert sum(s.area for s in _path_surfaces([edge(0.0), edge(20.0)])) == pytest.approx(800, rel=0.01)
+    assert _path_surfaces([edge(0.0)]) == []
+
+
+def test_a_path_stays_inside_its_polylines():
+    """Ground between the path and the park's edge is not path."""
+    from shapely.geometry import Polygon
+
+    from spongepark.engine.site.survey_layers import _path_surfaces
+
+    edge = lambda y: ("line", np.array([[10.0, y], [40.0, y]]), {})
+    park = Polygon([(0, 0), (50, 0), (50, 50), (0, 50)])
+    surfaces = _path_surfaces([edge(20.0), edge(23.0)], park)
+    assert sum(s.area for s in surfaces) == pytest.approx(90, rel=0.01)
+
+
 def test_a_pond_stores_rain_once_its_depth_is_given(park, tmp_path):
     c = TestClient(app)
     pid = c.post("/projects/open", json={"path": _finish(park, tmp_path)}).json()["project"]

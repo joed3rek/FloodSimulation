@@ -53,6 +53,8 @@ namespace SpongePark
             bool hasProject = info != null, ground = hasProject && (bool?)info["has_terrain"] == true;
             return !hasProject ? "Open a project to see its site model."
                 : !ground ? "This project has no ground model yet: start a new project from its survey (Site > Import survey)."
+                : (bool?)info["from_model"] == true ? (siteConfirmed ? "Site model confirmed. Site setup holds the rainfall and soil; Analyse shows where water runs and pools."
+                    : "The ground and buildings built from the 3D model. Check them in 3D. When they match the site, Site > Confirm site model.")
                 : surveyLayers == null ? "The ground model is shown. This project has no survey layers (it was not made from a survey drawing)."
                 : siteConfirmed ? "Site model confirmed. Switch layers on and off in Contents; reopen it from the Site tab."
                 : "Look over the ground and what the survey shows (Contents switches layers on and off). When it matches the site, Site > Confirm site model.";

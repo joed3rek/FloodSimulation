@@ -37,7 +37,7 @@ namespace SpongePark
             ["dam_height_m"] = "Crest height (m)",
         };
 
-        VisualElement hotspotList, propsBox, warnBox, budgetFill, budgetBar;
+        VisualElement hotspotList, stormTable, propsBox, warnBox, budgetFill, budgetBar;
         Label flowText, floodText, drawHint, budgetLabel;
         JToken flowData, designTools, designResult;
         JObject designFc;
@@ -60,6 +60,7 @@ namespace SpongePark
             flowText = Text("Confirm the site model, answer Site setup, then Analyse site.", "muted");
             hotspotList = new VisualElement();
             hotspotList.AddToClassList("layer-list");
+            stormTable = new VisualElement();
             floodText = Text("", "muted");
             drawHint = Text("", "vp-hint");
             budgetLabel = Text("", "muted");
@@ -104,6 +105,7 @@ namespace SpongePark
             layerVisible["flow:" + key] = on;
             left.Flow.SetVisible(key, on);
             right.Flow.SetVisible(key, on);
+            if (key == FlowView.Ponding) ShowStormWater();
         }
 
         // ------------------------------------------------------------ step 2: flow
@@ -115,20 +117,49 @@ namespace SpongePark
             if (a == null) { flowText.text = "Could not work out the flow: " + api.LastError; yield break; }
             flowData = a;
             PlanFirst();
+            var flooded = (a["storm_summary"] as JObject)?.Properties().Where(p => p.Value["flood_area_m2"] != null).Select(p => int.Parse(p.Name)).ToList();
+            yield return left.LoadPeaks(api, frame, flooded ?? new List<int>());
+            yield return right.LoadPeaks(api, frame, flooded ?? new List<int>());
+            ShowFlow(a);
+        }
+
+        /// The selected storm's highest water, while the storm is not being played through.
+        void ShowStormWater()
+        {
+            if (live || playing || simT > 0) return;
+            left.ShowPeak(CurrentRp, FlowOn(FlowView.Ponding));
+            right.ShowPeak(CurrentRp, FlowOn(FlowView.Ponding));
+        }
+
+        /// The flow data holds every storm: showing another one needs nothing from the engine.
+        void ShowFlow(JToken a)
+        {
             int rp = CurrentRp;
+            flowShownRp = rp;
+            FillStormReadout(a, rp);
+            ShowStormWater();
             left.Flow.Build(a, frame, layerVisible, rp);
             right.Flow.Build(a, frame, layerVisible, rp);
             var s = a["summary"];
             var ss = rp > 0 ? a["storm_summary"]?[rp.ToString()] : null;   // how full the hollows get in this storm
             int exits = (int)s["exits"];
+            bool ranFlow = ss != null && ss["runoff_peak_cms"]?.Type == JTokenType.Float;
+            string flows = ranFlow
+                ? $"In the {rp}-year storm {(float)ss["rain_mm"]:0} mm of rain makes {(float)ss["runoff_mm"]:0} mm of runoff, peaking at {(float)ss["runoff_peak_cms"]:0.00} m³/s; " +
+                  $"{(float)ss["left_m3"]:0} m³ leaves the park" + ((float)ss["held_m3"] > 0
+                      ? $" and {(float)ss["held_m3"]:0.#} m³ stands against the closed edges (up to {(float)ss["held_deepest_m"] * 100:0} cm deep). " : ". ")
+                : ss != null ? "Analyse site again for the flow in each storm. " : "";
             string collects = ss != null
-                ? $"In the {rp}-year storm water collects in {(int)ss["hotspots"]} place{((int)ss["hotspots"] == 1 ? "" : "s")} (up to {(float)ss["deepest_m"] * 100:0} cm deep, " +
+                ? $"Hollows: water collects in {(int)ss["hotspots"]} place{((int)ss["hotspots"] == 1 ? "" : "s")} (up to {(float)ss["deepest_m"] * 100:0} cm deep, " +
                   $"{(float)ss["ponding_volume_m3"]:0.#} m³ of the {(float)s["ponding_volume_m3"]:0.#} m³ the hollows can hold); {(int)ss["full"]} fill to the brim and " +
                   $"{(float)ss["spill_m3"]:0} m³ spills on over their edges. "
                 : $"{(int)s["hotspots"]} place{((int)s["hotspots"] == 1 ? "" : "s")} where water can collect (up to {(float)s["deepest_m"] * 100:0} cm deep, " +
                   $"{(float)s["ponding_volume_m3"]:0.#} m³ in all; how full they get in each storm shows once Analyse site has run the storms). ";
-            flowText.text = "Blue lines: where water runs (wider where more ground drains to it). " + collects +
-                            $"Water leaves the park at {exits} point{(exits == 1 ? "" : "s")} (red). Worked out on the ground with the ponds and existing wells from Site setup.";
+            flowText.text = (ranFlow ? "Blue lines: where water runs (wider where more water runs in this storm). " : "Blue lines: where water runs (wider where more ground drains to it). ") + flows + collects +
+                            (a["exits"].All(e => (string)e["state"] == "closed") && exits > 0
+                                ? $"The ground runs to the edge at {exits} point{(exits == 1 ? "" : "s")} (red), all closed: the edge holds the water unless an outlet is placed. "
+                                : $"Water leaves the park at {exits} point{(exits == 1 ? "" : "s")} (red). ") + $"Worked out on the ground with the ponds and existing wells from Site setup.";
+            FillStormTable(a, rp);
             hotspotList.Clear();
             var wet = a["hotspots"].Where(h => FlowView.StormFill(h, rp) == null || (float)FlowView.StormFill(h, rp)["volume_m3"] > 0)
                                    .OrderByDescending(h => (float)(FlowView.StormFill(h, rp)?["volume_m3"] ?? h["volume_m3"]));
@@ -174,10 +205,118 @@ namespace SpongePark
                 w.AddToClassList("layer-words");
                 w.Add(Text(held ? $"{e["id"]} · no way out: held by a {(float)e["edge_height_m"]:0.##} m edge"
                                 : $"{e["id"]} · water leaves the park" + (e["state"] == null || e["state"].Type == JTokenType.Null ? " (not confirmed)" : ""), "layer-title"));
-                w.Add(Text($"{(float)e["draining_area_m2"]:0} m² of the park drains here", "layer-source"));
+                w.Add(Text($"{(float)e["draining_area_m2"]:0} m² of the park drains here" + ExitInStorm(e, rp), "layer-source"));
                 b.Add(w);
                 hotspotList.Add(b);
             }
+        }
+
+        /// This storm at an exit, from SWMM: what the edge holds and what gets past it.
+        static string ExitInStorm(JToken e, int rp)
+        {
+            if (rp <= 0) return "";
+            if ((bool?)e["held"]?["needs_analysis"] == true) return " · Analyse site again to see what the edge holds";
+            var peak = e["peak_cms"]?[rp.ToString()];
+            float q = peak != null ? (float)peak : 0f;
+            var h = e["held"]?["storms"]?[rp.ToString()];
+            if (h == null) return q > 0 ? $" · peak {q:0.000} m³/s in the {rp}-yr storm" : "";
+            return $" · {rp}-yr storm: holds {(float)h["volume_m3"]:0.#} m³, {(float)h["max_depth_m"] * 100:0} cm deep over {(float)h["area_m2"]:0} m²" +
+                   ((float)h["over_edge_m3"] > 0 ? $"; {(float)h["over_edge_m3"]:0} m³ goes over the edge, peak {q:0.000} m³/s" : "; nothing goes over the edge");
+        }
+
+        /// Another storm in place: the view, camera and time stay where they are, nothing covers the screen.
+        void PickStorm(int k)
+        {
+            if (k == rpIdx || returnPeriods.Count == 0) return;
+            rpIdx = k;
+            if (info == null) return;
+            if (flowData != null && !busy) ShowFlow(flowData);
+            stormPending = true;
+        }
+
+        IEnumerator SwitchStorm()
+        {
+            stormLoading = true;
+            int rp = CurrentRp;
+            if (flowData != null && flowShownRp != rp) ShowFlow(flowData);
+            yield return left.LoadStorm(api, frame, rp, bundle);
+            yield return right.LoadStorm(api, frame, rp, bundle);
+            yield return LoadComparison();
+            if (!live && simT > 0)
+            {
+                if (left.Frames != null) left.ShowAt(simT, false, 0);
+                if (right.Frames != null) right.ShowAt(simT, false, 0);
+            }
+            ShowStormWater();   // loading a storm's frames resets the water
+            stormLoading = false;
+        }
+
+        /// What this storm does, on the view, so the difference shows as the year changes.
+        void FillStormReadout(JToken a, int rp)
+        {
+            var rows = a["storm_summary"] as JObject;
+            var s = rp > 0 ? rows?[rp.ToString()] : null;
+            SpongePark.UI.Kit.Show(stormReadout, s != null);
+            if (s == null) return;
+            float Pool(JToken r) => (float)r["ponding_volume_m3"] + (float)(r["held_m3"] ?? 0);
+            float pooled = Pool(s), deepest = Mathf.Max((float)s["deepest_m"], (float)(s["held_deepest_m"] ?? 0));
+            bool ran = s["runoff_peak_cms"]?.Type == JTokenType.Float;
+            var pools = rows.Properties().Select(p => Pool(p.Value)).ToList();
+            stormReadout.text = $"{rp}-year storm: {(float)(s["rain_mm"] ?? 0):0} mm of rain" +
+                (ran ? $", peak flow {(float)s["runoff_peak_cms"]:0.00} m³/s, {(float)s["left_m3"]:0} m³ leaves the park" : ", Analyse site again for the flow") +
+                (s["flood_area_m2"] != null
+                    ? $"\nWater at its highest: {(float)s["flood_area_m2"]:0} m² at 5 cm or deeper, {(float)s["flood_depth_m"] * 100:0} cm at the deepest (2D flood model, indicative)"
+                    : $"\nPooled: {(pooled < 10 ? pooled.ToString("0.0") : pooled.ToString("0"))} m³, {deepest * 100:0} cm at the deepest" +
+                      (pools.Max() - pools.Min() < 0.05f ? ". The same in every storm: the hollows are already full in the smallest. Analyse site again for the water on the ground." : ""));
+        }
+
+        /// The storms side by side; click a row to show that storm.
+        void FillStormTable(JToken a, int rp)
+        {
+            stormTable.Clear();
+            var rows = a["storm_summary"] as JObject;
+            if (rows == null || !rows.Properties().Any()) return;
+            stormTable.Add(StormRow(false, "Storm yr", "Rain mm", "Run off mm", "Peak m³/s", "Out m³", "Wet m²", "Max cm"));
+            foreach (var p in rows.Properties())
+            {
+                var s = p.Value;
+                int year = int.Parse(p.Name);
+                float pooled = (float)s["ponding_volume_m3"] + (float)(s["held_m3"] ?? 0);
+                float deepest = Mathf.Max((float)s["deepest_m"], (float)(s["held_deepest_m"] ?? 0));
+                bool ran = s["runoff_peak_cms"]?.Type == JTokenType.Float;
+                bool flood = s["flood_area_m2"] != null;
+                if (flood) deepest = (float)s["flood_depth_m"];
+                var row = StormRow(year == rp, $"{year}", $"{(float)(s["rain_mm"] ?? 0):0}", $"{(float)s["runoff_mm"]:0}", ran ? $"{(float)s["runoff_peak_cms"]:0.00}" : "-",
+                                   ran ? $"{(float)s["left_m3"]:0}" : "-", flood ? $"{(float)s["flood_area_m2"]:0}" : (pooled < 10 ? $"{pooled:0.0}" : $"{pooled:0}"), $"{deepest * 100:0}");
+                row.RegisterCallback<ClickEvent>(_ => { int k = returnPeriods.IndexOf(year); if (k >= 0) timeline.OnRp?.Invoke(k); });
+                row.tooltip = $"Show the {year}-year storm";
+                stormTable.Add(row);
+            }
+            var note = Text("From SWMM for the whole park. Peak: runoff at its highest. Out: leaves the park. Wet: ground at 5 cm or deeper at the storm's highest, and Max: the deepest water, from the 2D flood model (indicative).", "layer-source");
+            note.style.whiteSpace = WhiteSpace.Normal;
+            note.style.marginTop = 6;
+            stormTable.Add(note);
+        }
+
+        static VisualElement StormRow(bool current, params string[] cells)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.FlexEnd;
+            row.style.paddingTop = 3;
+            row.style.paddingBottom = 3;
+            if (current) row.style.backgroundColor = new Color(0.29f, 0.61f, 0.79f, 0.25f);
+            foreach (var c in cells)
+            {
+                var l = Text(c, "layer-source");
+                l.style.flexGrow = 1;
+                l.style.flexBasis = 0;
+                l.style.whiteSpace = WhiteSpace.Normal;
+                l.style.unityTextAlign = TextAnchor.LowerRight;
+                l.style.paddingRight = 4;
+                row.Add(l);
+            }
+            return row;
         }
 
         void FocusOn(float x, float y, float z, float distance)

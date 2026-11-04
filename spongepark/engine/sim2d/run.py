@@ -40,6 +40,17 @@ def _coarsen(z: np.ndarray, valid: np.ndarray, k: int):
     return out, cnt >= (k * k) / 2
 
 
+def _keep_barriers(z: np.ndarray, project: Project, k: int) -> None:
+    """A coarse cell holding part of a thin wall or check dam takes its top (a block average would wash it away): a design
+    model's walls hold water on the storm's coarser grid too. Changes ``z`` in place."""
+    if k <= 1 or not project.exists("terrain/barriers.tif"):
+        return
+    b = read_geotiff(project.path("terrain/barriers.tif"))
+    nr, nc = z.shape
+    top = np.where(b.z != b.nodata, b.z, -np.inf)[:nr * k, :nc * k].reshape(nr, k, nc, k).max((1, 3))
+    z[np.isfinite(top)] = np.maximum(z, top)[np.isfinite(top)]
+
+
 def _infiltration(site: Site, method: str, X, Y, mask, imperv):
     """Ground infiltration matching the SWMM method: (constant rates mm/hr, rate function or None, note).
 
@@ -97,6 +108,7 @@ class Inputs2D:
     duration_s: float
     alpha: float
     dt_max: float
+    inlets: Any = None   # (row, col, area m2) where water from outside the site arrives
 
 
 def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = None) -> Inputs2D:
@@ -109,11 +121,12 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
     k = max(1, int(round(cell_m / dem.cell_size)))
     valid = (dem.z != dem.nodata) & np.isfinite(dem.z)
     z, valid = _coarsen(dem.z, valid, k)
+    _keep_barriers(z, project, k)
     cell = dem.cell_size * k
     g = DEM(z, cell, dem.origin, dem.crs, dem.nodata)
     X, Y = g.cell_centres()
     mask = valid & contains_xy(site.boundary, X, Y)
-    _close_exits(project, g, mask, X, Y)
+    _close_exits(project, g, mask, X, Y, option_id)
 
     # roughness and infiltration per cell
     imperv_kinds = set(P.value("terrain.impervious_context_kinds"))
@@ -124,6 +137,7 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
     n = np.where(imperv, float(P.value("surface.n_imperv")), float(P.value("surface.n_perv")))
     method = str(P.value("swmm.infiltration_method")).upper()
     f, infil_fn, infil_note, infil_params = _infiltration(site, method, X, Y, mask, imperv)
+    f, infil_fn, infil_note = _nbs_zones(project, f, infil_fn, infil_note, infil_params, X, Y, mask)
 
     # NbS elements as sinks (resolved values written by the SWMM run of the option)
     from ..site import wells
@@ -150,29 +164,66 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
         els = Elements2D(lab, ids, np.array(caps), np.array(rates), np.array(areas))
 
     storm = load_hyetographs(project)[rp]
+    from ..site import openings
+
     return Inputs2D(g, mask, n, f, infil_fn, infil_note, infil_params, els, storm.intensity_mm_hr.astype(float),
                     storm.dt_min * 60, storm.duration_hr * 3600 + float(P.value("sim2d.extra_time_hr")) * 3600,
-                    float(P.value("sim2d.courant")), float(P.value("sim2d.max_time_step_s")))
+                    float(P.value("sim2d.courant")), float(P.value("sim2d.max_time_step_s")),
+                    openings.inlet_cells(project, option_id, X, Y, mask))
 
 
-def _close_exits(project: Project, g: DEM, mask: np.ndarray, X: np.ndarray, Y: np.ndarray) -> None:
+def _nbs_zones(project: Project, f, infil_fn, note, params, X, Y, mask):
+    """Rain gardens and swales in a design model soak water in at the fact sheets' media rate, not the park's."""
+    from ..io.model3d import NBS_RATE_KEY, NBS_ZONES
+    from shapely.ops import unary_union
+
+    if not project.exists(NBS_ZONES):
+        return f, infil_fn, note
+    rate = float(project.parameters.value(NBS_RATE_KEY))
+    zone = contains_xy(unary_union([shape(z["geometry"]) for z in project.read_geojson(NBS_ZONES)["features"]]), X, Y) & mask
+    f = np.where(zone, np.maximum(f, rate), f)
+    if "base_mm_hr" in params:
+        params["base_mm_hr"] = np.where(zone, np.maximum(params["base_mm_hr"], rate), params["base_mm_hr"])
+    note = f"{note}; rain gardens and swales at {rate:g} mm/hr (HC 4.2 p.12, HC 4.7 p.8)"
+    if infil_fn is None:
+        return f, None, note
+    park = infil_fn
+
+    def fn(t, i, P):
+        v = park(t, i, P)
+        return np.where(zone, np.maximum(v, rate), v)
+
+    return f, fn, note
+
+
+def _close_exits(project: Project, g: DEM, mask: np.ndarray, X: np.ndarray, Y: np.ndarray, option: Optional[str] = None) -> None:
     """Exits with no way out (Site setup > Outfalls): the park's edge cells whose ground drains to such an exit
     are raised by its edge height (the wall or kerb), so water ponds against the edge and spills over it only
-    above that height, as in SWMM. Changes ``g.z`` in place."""
+    above that height, as in SWMM. Then each outlet the designer placed cuts through that edge at its sill.
+    Changes ``g.z`` in place."""
     from scipy import ndimage
 
-    from ..site import outfalls
+    from ..site import openings, outfalls
 
-    closed = {e["id"]: float(e["edge_height_m"]) for e in outfalls.status(project)["exits"]
+    closed = {e["id"]: float(e["edge_height_m"]) for e in outfalls.status(project, option, with_outlets=False)["exits"]
               if e["state"] == "closed" and e["confirmed"]}
-    if not closed or not project.exists("site/subcatchments.geojson"):
+    outlets = [o for o in openings.active(project, option) if o["kind"] == "outlet"]
+    if (not closed and not outlets) or not project.exists("site/subcatchments.geojson"):
         return
+    ground = g.z.copy()
     ring = mask & ~ndimage.binary_erosion(mask, structure=np.ones((3, 3)), border_value=0)
+    tops = outfalls.wall_tops(project, g)   # a modelled wall stands at its own height; a gap in it at the answer's
     for f in project.read_geojson("site/subcatchments.geojson")["features"]:
         h = closed.get(f["properties"].get("outlet"))
         if h:
             edge = ring & contains_xy(shape(f["geometry"]).buffer(g.cell_size), X, Y)
             g.z[edge] += h
+            if tops is not None:
+                walled = edge & np.isfinite(tops)
+                g.z[walled] = np.maximum(ground[walled], tops[walled])
+    for o in outlets:
+        cut = ring & (np.hypot(X - o["x"], Y - o["y"]) <= max(float(o["width_m"]) / 2, g.cell_size))
+        g.z[cut] = ground[cut] + float(o["sill_m"])
 
 
 def _engine(P) -> str:
@@ -246,12 +297,14 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
             raise RuntimeError(f"{option_id}: the elements are not carved into the ground yet (regrade it first), "
                                "so Itzi would not see their storage.")
         engine, engine_note = "builtin", "Itzi needs the elements carved into the ground; the built-in model was used."
+    if engine == "itzi" and inp.inlets:
+        engine, engine_note = "builtin", "Itzi cannot take the inlets here; the built-in model was used."
     flow = None
     if engine == "itzi":
         res, flow = _run_itzi(inp, frame_s)
     else:
         res = simulate(g.z, mask, cell, inp.rain_mm_hr, inp.rain_dt_s, duration_s, inp.n, inp.f, els,
-                       frame_every_s=frame_s, alpha=inp.alpha, dt_max=inp.dt_max, infil_fn=inp.infil_fn)
+                       frame_every_s=frame_s, alpha=inp.alpha, dt_max=inp.dt_max, infil_fn=inp.infil_fn, inlets=inp.inlets)
 
     # SWMM comparison
     swmm = None

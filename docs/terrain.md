@@ -95,3 +95,26 @@ standard, and `SP-CHECK-*` layers (meaning unclear) are listed under `needs_deci
 
 Layers not in the standard become `SP-X-<old name>` (nothing is lost). To use a new surveyor's
 name, add it to the layer's `aliases`.
+
+## A 3D model as the ground (flow and pooling study)
+
+Start screen > *Flow Study from a 3D Model*, or Site > *From 3D model*. It takes a Rhino `.3dm` or COLLADA `.dae` file.
+
+1. **Layers.** The engine lists the model's layers (for COLLADA, the node's `layer` attribute, else the first level of
+   the scene with more than one node) and suggests a role for each: ground, building, site boundary or leave out.
+   Trees, people and furniture must be left out: anything marked ground or building blocks water.
+2. **Units and size.** Units come from the file when it states them. The dialog shows the resulting site size and
+   levels, because a wrong scale still gives believable results.
+3. **Ground.** The highest ground or building surface over each cell, at the chosen cell size, is written to
+   `terrain/existing.tif`. From there flow, ponding and storm runs work as for a survey.
+
+- **Buildings** become one flat block each, so a parapet or a dished roof does not read as a pond. They are recorded in
+  `site/context.geojson` as impervious.
+- **The site** is the closed curve on the boundary layer, or else the outer edge of the model's largest joined part.
+- **Gaps** enclosed by the model are filled across and reported; left empty they would count as the site's edge, and water
+  would leave through them. Gaps open to the outside stay outside the site.
+- **NURBS and polysurfaces** are read only through the meshes Rhino saved with them (`rhino3dm` cannot mesh). Objects with
+  no saved mesh are counted and reported, not guessed at. Triangle strips and fans in COLLADA files are reported as unread.
+- **Overhangs** (bridges, canopies on a ground or building layer) count as solid down to the ground below them.
+- The model is kept inside the project (`survey/`) and recorded in `site/model_source.json`. There are no survey layers, so
+  trees, paths and ponds in the model are not modelled as such, and soil comes from Site setup.

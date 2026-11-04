@@ -140,7 +140,11 @@ def info(pid: str) -> Dict[str, Any]:
             "return_periods": p.parameters.value("project.return_periods"),
             "has_soils": bool(p.read_geojson("site/soil_zones.geojson")["features"]),
             "has_rainfall": p.exists("rainfall/return_periods.csv"),
-            "has_survey": any(p.path("survey").glob("*_SP.dxf")),
+            "has_survey": any(p.path("survey").glob("*_SP.dxf")) or p.exists("site/model_source.json"),
+            "from_model": p.exists("site/model_source.json"),
+            "has_existing": p.exists("survey/existing.sponge"),
+            "proposal": p.read_json("site/proposal.json") if p.exists("site/proposal.json") else None,
+            "openings_confirmed": bool(p.exists("site/openings.json") and p.read_json("site/openings.json").get("confirmed")),
             "site_confirmed": bool(p.parameters.value_or("site.model_confirmed", False)),
             "has_ground": p.exists("site/ground.json"),
             "analysed": p.exists("site/analysis.json")}
@@ -469,7 +473,8 @@ def flow_analysis(pid: str, rebuild: bool = False, scenario: Optional[str] = Non
 
     p = _project(pid)
     with _locks[pid]:
-        fresh = rebuild or not p.exists(flowmap.rel_for(scenario))
+        rel = flowmap.rel_for(scenario)
+        fresh = rebuild or not p.exists(rel) or p.read_json(rel).get("version") != flowmap.VERSION
         out = flowmap.load(p, rebuild, scenario)
         if fresh:
             p.save()
@@ -534,6 +539,53 @@ def ponds_put(pid: str, answers: List[Dict[str, Any]] = Body(..., embed=True)) -
     with _locks[pid]:
         try:
             out = ponds.apply(p, answers)
+            _analysis_stale(p)
+        except ValueError as ex:
+            raise HTTPException(400, str(ex))
+        p.save()
+    return out
+
+
+@app.put("/projects/{pid}/proposal")
+def proposal_put(pid: str, body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """A proposed design's files, kept on the survey's project until the existing site has been studied and it is time for the design."""
+    p = _project(pid)
+    with _locks[pid]:
+        p.write_json("site/proposal.json", {"model": body.get("model"), "design_plan": body.get("design_plan")})
+        p.save()
+    return p.read_json("site/proposal.json")
+
+
+@app.post("/projects/{pid}/compare/{rp}")
+def compare_run(pid: str, rp: int, wait: bool = False) -> Dict[str, Any]:
+    """Before and after: the same storm on the existing site and the proposed design."""
+    from spongepark.engine.site import compare
+
+    def fn(p: Project):
+        out = compare.run(p, rp)
+        p.save()
+        return out
+
+    return _job(pid, f"before and after rp{rp}", fn, wait)
+
+
+@app.get("/projects/{pid}/site/openings")
+def openings_get(pid: str) -> Dict[str, Any]:
+    """The inlets and outlets the designer has placed, and gaps in a modelled wall nobody has answered for yet."""
+    from spongepark.engine.site import openings
+
+    return openings.status(_project(pid))
+
+
+@app.put("/projects/{pid}/site/openings")
+def openings_put(pid: str, body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """``openings``: every inlet and outlet ([{kind, origin, x, y, ...}]); ``confirmed``: the list is complete."""
+    from spongepark.engine.site import openings
+
+    p = _project(pid)
+    with _locks[pid]:
+        try:
+            out = openings.save(p, body)
             _analysis_stale(p)
         except ValueError as ex:
             raise HTTPException(400, str(ex))
@@ -673,6 +725,17 @@ def sim2d_frames(pid: str, oid: str, rp: int, start: int = 0, count: int = 1000)
     if not p.exists(f"scenarios/{oid}/sim2d/rp{rp}.npz"):
         raise HTTPException(404, "run the 2D simulation first")
     return frames_payload(p, oid, rp, start, count)
+
+
+@app.get("/projects/{pid}/options/{oid}/sim2d/{rp}/peak")
+def sim2d_peak(pid: str, oid: str, rp: int) -> Dict[str, Any]:
+    """The storm's highest water (indicative), as one depth frame."""
+    from spongepark.engine.io.viewer import peak_payload
+
+    p = _project(pid)
+    if not p.exists(f"scenarios/{oid}/sim2d/max_depth_rp{rp}.tif"):
+        raise HTTPException(404, "run the 2D simulation first")
+    return peak_payload(p, oid, rp)
 
 
 @app.get("/projects/{pid}/options/{oid}/sim2d/{rp}/inputs")
@@ -900,6 +963,54 @@ def intake_finish(req: IntakeFinish, wait: bool = False) -> Dict[str, Any]:
                 req.park_area_m2, req.contours_in_surface, req.units_scale_to_m)))
         except Exception as ex:
             log.exception("intake failed")
+            _jobs[jid].update(status="error", error=str(ex))
+
+    fut = _pool.submit(work)
+    if wait:
+        fut.result()
+        return _jobs[jid]
+    return {"job": jid, "status": "running"}
+
+
+@app.post("/intake/model/inspect")
+def intake_model_inspect(path: str = Body(..., embed=True)) -> Dict[str, Any]:
+    """A 3D model (.3dm, .dae): its layers with a suggested role each, its units and its size."""
+    from spongepark.engine.io import model3d
+
+    try:
+        return model3d.inspect(Path(path))
+    except model3d.ModelError as ex:
+        raise HTTPException(400, str(ex))
+
+
+class ModelFinish(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    model: str
+    roles: Dict[str, str]
+    project_path: Optional[str] = None
+    scale_to_m: Optional[float] = None
+    cell_m: Optional[float] = None
+    survey_project: Optional[str] = None    # the site's project made from its survey: coordinates and existing contours
+    design_plan: Optional[str] = None       # the design's plan (DXF): positions only, its contours are not used
+
+
+@app.post("/intake/model/finish")
+def intake_model_finish(req: ModelFinish, wait: bool = False) -> Dict[str, Any]:
+    """Create the project of a proposed design (a job): it needs all three, the survey's project, the plan and the model."""
+    from spongepark.engine.io import model3d
+
+    if not req.survey_project or not req.design_plan:
+        raise HTTPException(400, "a proposed design needs all three: the site survey, the design plan and the 3D model.")
+    jid = uuid.uuid4().hex[:12]
+    _jobs[jid] = {"id": jid, "project": None, "name": "model intake", "status": "running"}
+
+    def work():
+        try:
+            _jobs[jid].update(status="done", result=_jsonable(model3d.finish(
+                Path(req.model), req.roles, Path(req.project_path) if req.project_path else None,
+                req.scale_to_m, req.cell_m, req.survey_project, req.design_plan)))
+        except Exception as ex:
+            log.exception("model intake failed")
             _jobs[jid].update(status="error", error=str(ex))
 
     fut = _pool.submit(work)

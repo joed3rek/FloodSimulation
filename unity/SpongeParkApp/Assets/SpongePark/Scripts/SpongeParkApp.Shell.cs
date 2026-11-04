@@ -34,7 +34,11 @@ namespace SpongePark
         Dialog siteSetup, targetsDialog, settingsDialog;
         PanelSettings panelSettings;
         readonly Dictionary<string, Command> commands = new Dictionary<string, Command>();
-        bool contentsDirty, lastBusy;
+        bool contentsDirty, lastBusy, stormPending, stormLoading;
+        int flowShownRp;
+        VisualElement stormButtons;
+        Label stormReadout;
+        string stormButtonsFor;
         string contentsKey = "", lastStatus = "";
         Rect viewRect = new Rect(0.3f, 0, 0.7f, 1);
         JObject onboarding;   // the guided project's checklist state (null: not guided)
@@ -76,10 +80,10 @@ namespace SpongePark
             timeline = new Timeline(ui)
             {
                 OnPlay = () => playing = !playing,
-                OnRestart = () => { simT = 0; if (live) StartCoroutine(StartLive()); },
+                OnRestart = () => { simT = 0; if (live) StartCoroutine(StartLive()); else ShowStormWater(); },
                 OnSpeed = v => speed = v,
                 OnScrub = v => { if (!live) { simT = v; left.ShowAt(simT, false, 0); right.ShowAt(simT, false, 0); } },
-                OnRp = k => { if (k == rpIdx || returnPeriods.Count == 0) return; rpIdx = k; if (!busy && info != null) StartCoroutine(Run(LoadViews(), "Loading the storm")); },
+                OnRp = PickStorm,
             };
             statusBar = new StatusBar { OnSnap = () => toasts.Show("Snapping arrives with the drawing tools in Pass 2.", "info") };
             toasts = new Toasts();
@@ -117,8 +121,8 @@ namespace SpongePark
         void BuildCommands()
         {
             // Site
-            C("import", "Import survey", "import", "Start a new project from a survey drawing (DXF): link its layers, build the ground",
-              () => { EnsureLanding(); PickFile("Choose the site survey (DXF)", "Site survey", "dxf,dwg", p => StartCoroutine(StartIntake(p))); },
+            C("import", "New project", "import", "Start a new project: study the existing site, or a proposed design",
+              () => { EnsureLanding(); OpenNewProject(); },
               () => engineUp && !busy, visible: () => !bundle, primary: true);
             C("confirm", "Confirm site model", "confirm", "The ground and the survey layers match the site: go on to the analysis",
               () => StartCoroutine(Run(ConfirmSite(true), "Saving")), () => Engine && HasGround, visible: () => !siteConfirmed && !bundle, primary: true);
@@ -137,7 +141,12 @@ namespace SpongePark
                   () => flowData != null, () => flowData != null && FlowOn(key));
             }
             C("analyse", "Analyse site", "analyse", "Where water runs and collects on the ground (with the ponds and wells from Site setup), and SWMM on the existing park for every storm",
-              () => StartCoroutine(Run(AnalyseSite(), "Analysing the site")), () => Engine && siteConfirmed && FloodReady, visible: () => !bundle, primary: true);
+              () => { if (NeedOpenings) AskOpenings(); else StartCoroutine(Run(AnalyseSite(), "Analysing the site")); }, () => Engine && siteConfirmed && FloodReady, visible: () => !bundle, primary: true);
+            C("to-design", "Go to the design", "import", "Step 2 of the proposal: the existing site is studied, now the design, on the survey's coordinates and with its rainfall and ground",
+              GoToDesign, () => Engine && Analysed && !busy, visible: () => info?["proposal"] != null && info["proposal"].Type == JTokenType.Object);
+            C("compare", "Before and after", "results", "The selected storm on the existing site and on the design: flooding, runoff and where runoff is not collected",
+              () => { if (NeedOpenings) AskOpenings(); else StartCoroutine(Run(RunCompare(), "Running the storm on the existing site and the design")); },
+              () => Engine && Analysed && !busy, visible: () => (bool?)info?["has_existing"] == true);
             C("baseline", "Analyse existing", "baseline", "SWMM on the existing park for every storm (needed to compare options)",
               () => StartCoroutine(Run(Baseline(), "Analysing")), () => Engine && siteConfirmed && FloodReady, visible: () => !bundle);
             // Design
@@ -216,7 +225,7 @@ namespace SpongePark
             site.Group("Layers").Small(commands["layers-on"]).Small(commands["layers-off"]);
 
             var analyse = new RibbonTab(Tab.Analyse, "Analyse");
-            analyse.Group("Analyse").Large(commands["analyse"]);
+            analyse.Group("Analyse").Large(commands["analyse"]).Large(commands["to-design"]);
             analyse.Group("Show").Large(commands["flow-lines"]).Large(commands["flow-arrows"]).Large(commands["flow-ponding"]).Large(commands["flow-exits"]);
 
             var design = new RibbonTab(Tab.Design, "Design");
@@ -248,6 +257,7 @@ namespace SpongePark
             var og = res.Group("Option");
             og.Add(optionField);
             res.Group("View").Large(commands["split"]).Large(commands["swap"]);
+            res.Group("Compare").Large(commands["compare"]);
             res.Group("Tables").Large(commands["show-results"]).Large(commands["table"]);
 
             var exp = new RibbonTab(Tab.Export, "Export");
@@ -334,7 +344,25 @@ namespace SpongePark
                 overlayToggles.Add((b, () => Mathf.Approximately(exaggeration, v)));
             }
             tl.Add(heights);
+            stormButtons = Kit.Box("seg");
+            tl.Add(stormButtons);
             overlay.Add(tl);
+            stormReadout = Text("", "muted");
+            stormReadout.style.position = Position.Absolute;
+            stormReadout.style.left = 12;
+            stormReadout.style.top = 48;
+            stormReadout.style.maxWidth = 520;
+            stormReadout.style.whiteSpace = WhiteSpace.Normal;
+            stormReadout.style.paddingLeft = 8;
+            stormReadout.style.paddingRight = 8;
+            stormReadout.style.paddingTop = 4;
+            stormReadout.style.paddingBottom = 4;
+            stormReadout.style.borderTopLeftRadius = stormReadout.style.borderTopRightRadius = 4;
+            stormReadout.style.borderBottomLeftRadius = stormReadout.style.borderBottomRightRadius = 4;
+            stormReadout.style.backgroundColor = new Color(0.08f, 0.09f, 0.11f, 0.85f);
+            stormReadout.style.color = new Color(0.9f, 0.92f, 0.95f);
+            SpongePark.UI.Kit.Show(stormReadout, false);
+            overlay.Add(stormReadout);
 
             var tc = Kit.Box("vp-tc");
             tc.Add(drawHint);
@@ -455,8 +483,8 @@ namespace SpongePark
             var groundPage = siteSetup.Page("ground", "Ground");
             var pondPage = siteSetup.Page("ponds", "Ponds");
             var wellPage = siteSetup.Page("wells", "Wells");
-            var outfallPage = siteSetup.Page("outfalls", "Outfalls");
-            if (!bundle) { BuildGroundAndRain(rainPage, groundPage, pondPage, wellPage); BuildOutfalls(outfallPage); }
+            var outfallPage = siteSetup.Page("outfalls", "Inlets and outlets");
+            if (!bundle) { BuildGroundAndRain(rainPage, groundPage, pondPage, wellPage); BuildOutfalls(outfallPage); BuildSetupFooter(); }
 
             targetsDialog = new Dialog("Targets", host);
             var tb = targetsDialog.Body;
@@ -517,6 +545,7 @@ namespace SpongePark
             props.Section("checks", "Design checks", warnBox, () => warnBox.childCount > 0);
             props.EmptyText("checks", () => designResult == null ? "Checks appear once the design has elements (Design tab)." : "No checks to show: every element is within its limits.");
 
+            props.Section("results", "Storm by storm", stormTable, () => stormTable.childCount > 0);
             props.Section("results", "Where water collects", hotspotList, () => hotspotList.childCount > 0);
             props.Section("results", "Design results (SWMM)", resultsCard, () => HasDesign || resultsBox.childCount > 0);
             props.Section("results", "Suggested layouts", suggestCard, () => suggestList.childCount > 0);
@@ -551,7 +580,7 @@ namespace SpongePark
             contentsKey = key;
             var groups = new List<ContentsGroup>();
             var survey = new ContentsGroup { Key = "survey", Title = "Survey", Empty = HasProject ? "No survey layers in this project." : "Open or create a project." };
-            if (HasGround)
+            if (HasGround && (bool?)info["from_model"] != true)   // a design model draws its own contour layers
                 survey.Rows.Add(new ContentsRow
                 {
                     Key = ContoursLayer, Label = "Contours (ground model)", Count = $"{left.Terrain.ContourInterval:0.##} m",
@@ -744,7 +773,16 @@ namespace SpongePark
                     if (ui.Layout.contentsCollapsed) ui.ChangeLayout(l => l.contentsCollapsed = false);
                     break;
                 case "checklist": if (onboarding == null) ToggleChecklist(); else ui.ChecklistOpen = true; break;
+                case "compare-demo":
+                    if (System.IO.File.Exists(parts[1].Replace('|', ':'))) ShowCompare(JToken.Parse(System.IO.File.ReadAllText(parts[1].Replace('|', ':'))));
+                    break;
+                case "new-project":
+                    OpenNewProject();
+                    if (parts.Length > 1) { newMode = parts[1]; BuildNewProject(); }
+                    break;
                 case "site-setup": siteSetup.Open(parts.Length > 1 ? parts[1] : null); break;
+                case "setup-walk": StartCoroutine(SetupWalk()); break;
+                case "survey-walk": StartCoroutine(SurveyWalk()); break;
                 case "targets": targetsDialog.Open(); break;
                 case "settings": settingsDialog.Open(); break;
                 case "max": ui.ViewportMax = true; break;
@@ -834,6 +872,33 @@ namespace SpongePark
             else if (lastBusy && !busy && !status.StartsWith("Error") && !string.IsNullOrEmpty(status)) toasts.Show(status, "ok");
             lastStatus = status;
             lastBusy = busy;
+            if (stormPending && !busy && !stormLoading)   // a storm picked while the app was busy loads as soon as it is free
+            {
+                stormPending = false;
+                if (info != null) StartCoroutine(SwitchStorm());
+            }
+            SyncStormButtons();
+        }
+
+        /// One button per design storm on the view, the current one lit.
+        void SyncStormButtons()
+        {
+            if (stormButtons == null) return;
+            string key = string.Join(",", returnPeriods);
+            if (key != stormButtonsFor)
+            {
+                stormButtonsFor = key;
+                stormButtons.Clear();
+                for (int i = 0; i < returnPeriods.Count; i++)
+                {
+                    int k = i;
+                    var b = new Button(() => PickStorm(k)) { text = $"{returnPeriods[i]} yr", tooltip = $"Show the {returnPeriods[i]}-year storm" };
+                    b.AddToClassList("seg-btn");
+                    stormButtons.Add(b);
+                }
+                SpongePark.UI.Kit.Show(stormButtons, returnPeriods.Count > 0);
+            }
+            for (int i = 0; i < stormButtons.childCount; i++) stormButtons[i].EnableInClassList("seg-btn--on", i == Mathf.Clamp(rpIdx, 0, returnPeriods.Count - 1));
         }
 
         TimelineData TimelineNow()

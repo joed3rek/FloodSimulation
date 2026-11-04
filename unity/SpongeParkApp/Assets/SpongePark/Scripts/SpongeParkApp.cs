@@ -83,8 +83,9 @@ namespace SpongePark
             if (Arg("-spProject") != null) StartCoroutine(Autorun());
             else
             {
-                // the opening animation (not over screenshots unless asked for with -spSplash)
-                bool splashOn = Arg("-spShot") == null || System.Environment.GetCommandLineArgs().Contains("-spSplash");
+                // the opening animation: off for now, only with -spSplash
+                // (to bring it back: Arg("-spShot") == null || ...Contains("-spSplash"))
+                bool splashOn = System.Environment.GetCommandLineArgs().Contains("-spSplash");
                 var splash = splashOn ? new UI.Splash(new[] { ("ui", "Loading the interface"), ("gpu", "Checking the graphics card"),
                     ("recent", "Reading recent projects"), ("start", "Preparing the start screen"), ("engine", "Starting the flood engine") }) : null;
                 if (splash != null)
@@ -186,12 +187,13 @@ namespace SpongePark
             if (engineUp) yield return OpenExisting(sponge);
         }
 
-        // Screenshot for checks and documentation: -spShot out.png [-spSurvey drawing.dxf] [-spEngineUrl url]
+        // Screenshot for checks and documentation: -spShot out.png [-spSurvey drawing.dxf] [-spModel model.3dm] [-spEngineUrl url]
         IEnumerator Shot()
         {
             if (Arg("-spEngineUrl") != null) api.baseUrl = Arg("-spEngineUrl");
             yield return CheckEngine();
             if (Arg("-spSurvey") != null) yield return StartIntake(Arg("-spSurvey"));
+            if (Arg("-spModel") != null) yield return StartModelIntake(Arg("-spModel"));
             yield return new WaitForSecondsRealtime(float.TryParse(Arg("-spWait"), out var wait) ? wait : 6);   // -spWait s
             // -spRp <years>: switch to that storm, as the storm buttons do
             if (int.TryParse(Arg("-spRp"), out var shotRp) && returnPeriods.Contains(shotRp) && info != null)
@@ -329,7 +331,8 @@ namespace SpongePark
             yield return api.Send("POST", api.P("/site/confirm"), new { confirmed }, x => r = x);
             if (r == null) yield break;
             siteConfirmed = confirmed;
-            status = confirmed ? "Site model confirmed. Next: Site setup (rainfall, ground, ponds, wells), then Analyse site." : "Site model reopened.";
+            status = confirmed ? "Site model confirmed. Answer the site setup, then Analyse site." : "Site model reopened.";
+            if (confirmed) yield return OpenSetup();
         }
 
         IEnumerator Refresh()
@@ -381,10 +384,11 @@ namespace SpongePark
         IEnumerator AnalyseSite()
         {
             JToken r = null;
-            yield return api.RunJob("POST", api.P("/analyse"), null, x => r = x, s => status = "analysing the site: " + s);
+            yield return api.RunJob("POST", api.P("/analyse"), null, x => r = x, s => status = "analysing the site, with the flood model for every storm (several minutes): " + s);
             if (r == null) yield break;
             yield return Refresh();
             yield return LoadFlow();
+            yield return LoadOutfalls();   // the exits come from the analysis
             ui.ActiveTab = SpongePark.UI.Tab.Analyse;
             MarkStage("analyse_flow");
             var f = r["flow"];
@@ -398,6 +402,10 @@ namespace SpongePark
             flowData = null;
             if (frame != null) { left.Flow.Build(null, frame, layerVisible); right.Flow.Build(null, frame, layerVisible); }
             hotspotList?.Clear();
+            stormTable?.Clear();
+            left.ClearPeaks();
+            right.ClearPeaks();
+            if (stormReadout != null) SpongePark.UI.Kit.Show(stormReadout, false);
             if (flowText != null)
                 flowText.text = !siteConfirmed ? "Confirm the site model, answer Site setup, then Analyse site."
                     : "Not analysed yet" + (info?["has_ground"] != null && FloodReady ? "" : " (answer Site setup first)") +
@@ -454,17 +462,24 @@ namespace SpongePark
             right.Option = CurrentOption ?? "baseline";
             yield return left.Load(api, frame, rp, bundle);
             yield return right.Load(api, frame, rp, bundle);
+            bool fromModel = (bool?)info?["from_model"] == true;
             if (!bundle && surveyLayers == null && (bool?)info?["has_survey"] == true)
             {
                 status = "Placing the survey's walls, trees and paths on the ground (a large drawing can take a minute the first time)…";
                 yield return api.Get(api.P("/site/layers"), x => surveyLayers = x, 600);
             }
+            // the model takes the place of the ground, so the ground goes only once there is a model to draw
+            bool noModel = fromModel && surveyLayers == null;
+            if (noModel) api.ClearError();
+            left.Terrain.SetDrawn(!fromModel || noModel);
+            right.Terrain.SetDrawn(!fromModel || noModel);
             FillSiteLayers();
             bool contours = !layerVisible.TryGetValue(ContoursLayer, out var con) || con;
             left.Terrain.SetContours(contours);
             right.Terrain.SetContours(contours);
             left.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
             right.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
+            if (!bundle) yield return LoadOpenings();
             if (siteConfirmed && !bundle && Analysed) yield return LoadFlow();   // shown once Analyse site has run
             else if (!bundle) ClearFlow();
             yield return LoadComparison();
@@ -474,8 +489,10 @@ namespace SpongePark
             var b = left.Terrain.GetComponent<MeshFilter>().sharedMesh.bounds;
             rigLeft.Frame(b, sideBySide); rigRight.Frame(b, sideBySide);
             simT = 0;
+            ShowStormWater();
             status = left.Frames != null ? $"{CurrentRp}-yr storm loaded. Press Play."
                 : "Site model loaded: drag to orbit, scroll to zoom. Check the layers in Contents.";
+            if (noModel) AskToRemakeModel();
         }
 
         IEnumerator StartLive()
@@ -518,7 +535,7 @@ namespace SpongePark
         // ------------------------------------------------------------ frame update
         void Update()
         {
-            DesignInput();
+            if (!OpeningsInput()) DesignInput();
             UpdateWeather();
             if (!playing) return;
             float dtSim = Time.deltaTime * speed;
