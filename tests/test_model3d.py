@@ -377,7 +377,7 @@ def test_an_outlet_lets_water_out_and_an_inlet_brings_it_in(tmp_path):
         low = {"kind": "outlet", "origin": "site", "x": 0.5, "y": 20.0, "width_m": 6, "sill_m": 0}   # the low side of the slope
         openings.save(p, {"openings": [low], "confirmed": True})
         opened = run(p)
-        assert closed["outflow_m3"] < 0.01 * closed["rainfall_m3"]
+        assert closed["outflow_m3"] < 0.015 * closed["rainfall_m3"]   # rain on the wall tops runs off both ways
         assert opened["outflow_m3"] > 20 * max(closed["outflow_m3"], 1.0)
         inlet = {"kind": "inlet", "origin": "site", "x": 50.0, "y": 20.0, "area_m2": 1000, "runoff_pct": 50}
         openings.save(p, {"openings": [inlet], "confirmed": True})

@@ -68,6 +68,58 @@ def rel_for(scenario: Optional[str]) -> str:
     return REL if not scenario or scenario == "baseline" else f"scenarios/{scenario}/flow_analysis.json"
 
 
+def feeding_ground(dirs: np.ndarray, mask: np.ndarray, hollow: np.ndarray, z: np.ndarray, X: np.ndarray, Y: np.ndarray,
+                   cell: float, origin, max_paths: int = 6) -> Dict[str, Any]:
+    """Where a hollow's water comes from: the outline of the ground that drains to it (``catchment``) and the longest
+    separate ways down it (``feeders``: x, y, z from the top of the ground to the hollow)."""
+    from collections import deque
+
+    from rasterio.features import shapes
+    from rasterio.transform import from_origin
+    from shapely.geometry import LineString, shape
+    from shapely.ops import unary_union
+
+    nr, nc = mask.shape
+    steps = np.full(mask.shape, -1, np.int32)
+    steps[hollow] = 0
+    todo = deque(zip(*np.nonzero(hollow)))
+    while todo:   # up the drainage from the hollow, one cell at a time
+        r, c = todo.popleft()
+        for k, (dr, dc) in enumerate(fl.D8):
+            r0, c0 = r - dr, c - dc
+            if 0 <= r0 < nr and 0 <= c0 < nc and mask[r0, c0] and steps[r0, c0] < 0 and dirs[r0, c0] == k:
+                steps[r0, c0] = steps[r, c] + 1
+                todo.append((r0, c0))
+    out: Dict[str, Any] = {"catchment": [], "feeders": []}
+    ground = steps >= 0
+    if ground.sum() > hollow.sum():
+        polys = [shape(g) for g, _ in shapes(ground.astype("int32"), mask=ground, transform=from_origin(origin[0], origin[1], cell, cell))]
+        u = unary_union(polys).simplify(cell * 0.5)
+        big = max(getattr(u, "geoms", [u]), key=lambda g: g.area)
+        out["catchment"] = np.round(np.asarray(big.exterior.coords), 2).ravel().tolist()
+    near = np.zeros(mask.shape, bool)   # a way down close to one already taken shows nothing new
+    keep = 4
+    order = np.argsort(-steps, axis=None)
+    for i in order:
+        r, c = np.unravel_index(i, mask.shape)
+        if steps[r, c] < 3 or len(out["feeders"]) >= max_paths:
+            break
+        if near[r, c]:
+            continue
+        path = [(int(r), int(c))]
+        while steps[path[-1]] > 0:
+            k = dirs[path[-1]]
+            path.append((path[-1][0] + fl.D8[k][0], path[-1][1] + fl.D8[k][1]))
+        for pr, pc in path:
+            near[max(0, pr - keep):pr + keep + 1, max(0, pc - keep):pc + keep + 1] = True
+        ln = LineString([(X[p], Y[p]) for p in path]).simplify(cell * 0.3)
+        xy = np.asarray(ln.coords)
+        rr = np.clip(((origin[1] - xy[:, 1]) / cell).astype(int), 0, nr - 1)
+        cc = np.clip(((xy[:, 0] - origin[0]) / cell).astype(int), 0, nc - 1)
+        out["feeders"].append(np.round(np.c_[xy, np.nan_to_num(z[rr, cc], nan=float(np.nanmin(z)))], 3).ravel().tolist())
+    return out
+
+
 def analyse(project: Project, min_line_area_m2: float = 40.0, arrow_spacing_m: float = 3.0,
             scenario: Optional[str] = None) -> Dict[str, Any]:
     """Flow on the existing ground, or (``scenario``) on a scenario's carved ground: its NbS elements hold
@@ -228,7 +280,7 @@ def analyse(project: Project, min_line_area_m2: float = 40.0, arrow_spacing_m: f
     for h in hot:
         h["spills_to"] = id_of.get(h.pop("_into"))
         h["exit"] = exit_at(h.pop("_last"))
-        del h["_label"]
+        h.update(feeding_ground(dirs, mask, lab == h.pop("_label"), z, X, Y, cell, acc_r.origin))
     for f, seed in zip(flow_lines, line_seeds):
         f["exit"] = exit_at(_downstream(dirs, mask, *seed)[1])
 

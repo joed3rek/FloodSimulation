@@ -181,8 +181,10 @@ namespace SpongePark
               () => StartCoroutine(Run(RunDesign(), "Simulating the design")), () => Engine && HasDesign, () => designDirty, visible: () => !bundle, primary: true);
             C("verify", "Check in SWMM", "verify", "Check the design again in SWMM, every storm", CheckAgain, () => Engine && HasDesign, visible: () => !bundle);
             // Simulate
-            C("flood", "Run flood simulation", "simulate", "The 2D flood model over the existing ground for the chosen storm",
-              () => StartCoroutine(Run(RunFlood(), "Running the flood simulation")), () => Engine && siteConfirmed && FloodReady, visible: () => !bundle, primary: true);
+            C("flood", "Run flood, all storms", "simulate", "The 2D flood model over the existing ground for every storm at once, behind the app",
+              () => StartCoroutine(FloodAll()), () => Engine && siteConfirmed && Analysed && !floodRunning && !busy, visible: () => !bundle, primary: true);
+            C("flood-one", "This storm only", "simulate", "The 2D flood model for the chosen storm",
+              () => StartCoroutine(Run(RunFlood(), "Running the flood simulation")), () => Engine && siteConfirmed && FloodReady, visible: () => !bundle);
             C("run2d", "Run 2D (option)", "simulate", "The 2D model for the existing site and the chosen option", () => StartCoroutine(Run(Simulate(), "Simulating")),
               () => Engine && options.Any(o => o != "baseline"), visible: () => !bundle);
             C("load", "Load storm", "load", "Load the chosen storm's results into the views", () => StartCoroutine(Run(LoadViews(), "Loading")), () => !busy && (HasProject || bundle));
@@ -241,7 +243,7 @@ namespace SpongePark
             design.Group("Verify").Large(commands["verify"]);
 
             var sim = new RibbonTab(Tab.Simulate, "Simulate");
-            sim.Group("Flood").Large(commands["flood"]).Small(commands["run2d"]).Small(commands["load"]);
+            sim.Group("Flood").Large(commands["flood"]).Small(commands["flood-one"]).Small(commands["run2d"]).Small(commands["load"]);
             sim.Group("Live").Large(commands["live"]).Small(commands["verify-gpu"]);
 
             var res = new RibbonTab(Tab.Results, "Results");
@@ -783,6 +785,7 @@ namespace SpongePark
                 case "site-setup": siteSetup.Open(parts.Length > 1 ? parts[1] : null); break;
                 case "setup-walk": StartCoroutine(SetupWalk()); break;
                 case "survey-walk": StartCoroutine(SurveyWalk()); break;
+                case "flow-walk": StartCoroutine(FlowWalk()); break;
                 case "targets": targetsDialog.Open(); break;
                 case "settings": settingsDialog.Open(); break;
                 case "max": ui.ViewportMax = true; break;

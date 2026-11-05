@@ -47,3 +47,27 @@ def test_water_held_at_an_exit_reaches_only_the_ground_connected_to_the_exit():
     assert wet.tolist() == [[True, True, False, False, False]]
     wet = held_cells(np.ones_like(z, dtype=bool), z, 3.0, 0, 0)
     assert wet.tolist() == [[True, True, True, True, True]]
+
+
+def test_a_hollow_knows_the_ground_that_drains_to_it():
+    import numpy as np
+
+    from spongepark.engine.hydrology import flowmap
+    from spongepark.engine.hydrology import flow as fl
+
+    # a plane falling to the east into a pit near the east edge
+    n = 30
+    x, y = np.meshgrid(np.arange(n) + 0.5, n - np.arange(n) - 0.5)
+    z = 10.0 - 0.1 * x
+    hollow = np.zeros((n, n), bool)
+    hollow[14:17, 25:28] = True
+    z[hollow] -= 1.0
+    mask = np.ones((n, n), bool)
+    dirs = fl.d8_directions(fl.fill_sinks(z, mask), mask)
+    out = flowmap.feeding_ground(dirs, mask, hollow, z, x, y, 1.0, (0.0, float(n)))
+    assert out["feeders"], "the ways down to the hollow"
+    first = out["feeders"][0]
+    assert first[0] < first[-3]   # runs east, downhill, towards the hollow
+    assert 25 <= first[-3] <= 28 and 14 <= n - first[-2] <= 17   # and ends in it
+    xs = out["catchment"][0::2]
+    assert min(xs) < 20 and max(xs) <= 30

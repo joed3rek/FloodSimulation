@@ -77,3 +77,73 @@ def test_2d_volume_leaving_matches_swmm(plane_project):
     assert abs(s["swmm_comparison"]["difference_pct_of_rainfall"]) < tol, s
     assert plane_project.exists("scenarios/baseline/sim2d/rp2.npz")
     assert s["label"].startswith("indicative")
+
+
+def test_flood_storms_run_behind_the_app_and_can_be_stopped(plane_project):
+    import threading
+    import time
+
+    from spongepark.engine.site import analysis
+
+    p = plane_project
+    p.save()
+    rel = "scenarios/baseline/sim2d/rp2_summary.json"
+    if p.exists(rel):
+        p.path(rel).unlink()
+
+    state = analysis.flood_state([2])
+    analysis.flood_storms(p, [2], threading.Event(), state)
+    assert state["done"] == [2] and state["failed"] == []
+    assert p.exists(rel)
+
+    # stopped: the storm's process ends at once and records nothing
+    p.path(rel).unlink()
+    stop, state = threading.Event(), analysis.flood_state([2])
+    threading.Timer(0.2, stop.set).start()
+    began = time.time()
+    analysis.flood_storms(p, [2], stop, state)
+    assert time.time() - began < 5 and state["done"] == [] and not p.exists(rel)
+
+
+def test_still_deep_water_stays_flat():
+    """The flow damping (sim2d.flow_theta): no checkerboard on a deep pond with a smooth bed."""
+    dem = bowl(size_m=(40, 40), cell_size=1.0, depth_m=3.0)
+    mask = np.ones(dem.z.shape, bool)
+    rain = np.r_[np.full(12, 150.0), np.zeros(12)]
+    n, f = np.full(dem.z.shape, 0.03), np.zeros(dem.z.shape)
+    res = simulate(dem.z, mask, 1.0, rain, 300.0, 2 * 3600, n, f)
+    last = res.frames[-1]
+    deep = last > 0.5
+    assert deep.sum() > 50
+    assert np.ptp((dem.z + last)[deep]) < 0.05
+    assert abs(res.balance["continuity_error_pct"]) < 1e-6
+
+
+def test_graphics_card_gives_the_same_water():
+    gpu = pytest.importorskip("spongepark.engine.sim2d.gpu")
+    if not gpu.available():
+        pytest.skip("no NVIDIA card here")
+
+    class Dem:
+        z = bowl(size_m=(30, 30), cell_size=1.0, depth_m=0.8).z
+        cell_size = 1.0
+
+    z = Dem.z
+    mask = np.ones(z.shape, bool)
+    rain = np.r_[np.full(6, 60.0), np.full(6, 10.0)]
+    n, base = np.full(z.shape, 0.04), np.full(z.shape, 2.0)
+    label = -np.ones(z.shape, np.int64)
+    label[13:17, 13:17] = 0
+    els = Elements2D(label, ["E"], np.array([6.0]), np.array([5 / 1000 / 3600]), np.array([16.0]))
+
+    class Inputs:
+        dem, inlets, theta, alpha, dt_max = Dem, None, 0.9, 0.7, 10.0
+        infil_params = {"kind": "constant", "base_mm_hr": base}
+        rain_mm_hr, rain_dt_s, duration_s = rain, 300.0, 3600.0
+    Inputs.mask, Inputs.n, Inputs.elements = mask, n, els
+    a = simulate(z, mask, 1.0, rain, 300.0, 3600.0, n, base, els)
+    b = gpu.simulate_gpu(Inputs, 300.0)
+    for k in ("rainfall_m3", "outflow_m3", "infiltration_ground_m3", "surface_remaining_m3", "element_storage_remaining_m3"):
+        assert b.balance[k] == pytest.approx(a.balance[k], abs=1e-6 * a.balance["rainfall_m3"]), k
+    assert np.abs(b.max_depth - a.max_depth).max() < 1e-6
+    assert abs(b.balance["continuity_error_pct"]) < 1e-6

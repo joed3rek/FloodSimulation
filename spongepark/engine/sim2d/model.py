@@ -37,8 +37,11 @@ INDICATIVE = "indicative: 2D surface model (local inertial), not calibrated; vol
 
 
 @njit(cache=True, nogil=True)
-def _fluxes(z, h, mask, n2, qx, qy, dt, dx, edge_drop):
+def _fluxes(z, h, mask, n2, qx, qy, dt, dx, edge_drop, theta):
     nr, nc = z.shape
+    side = 0.5 * (1.0 - theta)   # de Almeida et al. 2012: a little of the neighbouring faces' flow damps the checkerboard
+    was_x = qx.copy()
+    was_y = qy.copy()
     # x faces: qx[r, c] between (r, c-1) and (r, c); positive towards +c
     for r in range(nr):
         for c in range(nc + 1):
@@ -68,8 +71,11 @@ def _fluxes(z, h, mask, n2, qx, qy, dt, dx, edge_drop):
                 qx[r, c] = 0.0
                 continue
             nn = n2[r, L] if inL else n2[r, R]
-            q = qx[r, c]
-            q = (q - G * hf * dt * (er - el) / dx) / (1.0 + G * dt * nn * abs(q) / hf ** (7.0 / 3.0))
+            q = was_x[r, c]
+            ql = was_x[r, c - 1] if c > 0 else q
+            qr = was_x[r, c + 1] if c < nc else q
+            damped = theta * q + side * (ql + qr) if inL and inR else q   # an edge does not borrow its neighbours' flow
+            q = (damped - G * hf * dt * (er - el) / dx) / (1.0 + G * dt * nn * abs(q) / hf ** (7.0 / 3.0))
             if not inL and q > 0:
                 q = 0.0  # no inflow from outside
             if not inR and q < 0:
@@ -104,8 +110,11 @@ def _fluxes(z, h, mask, n2, qx, qy, dt, dx, edge_drop):
                 qy[r, c] = 0.0
                 continue
             nn = n2[T, c] if inT else n2[B, c]
-            q = qy[r, c]
-            q = (q - G * hf * dt * (eb - et) / dx) / (1.0 + G * dt * nn * abs(q) / hf ** (7.0 / 3.0))
+            q = was_y[r, c]
+            qt = was_y[r - 1, c] if r > 0 else q
+            qb = was_y[r + 1, c] if r < nr else q
+            damped = theta * q + side * (qt + qb) if inT and inB else q
+            q = (damped - G * hf * dt * (eb - et) / dx) / (1.0 + G * dt * nn * abs(q) / hf ** (7.0 / 3.0))
             if not inT and q > 0:
                 q = 0.0
             if not inB and q < 0:
@@ -195,6 +204,34 @@ def _sources(h, mask, rain_m, infil_rate, el, cap, store, el_rate, el_area, el_c
     return infil, el_inf
 
 
+@njit(cache=True, nogil=True)
+def _max_depth(h, mask):
+    nr, nc = h.shape
+    top = 0.0
+    for r in range(nr):
+        for c in range(nc):
+            if mask[r, c] and h[r, c] > top:
+                top = h[r, c]
+    return top
+
+
+@njit(cache=True, nogil=True)
+def _track_max(hmax, h):
+    nr, nc = h.shape
+    for r in range(nr):
+        for c in range(nc):
+            if h[r, c] > hmax[r, c]:
+                hmax[r, c] = h[r, c]
+
+
+@njit(cache=True, nogil=True)
+def _rates_m_s(out, mask, mm_hr):
+    nr, nc = out.shape
+    for r in range(nr):
+        for c in range(nc):
+            out[r, c] = mm_hr[r, c] / 1000.0 / 3600.0 if mask[r, c] else 0.0
+
+
 @dataclass
 class Elements2D:
     label: np.ndarray  # int grid, -1 = none
@@ -216,7 +253,8 @@ class Result2D:
 def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarray, rain_dt_s: float,
              duration_s: float, n_manning: np.ndarray, infil_mm_hr: np.ndarray,
              elements: Optional[Elements2D] = None, frame_every_s: float = 300.0, alpha: float = 0.7,
-             dt_max: float = 10.0, edge_drop_fraction: float = 0.01, infil_fn=None, inlets=None) -> Result2D:
+             dt_max: float = 10.0, edge_drop_fraction: float = 0.01, infil_fn=None, inlets=None,
+             theta: float = 0.9) -> Result2D:   # theta 1 is the undamped scheme of the Unity preview shader
     """Run the 2D model. ``rain_mm_hr[i]`` applies from ``i * rain_dt_s``; depths start dry.
 
     ``infil_fn(t_s, rain_mm_hr, cum_rain_mm) -> mm/hr grid`` replaces the constant rates when given
@@ -236,6 +274,7 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
     cap, el_rate, el_area = (elements.capacity_m3.astype(float), elements.rate_m_s.astype(float),
                              elements.area_m2.astype(float))
     cell_area = cell * cell
+    wet_area = cell_area * mask.sum()
     el_cells = np.array([float(((el == k) & mask).sum()) for k in range(len(elements.ids))])
     t = 0.0
     rain_tot = infil_tot = el_inf_tot = out_tot = inlet_tot = 0.0
@@ -245,7 +284,7 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
     edge_drop = edge_drop_fraction * cell
     cum_rain_mm = 0.0
     while t < duration_s - 1e-9:
-        hm = float(h[mask].max()) if mask.any() else 0.0
+        hm = _max_depth(h, mask)
         dt = dt_max if hm < 1e-3 else min(dt_max, alpha * cell / math.sqrt(G * hm))
         i = int(t // rain_dt_s)
         t_next_rain = (i + 1) * rain_dt_s
@@ -253,18 +292,18 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
         rate = rain_mm_hr[i] if i < len(rain_mm_hr) else 0.0
         rain_m = rate / 1000 / 3600 * dt
         if infil_fn is not None:
-            f_rate = np.where(mask, infil_fn(t, rate, cum_rain_mm), 0.0) / 1000 / 3600
+            _rates_m_s(f_rate, mask, infil_fn(t, rate, cum_rain_mm))
         cum_rain_mm += rate * dt / 3600
-        _fluxes(z, h, mask, n2, qx, qy, dt, cell, edge_drop)
+        _fluxes(z, h, mask, n2, qx, qy, dt, cell, edge_drop, theta)
         out_tot += _limit_and_update(h, mask, qx, qy, dt, cell)
         inf, ein = _sources(h, mask, rain_m, f_rate, el, cap, store, el_rate, el_area, el_cells, dt, cell_area)
-        rain_tot += rain_m * cell_area * mask.sum()
+        rain_tot += rain_m * wet_area
         for r_in, c_in, area_in in inlets or ():
             h[r_in, c_in] += rain_m * area_in / cell_area
             inlet_tot += rain_m * area_in
         infil_tot += inf
         el_inf_tot += ein
-        np.maximum(hmax, h, out=hmax)
+        _track_max(hmax, h)
         t += dt
         if t >= next_frame - 1e-9 or t >= duration_s - 1e-9:
             frames.append(h.astype(np.float32))

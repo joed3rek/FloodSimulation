@@ -22,7 +22,7 @@ def test_gpu_kernels_match_engine_model(case):
     rain = np.r_[np.full(6, 20.0), np.full(6, 60.0), np.full(12, 5.0)]
     n = np.full(dem.z.shape, 0.04)
     f = np.full(dem.z.shape, 2.0)
-    a = simulate(dem.z, mask, 1.0, rain, 300.0, 3 * 3600, n, f, els)
+    a = simulate(dem.z, mask, 1.0, rain, 300.0, 3 * 3600, n, f, els, theta=1.0)   # the shader has no flow damping yet
     b = simulate_gpu_reference(dem.z, mask, 1.0, rain, 300.0, 3 * 3600, n, f, els)
     rain_v = a.balance["rainfall_m3"]
     for k in ("outflow_m3", "infiltration_ground_m3", "infiltration_elements_m3", "surface_remaining_m3",

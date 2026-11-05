@@ -42,6 +42,7 @@ SERVED = {".png": "image/png", ".json": "application/json", ".geojson": "applica
 _projects: Dict[str, Project] = {}
 _locks: Dict[str, threading.Lock] = {}
 _jobs: Dict[str, Dict[str, Any]] = {}
+_floods: Dict[str, Dict[str, Any]] = {}   # the 2D storms running behind the app, per open project
 _pool = ThreadPoolExecutor(max_workers=2)
 
 
@@ -125,6 +126,9 @@ def shutdown() -> Dict[str, Any]:
 def open_project(req: OpenRequest) -> Dict[str, Any]:
     path = Path(req.path)
     p = Project.create(path, req.name or path.stem, crs=req.crs) if req.create and not path.exists() else Project.open(path)
+    for old, q in list(_projects.items()):   # opened again (the app restarted): its storms are not needed twice
+        if q.package_path and p.package_path and Path(q.package_path).resolve() == Path(p.package_path).resolve():
+            _stop_flood(old)
     pid = uuid.uuid4().hex[:8]
     _projects[pid], _locks[pid] = p, threading.Lock()
     return {"project": pid, **info(pid)}
@@ -147,7 +151,8 @@ def info(pid: str) -> Dict[str, Any]:
             "openings_confirmed": bool(p.exists("site/openings.json") and p.read_json("site/openings.json").get("confirmed")),
             "site_confirmed": bool(p.parameters.value_or("site.model_confirmed", False)),
             "has_ground": p.exists("site/ground.json"),
-            "analysed": p.exists("site/analysis.json")}
+            "analysed": p.exists("site/analysis.json"),
+            "flood": {k: v for k, v in _floods.get(pid, {}).items() if k not in ("stop", "thread")} or None}
 
 
 @app.post("/projects/{pid}/save")
@@ -226,11 +231,67 @@ def analyse_site(pid: str, wait: bool = False) -> Dict[str, Any]:
     from spongepark.engine.site import analysis
 
     def fn(p: Project):
+        _stop_flood(pid)
         out = analysis.run(p)
         p.save()
         return out
 
     return _job(pid, "analyse site", fn, wait)
+
+
+@app.post("/projects/{pid}/flood")
+def flood_all(pid: str) -> Dict[str, Any]:
+    """Simulate: the 2D flood model for every design storm of the existing site, side by side, behind the app. Follow
+    it with ``flood`` in the project's info; a new run, a Site setup change or re-opening the project stops it."""
+    from spongepark.engine.site import analysis
+
+    p = _project(pid)
+    storms = analysis.design_storms(p)
+    if not storms:
+        raise HTTPException(400, "Analyse the site first: the flood model needs the design storms.")
+    _stop_flood(pid)
+    with _locks[pid]:
+        p.save()   # the storms' processes read the project's state files
+    _start_flood(pid, storms)
+    return info(pid)["flood"]
+
+
+def _start_flood(pid: str, storms: List[int]) -> None:
+    from spongepark.engine.site import analysis
+
+    p, stop = _projects[pid], threading.Event()
+    state = {**analysis.flood_state(storms), "stop": stop}
+
+    def work():
+        try:
+            analysis.flood_storms(p, storms, stop, state, gpu=_gpu())
+            if stop.is_set():   # whoever stopped it may hold the project's lock and be waiting for this thread
+                return
+            with _locks[pid]:
+                if not stop.is_set():
+                    analysis.flood_finished(p, state)
+                    p.save()
+        except Exception:
+            log.exception("the 2D storms behind the app failed")
+        finally:
+            state["running"] = False
+
+    state["thread"] = threading.Thread(target=work, daemon=True, name=f"flood-{pid}")
+    _floods[pid] = state
+    state["thread"].start()
+
+
+def _gpu() -> bool:
+    from spongepark.engine.sim2d.gpu import available
+
+    return available()
+
+
+def _stop_flood(pid: str) -> None:
+    state = _floods.get(pid)
+    if state:
+        state["stop"].set()
+        state["thread"].join(10)   # its processes have ended, so they write nothing more
 
 
 @app.post("/projects/{pid}/baseline")
@@ -648,6 +709,9 @@ def wells_put(pid: str, answers: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
 def _analysis_stale(p: Project) -> None:
     from spongepark.engine.site import analysis
 
+    for pid, q in list(_projects.items()):
+        if q is p:
+            _stop_flood(pid)
     analysis.stale(p)
 
 

@@ -10,6 +10,7 @@ JSON and a PNG. Everything is labelled indicative.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -23,7 +24,7 @@ from ..pipeline import load_hyetographs
 from ..project import Project
 from ..site.model import Site
 from ..terrain.raster import DEM, read_geotiff, write_geotiff
-from .model import INDICATIVE, Elements2D, simulate
+from .model import INDICATIVE, Elements2D, njit, simulate
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +52,18 @@ def _keep_barriers(z: np.ndarray, project: Project, k: int) -> None:
     z[np.isfinite(top)] = np.maximum(z, top)[np.isfinite(top)]
 
 
+@njit(cache=True, nogil=True)
+def _curve_number(out, imperv, base, S, i, P):
+    nr, nc = out.shape
+    for r in range(nr):
+        for c in range(nc):
+            if imperv[r, c]:
+                out[r, c] = 0.0
+            else:
+                ratio = S[r, c] / (P + S[r, c])
+                out[r, c] = max(base[r, c], i * ratio * ratio)
+
+
 def _infiltration(site: Site, method: str, X, Y, mask, imperv):
     """Ground infiltration matching the SWMM method: (constant rates mm/hr, rate function or None, note).
 
@@ -73,9 +86,11 @@ def _infiltration(site: Site, method: str, X, Y, mask, imperv):
             S[contains_xy(sc.shape(), X, Y)] = 25400.0 / cn - 254.0
         S = np.where(np.isnan(S), np.nanmean(S), S)
         base = f.copy()
+        now = np.zeros(mask.shape)
 
         def fn(t, i, P):
-            return np.where(imperv, 0.0, np.maximum(base, i * (S / (P + S)) ** 2))
+            _curve_number(now, imperv, base, S, i, P)
+            return now
 
         return f, fn, "curve number (SCS, Ia = 0, as SWMM), floor at the zone's saturated rate",             {"kind": "curve_number", "base_mm_hr": f, "S_mm": np.where(imperv, 0.0, S)}
     if "HORTON" in method:
@@ -109,6 +124,7 @@ class Inputs2D:
     alpha: float
     dt_max: float
     inlets: Any = None   # (row, col, area m2) where water from outside the site arrives
+    theta: float = 0.9   # sim2d.flow_theta
 
 
 def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = None) -> Inputs2D:
@@ -168,8 +184,9 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
 
     return Inputs2D(g, mask, n, f, infil_fn, infil_note, infil_params, els, storm.intensity_mm_hr.astype(float),
                     storm.dt_min * 60, storm.duration_hr * 3600 + float(P.value("sim2d.extra_time_hr")) * 3600,
-                    float(P.value("sim2d.courant")), float(P.value("sim2d.max_time_step_s")),
-                    openings.inlet_cells(project, option_id, X, Y, mask))
+                    min(float(P.value("sim2d.courant")), 0.5),   # projects saved with the old default of 0.7 too
+                    float(P.value("sim2d.max_time_step_s")),
+                    openings.inlet_cells(project, option_id, X, Y, mask), float(P.value_or("sim2d.flow_theta", 0.9)))
 
 
 def _nbs_zones(project: Project, f, infil_fn, note, params, X, Y, mask):
@@ -300,11 +317,19 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
     if engine == "itzi" and inp.inlets:
         engine, engine_note = "builtin", "Itzi cannot take the inlets here; the built-in model was used."
     flow = None
+    if engine == "gpu":
+        from .gpu import can_run, simulate_gpu
+
+        if can_run(inp):
+            res = simulate_gpu(inp, frame_s)
+        else:
+            engine, engine_note = "builtin", "The graphics card port does not cover this case; the built-in model was used."
     if engine == "itzi":
         res, flow = _run_itzi(inp, frame_s)
-    else:
+    elif engine != "gpu":
         res = simulate(g.z, mask, cell, inp.rain_mm_hr, inp.rain_dt_s, duration_s, inp.n, inp.f, els,
-                       frame_every_s=frame_s, alpha=inp.alpha, dt_max=inp.dt_max, infil_fn=inp.infil_fn, inlets=inp.inlets)
+                       frame_every_s=frame_s, alpha=inp.alpha, dt_max=inp.dt_max, infil_fn=inp.infil_fn, inlets=inp.inlets,
+                       theta=inp.theta)
 
     # SWMM comparison
     swmm = None
@@ -321,14 +346,19 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
     thr = float(P.value("sim2d.flood_depth_threshold_m"))
     out_dir = f"scenarios/{option_id}/sim2d"
     project.path(out_dir).mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(project.path(f"{out_dir}/rp{rp}.npz"), times_s=res.times_s, depth_m=res.frames.astype(np.float16),
-                        mask=mask, origin=np.array(g.origin), cell_m=cell,
-                        **({k: v.astype(np.float32) for k, v in flow.items()} if flow else {}))
+    # written aside and moved into place: the app can ask for a storm while it is still being written
+    with open(project.path(f"{out_dir}/rp{rp}.tmp.npz"), "wb") as tmp:
+        np.savez_compressed(tmp, times_s=res.times_s, depth_m=res.frames.astype(np.float16),
+                            mask=mask, origin=np.array(g.origin), cell_m=cell,
+                            **({k: v.astype(np.float32) for k, v in flow.items()} if flow else {}))
+    os.replace(project.path(f"{out_dir}/rp{rp}.tmp.npz"), project.path(f"{out_dir}/rp{rp}.npz"))
     write_geotiff(DEM(np.where(mask, res.max_depth, dem.nodata), cell, g.origin, g.crs, dem.nodata),
-                  project.path(f"{out_dir}/max_depth_rp{rp}.tif"))
+                  project.path(f"{out_dir}/max_depth_rp{rp}.tmp.tif"))
+    os.replace(project.path(f"{out_dir}/max_depth_rp{rp}.tmp.tif"), project.path(f"{out_dir}/max_depth_rp{rp}.tif"))
     summary = {
         "label": INDICATIVE,
         "model": "Itzi (Courty et al., local inertial shallow water)" if engine == "itzi" else "built-in local inertial model",
+        "ran_on": "graphics card" if engine == "gpu" else "CPU",
         "model_note": engine_note,
         "option_id": option_id, "return_period_yr": rp, "cell_m": cell, "duration_hr": duration_s / 3600,
         "balance": res.balance,

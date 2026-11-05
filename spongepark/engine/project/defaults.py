@@ -265,7 +265,12 @@ _DEFAULTS: List[Tuple[str, object, str, Source, str]] = [
      "2D flood model: 'itzi' (Itzi, GPL, run as a separate program; set up with `spongepark itzi setup`), "
      "'builtin' (the engine's own local inertial model), or 'auto' (Itzi when it is set up)."),
     ("sim2d.cell_m", 1.0, "m", D, "2D model cell size (the DEM is block-averaged up to it)."),
-    ("sim2d.courant", 0.7, "-", L, "Time step factor alpha in dt = alpha dx / sqrt(g h) (Bates et al. 2010)."),
+    ("sim2d.courant", 0.5, "-", L,
+     "Time step factor alpha in dt = alpha dx / sqrt(g h). Bates et al. 2010 allow up to 0.7, which went unstable on the "
+     "deep, flat ponds of Tree Park at 1 m (water spiking to 3.5 m in a 1.2 m pond); 0.5 stays steady."),
+    ("sim2d.flow_theta", 0.9, "-", L,
+     "Weight of a face's own flow against its neighbours' in the flow update; below 1 it damps the checkerboard on still, "
+     "deep water (de Almeida, Bates, Freer and Souvignet 2012, Water Resources Research 48, W05528)."),
     ("sim2d.max_time_step_s", 10.0, "s", D, "Longest 2D time step (dry periods)."),
     ("sim2d.frame_interval_s", 300.0, "s", D, "Interval of stored depth frames."),
     ("sim2d.extra_time_hr", 2.0, "hr", D, "Simulated time after the storm ends."),

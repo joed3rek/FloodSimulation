@@ -140,6 +140,7 @@ namespace SpongePark
             ShowStormWater();
             left.Flow.Build(a, frame, layerVisible, rp);
             right.Flow.Build(a, frame, layerVisible, rp);
+            PrepareFlowAnim(a, rp);
             var s = a["summary"];
             var ss = rp > 0 ? a["storm_summary"]?[rp.ToString()] : null;   // how full the hollows get in this storm
             int exits = (int)s["exits"];
@@ -155,7 +156,8 @@ namespace SpongePark
                   $"{(float)ss["spill_m3"]:0} m³ spills on over their edges. "
                 : $"{(int)s["hotspots"]} place{((int)s["hotspots"] == 1 ? "" : "s")} where water can collect (up to {(float)s["deepest_m"] * 100:0} cm deep, " +
                   $"{(float)s["ponding_volume_m3"]:0.#} m³ in all; how full they get in each storm shows once Analyse site has run the storms). ";
-            flowText.text = (ranFlow ? "Blue lines: where water runs (wider where more water runs in this storm). " : "Blue lines: where water runs (wider where more ground drains to it). ") + flows + collects +
+            string pointAt = "Point at a path or a pool to see the water move; click to keep it. ";
+            flowText.text = pointAt + (ranFlow ? "Blue lines: where water runs (wider where more water runs in this storm). " : "Blue lines: where water runs (wider where more ground drains to it). ") + flows + collects +
                             (a["exits"].All(e => (string)e["state"] == "closed") && exits > 0
                                 ? $"The ground runs to the edge at {exits} point{(exits == 1 ? "" : "s")} (red), all closed: the edge holds the water unless an outlet is placed. "
                                 : $"Water leaves the park at {exits} point{(exits == 1 ? "" : "s")} (red). ") + $"Worked out on the ground with the ponds and existing wells from Site setup.";

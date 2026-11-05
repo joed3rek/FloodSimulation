@@ -194,6 +194,7 @@ namespace SpongePark
             yield return CheckEngine();
             if (Arg("-spSurvey") != null) yield return StartIntake(Arg("-spSurvey"));
             if (Arg("-spModel") != null) yield return StartModelIntake(Arg("-spModel"));
+            if (Arg("-spOpen") != null) { projectPath = Arg("-spOpen"); yield return OpenProject(false); }   // -spOpen project.sponge
             yield return new WaitForSecondsRealtime(float.TryParse(Arg("-spWait"), out var wait) ? wait : 6);   // -spWait s
             // -spRp <years>: switch to that storm, as the storm buttons do
             if (int.TryParse(Arg("-spRp"), out var shotRp) && returnPeriods.Contains(shotRp) && info != null)
@@ -400,6 +401,7 @@ namespace SpongePark
         void ClearFlow()
         {
             flowData = null;
+            PrepareFlowAnim(null, 0);
             if (frame != null) { left.Flow.Build(null, frame, layerVisible); right.Flow.Build(null, frame, layerVisible); }
             hotspotList?.Clear();
             stormTable?.Clear();
@@ -536,6 +538,7 @@ namespace SpongePark
         void Update()
         {
             if (!OpeningsInput()) DesignInput();
+            FlowAnimInput();
             UpdateWeather();
             if (!playing) return;
             float dtSim = Time.deltaTime * speed;

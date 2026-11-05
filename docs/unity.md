@@ -35,7 +35,7 @@ the top of the sidebar returns to the landing. After that, the left panel walks 
 | 4. Targets | Area budget, sizing storm, maximum drawdown, inverse-mode storm (saved as your decisions) |
 | 5. Analyse and propose | Existing-site SWMM analysis; generate a layout; optimise (best retention, or least area) |
 | 6. Compare | Choose option and storm; retention and peak reduction against the existing site |
-| 7. Simulate | Runs the 2D model for existing and proposed; play, restart, speed; live GPU mode; GPU verification |
+| 7. Simulate | Runs the 2D model for every storm at once behind the app (NVIDIA card plus CPU, `pip install .[gpu]`), or one storm; for existing and proposed; play, restart, speed; live GPU mode; GPU verification |
 | 8. View | Side by side or one view, existing/proposed toggle, vertical exaggeration, camera tour |
 | 9. Export | Drawings + Rhino file + report; web viewer bundle; video of the storm |
 
