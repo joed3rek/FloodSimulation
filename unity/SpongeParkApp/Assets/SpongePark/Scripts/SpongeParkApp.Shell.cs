@@ -211,6 +211,7 @@ namespace SpongePark
                 simT = 0; playing = true; rigLeft.Touring = true;
                 video.Begin(Path.Combine(exportDir, "video"));
             }, () => WaterShown && !video.Recording);
+            BuildImageCommands();
             // app bar
             C("home", "Start screen", "home", "Back to the start screen (new, open, recent)", ShowLanding, visible: () => !bundle);
             C("checklist", "Checklist", "checklist", "The project checklist (guided project)", ToggleChecklist, () => HasProject, () => onboarding != null && ui.ChecklistOpen);
@@ -229,6 +230,7 @@ namespace SpongePark
             var analyse = new RibbonTab(Tab.Analyse, "Analyse");
             analyse.Group("Analyse").Large(commands["analyse"]).Large(commands["to-design"]);
             analyse.Group("Show").Large(commands["flow-lines"]).Large(commands["flow-arrows"]).Large(commands["flow-ponding"]).Large(commands["flow-exits"]);
+            AddImageGroup(analyse);
 
             var design = new RibbonTab(Tab.Design, "Design");
             var draw = design.Group("Draw");
@@ -270,6 +272,7 @@ namespace SpongePark
             folder.RegisterValueChangedCallback(e => exportDir = e.newValue);
             exp.Group("Folder").Add(folder);
             exp.Group("Deliverables").Large(commands["report"]).Large(commands["bundle"]).Large(commands["video"]);
+            AddImageGroup(exp);
             return new List<RibbonTab> { site, analyse, design, sim, res, exp };
         }
 
@@ -349,6 +352,7 @@ namespace SpongePark
             stormButtons = Kit.Box("seg");
             tl.Add(stormButtons);
             overlay.Add(tl);
+            BuildCaptureFrame(overlay);
             stormReadout = Text("", "muted");
             stormReadout.style.position = Position.Absolute;
             stormReadout.style.left = 12;
@@ -971,6 +975,7 @@ namespace SpongePark
             Kit.Show(drawHint, !string.IsNullOrEmpty(drawHint.text));
             Kit.Show(viewLabelLeft, sideBySide);
             Kit.Show(viewLabelRight, sideBySide);
+            SyncCaptureFrame();
             viewLabelRight.text = right.Option == DesignScenario ? "DESIGN" : $"OPTION {CurrentOption?.ToUpper()}";
             // scale bar: about 100 points long, a round number of metres
             var cam = camLeft;

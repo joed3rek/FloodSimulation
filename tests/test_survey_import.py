@@ -168,3 +168,20 @@ def test_contours_that_disagree_with_the_spot_levels_only_check_the_ground():
     assert d["use"] is False and "generated" in d["reason"]          # adds nothing to 100 spot levels
     d = contours_decision(Survey([good, wrong], spots[:10], {}, [], {}))
     assert d["use"] is True                                          # too few spot levels: contours needed
+
+
+def test_boundary_drawn_as_open_pieces_is_joined():
+    from spongepark.engine.io.cad import _join_boundary
+
+    def line(*pts):
+        return {"geometry": {"type": "LineString", "coordinates": list(pts)}, "properties": {"layer": "B"}}
+
+    # a 40 x 20 rectangle in three open pieces, one end missing the next by 5 mm, plus an inner divider
+    pieces = [line((0, 0), (40, 0), (40, 20)), line((40, 20), (0, 20)), line((0, 20.005), (0, 0)), line((20, 0), (20, 20))]
+    j = _join_boundary(pieces)
+    assert j is not None and j["geometry"]["type"] == "Polygon"
+    assert abs(j["properties"]["area_m2"] - 800) < 1
+    assert j["properties"]["pieces"] == 4
+    # a closed outline is left alone; lines that enclose nothing give nothing
+    assert _join_boundary([{"geometry": {"type": "Polygon", "coordinates": [[(0, 0), (1, 0), (1, 1), (0, 0)]]}, "properties": {}}]) is None
+    assert _join_boundary([line((0, 0), (10, 0))]) is None

@@ -280,6 +280,31 @@ def _key(coords: Iterable[Tuple[float, float]]) -> Tuple:
     return tuple((round(x, 3), round(y, 3)) for x, y in coords)
 
 
+def _join_boundary(feats: List[Dict[str, Any]], tolerances=(0.001, 0.01, 0.05, 0.1, 0.25, 0.5)) -> Optional[Dict[str, Any]]:
+    """A boundary drawn as open lines that meet end to end (no closed polyline): the outline they enclose, or
+    None when a closed outline is already there or the lines enclose nothing. Ends that miss each other by less
+    than the tolerance are snapped together, trying the smallest tolerance first."""
+    from shapely.ops import polygonize, snap, unary_union
+
+    if not feats or any(f["geometry"]["type"] == "Polygon" for f in feats):
+        return None
+    lines = [LineString(f["geometry"]["coordinates"]) for f in feats if len(f["geometry"]["coordinates"]) >= 2]
+    if not lines:
+        return None
+    every = unary_union(lines)
+    for tol in tolerances:
+        faces = list(polygonize(unary_union([snap(l, every, tol) for l in lines])))
+        if not faces:
+            continue
+        u = unary_union(faces)
+        outer = max(u.geoms, key=lambda g: g.area) if u.geom_type == "MultiPolygon" else u
+        g = Polygon(outer.exterior.coords)   # the whole site: inner lines (dividers) are not holes
+        return {"geometry": {"type": "Polygon", "coordinates": [list(g.exterior.coords)]},
+                "properties": {"kind": "boundary", "layer": feats[0]["properties"]["layer"], "pieces": len(lines),
+                               "area_m2": round(g.area, 1), "joined_tolerance_m": tol}}
+    return None
+
+
 def extract(doc, layer_map: Dict[str, Any], label_search_m: float = 3.0,
             level_range: Optional[Tuple[float, float]] = None) -> Survey:
     roles = layer_map.get("roles", {})
@@ -411,6 +436,11 @@ def extract(doc, layer_map: Dict[str, Any], label_search_m: float = 3.0,
             else:
                 geom = {"type": "LineString", "coordinates": xy}
             feats[role].append({"geometry": geom, "properties": {"kind": role, "layer": e.dxf.layer}})
+    joined = _join_boundary(feats.get("boundary", []))
+    if joined is not None:
+        feats["boundary"] = [joined]
+        issues.append(f"The site boundary is drawn as {joined['properties']['pieces']} open lines; they were joined into one "
+                      f"closed outline ({joined['properties']['area_m2']:.0f} m2). Check it on the plan.")
     for e in on("trees"):
         if e.dxftype() in ("INSERT", "CIRCLE", "POINT"):
             p = e.dxf.insert if e.dxftype() == "INSERT" else (e.dxf.center if e.dxftype() == "CIRCLE" else e.dxf.location)

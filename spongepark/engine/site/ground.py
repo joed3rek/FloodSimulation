@@ -170,11 +170,40 @@ def _paved_path_share(project: Project) -> float:
     return float(unary_union(tris).intersection(park).area / park.area)
 
 
+def _write_soil_zone(project: Project, g: Dict[str, Any]) -> bool:
+    """The park as one soil zone with the questionnaire's soil group; False while the park has no boundary yet."""
+    from .survey_layers import park_boundary
+
+    park = park_boundary(project)
+    if park is None:
+        return False
+    project.write_geojson("site/soil_zones.geojson", {"type": "FeatureCollection", "features": [{
+        "type": "Feature", "geometry": park.__geo_interface__,
+        "properties": {"id": "PARK", "hsg": g["hsg"], "source": "ground questionnaire",
+                       "ksat_mm_hr": g["nbs_infiltration"]["ksat_mm_hr"],
+                       "ksat_source": g["nbs_infiltration"]["source"],
+                       "dry_time_days": float(project.parameters.value_or("swmm.cn_dry_time_days", 7.0)),
+                       "note": ("soil group assumed (C) until a percolation test" if g["soil_assumed"]
+                                else "soil group from the designer's answer")}}]})
+    return True
+
+
 def apply_to_subcatchments(project: Project) -> int:
-    """Set the questionnaire's curve number on every subcatchment (after delineation rebuilds them)."""
-    if not project.exists(REL) or not project.exists("site/subcatchments.geojson"):
+    """Set the questionnaire's curve number on every subcatchment (after delineation rebuilds them). The soil zone
+    and the paved-path share need the park's boundary, which may only exist after the first delineation (a survey
+    whose boundary is not a closed polygon), so they are brought up to date here too."""
+    if not project.exists(REL):
         return 0
     g = project.read_json(REL)
+    share = round(_paved_path_share(project), 4)
+    if share != g.get("paved_path_share"):
+        g["paved_path_share"] = share
+        project.write_json(REL, g)
+    zones = project.read_geojson("site/soil_zones.geojson")["features"] if project.exists("site/soil_zones.geojson") else []
+    if all((z.get("properties") or {}).get("source") == "ground questionnaire" for z in zones):   # none, or the questionnaire's own
+        _write_soil_zone(project, g)
+    if not project.exists("site/subcatchments.geojson"):
+        return 0
     fc = project.read_geojson("site/subcatchments.geojson")
     extra = 100 * g.get("paved_path_share", 0.0) if g.get("paths") == "paved" else 0.0
     for f in fc["features"]:
@@ -191,21 +220,10 @@ def apply_to_subcatchments(project: Project) -> int:
 
 def apply(project: Project, answers: Dict[str, Any]) -> Dict[str, Any]:
     """Save the answers, derive the curve numbers and set up infiltration from them."""
-    from .survey_layers import park_boundary
-
     out = derive(answers, _rain_rows(project))
     out["paved_path_share"] = round(_paved_path_share(project), 4)
     project.write_json(REL, out)
-    park = park_boundary(project)
-    if park is not None:
-        project.write_geojson("site/soil_zones.geojson", {"type": "FeatureCollection", "features": [{
-            "type": "Feature", "geometry": park.__geo_interface__,
-            "properties": {"id": "PARK", "hsg": out["hsg"], "source": "ground questionnaire",
-                           "ksat_mm_hr": out["nbs_infiltration"]["ksat_mm_hr"],
-                           "ksat_source": out["nbs_infiltration"]["source"],
-                           "dry_time_days": float(project.parameters.value_or("swmm.cn_dry_time_days", 7.0)),
-                           "note": ("soil group assumed (C) until a percolation test" if out["soil_assumed"]
-                                    else "soil group from the designer's answer")}}]})
+    _write_soil_zone(project, out)
     n = apply_to_subcatchments(project)
     P = project.parameters
     P.set("swmm.infiltration_method", "CURVE_NUMBER", "-", Source.DESIGNER,
