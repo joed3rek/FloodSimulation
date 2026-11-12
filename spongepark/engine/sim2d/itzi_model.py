@@ -23,7 +23,7 @@ from typing import Optional
 
 import numpy as np
 
-from .model import Result2D
+from .model import Result2D, cell_velocity
 
 log = logging.getLogger(__name__)
 
@@ -124,6 +124,10 @@ def simulate_itzi(z: np.ndarray, park: np.ndarray, cell: float, rain_mm_hr: np.n
             times, frames = o["times_s"], o["depth_m"].astype(np.float32)
             hmax, vmax, qx, qy = o["hmax"], o["vmax"], o["qx_mean"], o["qy_mean"]
             infil_acc = o["infiltration_m"] if "infiltration_m" in o.files else None
+            velocity = None
+            if "flow_e" in o.files and len(o["flow_e"]) == len(frames):   # m3/s across a cell's edge -> per metre width
+                velocity = np.stack([cell_velocity(e / cell, s / cell, f)
+                                     for e, s, f in zip(o["flow_e"], o["flow_s"], frames)])
 
     a = cell * cell
     steps = int(np.ceil(duration_s / rain_dt_s))
@@ -138,6 +142,6 @@ def simulate_itzi(z: np.ndarray, park: np.ndarray, cell: float, rain_mm_hr: np.n
                "continuity_error_m3": float(meta["continuity"].get("volume_error", 0.0)),
                "continuity_error_pct": 100 * float(meta["continuity"].get("continuity_error", 0.0)),
                "model": "itzi", "run_seconds": meta["seconds"], "itzi_settings": used}
-    res = Result2D(times, frames, np.where(park, hmax, 0.0), balance)
+    res = Result2D(times, frames, np.where(park, hmax, 0.0), balance, velocity=velocity)
     res.extra = {"vmax_m_s": vmax, "qx_mean": qx, "qy_mean": qy}   # flow pattern for the map
     return res

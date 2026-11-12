@@ -13,8 +13,11 @@ A closed exit is an existing ``edge_pond`` element in every scenario, the existi
 node whose stage-area curve is the ground draining to that exit up to the edge height, with an overflow weir
 at the edge height into the outfall (the road). The ground under it already infiltrates in its subcatchment,
 so the edge pond is not cut out of it and gets no rain of its own; the water standing in it soaks into
-the soil under it at the soil's rate (seepage), as any stored water does. Exits not answered stay open and are
-listed as unconfirmed.
+the soil under it at the soil's rate (seepage), as any stored water does.
+
+The model never proposes a way out: an exit nobody has answered for is held (``assumed``), with no spill, until the
+designer places an outlet there (Inlets and outlets), says water leaves there, or gives the wall or kerb height.
+Suggesting where an outlet could go belongs to the design, not to the analysis of the existing site.
 
 ``site/outfall_answers.json``: ``{"exits": [{"x", "y", "state", "edge_height_m"}], "all": {...}}``; answers are
 matched to exits by position (exit ids change when the drainage is redone), within ``MATCH_M``.
@@ -33,6 +36,8 @@ MATCH_M = 3.0
 STATES = ("open", "closed")
 WALLS = "terrain/walls.tif"   # the top of a modelled boundary wall (design model projects): the real edge height
 WALL_REACH_M = 2.0            # how far from the site's edge the wall's top is looked for (a plinth may stand in front)
+HELD_M = 3.0   # an exit nobody has answered for: no way out. Water is held against the edge and does not spill (the
+               # highest edge accepted); placing an outlet, or saying how high the wall or kerb is, replaces it
 
 
 def wall_tops(project: Project, like=None):
@@ -100,25 +105,32 @@ def status(project: Project, option: Optional[str] = None, with_outlets: bool = 
     levels = openings.outlet_levels(project, option) if with_outlets else {}
     rows = []
     tops = None
-    if project.exists(WALLS) and ans.get("all", {}).get("state") == "closed":
+    if project.exists(WALLS) and ans.get("all", {}).get("state") in ("closed", None):
         from ..terrain.raster import read_geotiff
 
         tops = (read_geotiff(project.path(WALLS)), wall_tops(project))
     for ex in _exits(project):
         a = _answer_for(ex, ans)
+        answered = a["state"] is not None
+        if not answered:   # no outlet unless the designer marks one: the water is held against the edge
+            a = {"state": "closed", "edge_height_m": HELD_M}
         if tops and a["state"] == "closed" and ex.get("ground_m") is not None:   # the wall as modelled, here
             r = int((tops[0].origin[1] - ex["y"]) / tops[0].cell_size)
             c = int((ex["x"] - tops[0].origin[0]) / tops[0].cell_size)
             if 0 <= r < tops[1].shape[0] and 0 <= c < tops[1].shape[1] and np.isfinite(tops[1][r, c]):
                 a = {"state": "closed", "edge_height_m": round(float(np.clip(tops[1][r, c] - float(ex["ground_m"]), 0.1, 3.0)), 3)}
+                answered = True   # the modelled wall says how high the edge is
         if ex["id"] in levels and ex.get("ground_m") is not None:
+            answered = True   # an outlet the designer placed
             rise = levels[ex["id"]] - float(ex["ground_m"])
             a = {"state": "open", "edge_height_m": None} if rise <= 0.02 else \
                 {"state": "closed", "edge_height_m": round(min(rise, 3.0), 3)}
-        rows.append({**ex, **a, "confirmed": a["state"] == "open" or (a["state"] == "closed" and bool(a["edge_height_m"]))})
+        rows.append({**ex, **a, "assumed": not answered,
+                     "confirmed": answered and (a["state"] == "open" or (a["state"] == "closed" and bool(a["edge_height_m"])))})
     return {"exits": rows, "all": ans.get("all", {}), "count": len(rows),
             "confirmed": bool(rows) and all(r["confirmed"] for r in rows),
             "closed": sum(1 for r in rows if r["state"] == "closed" and r["confirmed"]),
+            "held_unanswered": sum(1 for r in rows if r["assumed"]),
             "question": "Where can water leave the park? For each point where the ground drains to the edge, say "
                         "whether there is a way out (gate, opening, drain inlet) or a wall / kerb that holds the "
                         "water, and how high that edge is."}
@@ -196,7 +208,7 @@ def edge_elements(project: Project, site, option: Optional[str] = None) -> List[
     from ..terrain.raster import read_geotiff
 
     st = status(project, option)
-    closed = [e for e in st["exits"] if e["state"] == "closed" and e["confirmed"]]
+    closed = [e for e in st["exits"] if e["state"] == "closed" and e["edge_height_m"]]   # answered or held
     if not closed or not project.exists("terrain/existing.tif"):
         return []
     dem = read_geotiff(project.path("terrain/existing.tif"))

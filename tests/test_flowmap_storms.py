@@ -71,3 +71,21 @@ def test_a_hollow_knows_the_ground_that_drains_to_it():
     assert 25 <= first[-3] <= 28 and 14 <= n - first[-2] <= 17   # and ends in it
     xs = out["catchment"][0::2]
     assert min(xs) < 20 and max(xs) <= 30
+
+
+def test_water_held_at_a_closed_exit_carries_the_ground_that_drains_to_it():
+    from spongepark.engine.hydrology.flowmap import _held_at_exit
+    from spongepark.engine.terrain.raster import DEM
+
+    # a 20 x 20 m slope falling to the west edge, where the closed exit is; all of it drains there
+    z = np.tile(np.linspace(100.0, 101.9, 20), (20, 1))
+    dem = DEM(z=z, cell_size=1.0, origin=(0.0, 20.0))
+    ex = {"id": "OUT_1", "x": 0.5, "y": 10.5, "z": 100.0, "edge_height_m": 0.3}
+    sub = {"geometry": {"type": "Polygon", "coordinates": [[(0, 0), (20, 0), (20, 20), (0, 20), (0, 0)]]},
+           "properties": {"id": "S1", "outlet": "OUT_1"}}
+    results = {"elements": [{"id": "EDGE_1", "max_ponding_depth_m": 0.3}],
+               "return_periods": {"10": {"elements": [{"id": "EDGE_1", "max_depth_m": 0.2, "overflow_m3": 0.0}]}}}
+    held = _held_at_exit(ex, results, dem, [sub])
+    assert not held["needs_analysis"] and "outline" in held["storms"]["10"]
+    assert abs(held["draining_area_m2"] - 400.0) < 5           # the whole subcatchment
+    assert len(held["catchment"]) >= 8                           # x, y pairs of its outline

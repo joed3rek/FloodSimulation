@@ -118,6 +118,10 @@ def main(folder: str) -> None:
     vmax = np.max([np.nan_to_num(a_) for _, a_ in series("v")], axis=0) if series("v") else np.zeros((rows, cols))
     qx = np.mean([np.nan_to_num(a_) for _, a_ in series("qx")], axis=0) if series("qx") else np.zeros((rows, cols))
     qy = np.mean([np.nan_to_num(a_) for _, a_ in series("qy")], axis=0) if series("qy") else np.zeros((rows, cols))
+    # the flow at each kept frame (m3/s across each cell's east and south edge, + east and + south), for the speeds
+    sx, sy = series("qx"), series("qy")
+    flow_e = np.stack([np.nan_to_num(sx[k][1]) for k in keep]).astype(np.float32) if len(sx) == len(depth) and depth else None
+    flow_s = np.stack([np.nan_to_num(sy[k][1]) for k in keep]).astype(np.float32) if len(sy) == len(depth) and depth else None
     # mean rates per record (mm/h) -> total depth infiltrated per cell (m)
     infil_m = np.zeros((rows, cols))
     prev = 0.0
@@ -126,7 +130,8 @@ def main(folder: str) -> None:
         infil_m += np.nan_to_num(a_) * (now - prev) / 3600 / 1000
         prev = now
     np.savez_compressed(d / "outputs.npz", times_s=times, depth_m=frames, hmax=hmax, vmax=vmax, qx_mean=qx, qy_mean=qy,
-                        infiltration_m=infil_m)
+                        infiltration_m=infil_m,
+                        **({"flow_e": flow_e, "flow_s": flow_s} if flow_e is not None and flow_s is not None else {}))
     (d / "result.json").write_text(json.dumps({
         "seconds": seconds, "frames": int(len(times)),
         "continuity": {k: float(v) for k, v in cont.model_dump().items()} if hasattr(cont, "model_dump")

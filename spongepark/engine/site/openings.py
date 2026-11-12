@@ -7,7 +7,10 @@ get in and out, which only the designer knows. Nothing here is assumed, so each 
   from outside comes in);
 - ``origin``: ``site`` (an existing site condition: in every run) or ``design`` (part of the design: in design runs only;
   in a project built from a design model every run is the design);
-- an outlet's ``width_m`` and ``sill_m`` (how far above the ground water must rise to leave);
+- an outlet's ``width_m`` and ``invert_m``: the level water leaves at, on the survey's own datum (the invert or bottom
+  level many surveys mark at an outlet), so it may be below the ground beside it (a drain) or above it (a sill) with
+  no sign to work out. Saved with ``ground_m`` (the ground there) and ``sill_m`` (invert minus ground; negative when
+  below it). An old row with only ``sill_m`` (height above the ground) still reads as ground + sill;
 - an inlet's ``area_m2`` draining to it and ``runoff_pct`` of the rain on that area that arrives.
 
 ``site/openings.json``: ``{"openings": [...], "confirmed": bool}``; ``confirmed`` is the designer saying the list is
@@ -30,6 +33,54 @@ KINDS = ("outlet", "inlet")
 ORIGINS = ("site", "design")
 SNAP_M = 5.0     # a click this close to the site counts as on it
 MODEL_SOURCE = "site/model_source.json"
+LEVEL_MARGIN_M = 5.0   # an outlet level this far outside the site's ground levels is not on the survey's datum
+DEM_REL = "terrain/existing.tif"
+
+
+def _dem(project: Project):
+    from ..terrain.raster import read_geotiff
+
+    return read_geotiff(project.path(DEM_REL)) if project.exists(DEM_REL) else None
+
+
+def ground_range(dem) -> Optional[List[float]]:
+    """The lowest and highest ground on the site (m, survey datum)."""
+    if dem is None:
+        return None
+    z = dem.z[dem.z != dem.nodata]
+    return [round(float(z.min()), 3), round(float(z.max()), 3)] if z.size else None
+
+
+def outlet_ground(dem, x: float, y: float, width_m: float = 0.0) -> Optional[float]:
+    """The ground an outlet opens from: the lowest within its width (at least two cells) of the point, so an outlet in
+    a boundary wall reads the ground beside the wall, not the wall's top."""
+    if dem is None:
+        return None
+    X, Y = dem.cell_centres()
+    near = (dem.z != dem.nodata) & (np.hypot(X - x, Y - y) <= max(float(width_m) / 2, 2 * dem.cell_size))
+    return float(dem.z[near].min()) if near.any() else _ground_at(dem, x, y)
+
+
+def snap(project: Project, x: float, y: float, kind: str = "outlet", width_m: float = 0.0) -> Dict[str, Any]:
+    """Where a click puts an opening (an outlet onto the site's edge) and the ground there, for the app's form."""
+    from shapely.geometry import Point
+    from shapely.ops import nearest_points
+
+    boundary = _boundary(project)
+    p = Point(x, y)
+    if boundary is not None:
+        p = nearest_points(boundary.exterior if kind == "outlet" else boundary, p)[0] if (kind == "outlet" or boundary.distance(p) > 0) else p
+    dem = _dem(project)
+    g = outlet_ground(dem, p.x, p.y, width_m) if kind == "outlet" else (_ground_at(dem, p.x, p.y) if dem is not None else None)
+    return {"x": round(p.x, 2), "y": round(p.y, 2), "ground_m": None if g is None else round(g, 3),
+            "ground_range_m": ground_range(dem)}
+
+
+def invert_of(o: Dict[str, Any], ground: Optional[float]) -> Optional[float]:
+    """The level an outlet lets water out at: its own invert, or (an old row) the ground plus its sill."""
+    if o.get("invert_m") is not None:
+        return float(o["invert_m"])
+    return None if ground is None else ground + float(o.get("sill_m") or 0.0)
 
 
 def _boundary(project: Project):
@@ -55,12 +106,12 @@ def status(project: Project) -> Dict[str, Any]:
         for g in wall.get("openings", []):
             if not any(np.hypot(o["x"] - g["x"], o["y"] - g["y"]) <= max(SNAP_M, g["width_m"]) for o in st["openings"]):
                 gaps.append(g)
-    return {**st, "gaps": gaps, "from_model": project.exists(MODEL_SOURCE),
+    return {**st, "gaps": gaps, "from_model": project.exists(MODEL_SOURCE), "ground_range_m": ground_range(_dem(project)),
             "question": "Where does water enter or leave this site? Place each inlet and outlet, and say whether it is an "
                         "existing site condition or part of the design. Everywhere else the edge holds the water."}
 
 
-def _check(a: Dict[str, Any], i: int, boundary) -> Dict[str, Any]:
+def _check(a: Dict[str, Any], i: int, boundary, dem=None) -> Dict[str, Any]:
     from shapely.geometry import Point
     from shapely.ops import nearest_points
 
@@ -100,7 +151,23 @@ def _check(a: Dict[str, Any], i: int, boundary) -> Dict[str, Any]:
 
     if kind == "outlet":
         out["width_m"] = number("width_m", "width of the outlet (m)", 0.0, open_lo=True)
-        out["sill_m"] = number("sill_m", "height of its sill above the ground (m; 0 if level)", 0.0)
+        ground = outlet_ground(dem, p.x, p.y, out["width_m"])
+        if a.get("invert_m") is not None and a.get("invert_m") != "":
+            invert = number("invert_m", "level of the outlet (m, on the survey's levels)", -1e6)
+            span = ground_range(dem)
+            if span and not (span[0] - LEVEL_MARGIN_M <= invert <= span[1] + LEVEL_MARGIN_M):
+                raise ValueError(f"{who}: {invert:g} m is not a level on this site's survey, whose ground runs from "
+                                 f"{span[0]:.2f} to {span[1]:.2f} m. Give the outlet's level on the same levels "
+                                 f"(its invert or bottom level), not its height above the ground.")
+        else:   # an old row: height above the ground
+            sill = number("sill_m", "level of the outlet (m, on the survey's levels)", 0.0)
+            invert = (ground or 0.0) + sill
+        out["invert_m"] = round(invert, 3)
+        if ground is not None:
+            out["ground_m"] = round(ground, 3)
+            out["sill_m"] = round(invert - ground, 3)
+        else:
+            out["sill_m"] = round(float(a.get("sill_m") or 0.0), 3)
     else:
         out["area_m2"] = number("area_m2", "area draining to the inlet (m2)", 0.0, open_lo=True)
         out["runoff_pct"] = number("runoff_pct", "share of the rain on that area that arrives (%)", 0.0, 100.0, open_lo=True)
@@ -109,7 +176,15 @@ def _check(a: Dict[str, Any], i: int, boundary) -> Dict[str, Any]:
 
 def save(project: Project, body: Dict[str, Any]) -> Dict[str, Any]:
     boundary = _boundary(project)
-    rows = [_check(a, i, boundary) for i, a in enumerate(body.get("openings") or [])]
+    dem = _dem(project)
+    rows = [_check(a, i, boundary, dem) for i, a in enumerate(body.get("openings") or [])]
+    ids = [r["id"] for r in rows]
+    for i, r in enumerate(rows):   # a copy made in the app comes without an id, or with its original's
+        if ids.count(r["id"]) > 1 and ids.index(r["id"]) != i:
+            n = 1
+            while f"{r['kind'].upper()}_{n}" in ids:
+                n += 1
+            r["id"] = ids[i] = f"{r['kind'].upper()}_{n}"
     project.write_json(REL, {"openings": rows, "confirmed": bool(body.get("confirmed"))})
     project.history.log("openings", outlets=sum(o["kind"] == "outlet" for o in rows),
                         inlets=sum(o["kind"] == "inlet" for o in rows), confirmed=bool(body.get("confirmed")))
@@ -148,9 +223,8 @@ def outlet_levels(project: Project, option: Optional[str] = None) -> Dict[str, f
     for o in outs:
         p = Point(o["x"], o["y"])
         exit_id = min(subs, key=lambda s: s[1].distance(p))[0]
-        z = _ground_at(dem, o["x"], o["y"])
-        if exit_id and z is not None:
-            level = z + float(o["sill_m"])
+        level = invert_of(o, outlet_ground(dem, o["x"], o["y"], float(o.get("width_m") or 0.0)))
+        if exit_id and level is not None:
             levels[exit_id] = min(levels.get(exit_id, level), level)
     return levels
 

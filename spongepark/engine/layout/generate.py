@@ -207,7 +207,13 @@ def runoff_depth_mm(project: Project) -> Tuple[float, int, str]:
     if r is None:
         raise LayoutError(f"the baseline has no {rp}-yr run; add it to project.return_periods and rerun.")
     wb = r["water_balance"]
-    c = (wb["outflow_total_m3"] + wb["flooding_m3"]) / wb["rainfall_total_m3"]
+    # the runoff the ground makes, not what leaves the park: where no outlet is marked the edge holds the water, and
+    # that runoff still needs somewhere to go
+    if r.get("surface_runoff_m3") is not None:
+        made = float(r["surface_runoff_m3"])
+    else:   # a summary from before it was kept: the rain that did not soak in
+        made = wb["rainfall_total_m3"] - wb["infiltration_surfaces_m3"] - wb.get("interception_m3", 0.0)
+    c = max(made, wb["outflow_total_m3"] + wb["flooding_m3"]) / wb["rainfall_total_m3"]
     return c * float(r["storm"]["depth_mm"]), rp, f"baseline SWMM {rp}-yr: runoff coefficient {c:.2f} x {r['storm']['depth_mm']:.0f} mm"
 
 

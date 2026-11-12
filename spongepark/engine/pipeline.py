@@ -187,6 +187,8 @@ def run_option(
             "hydrograph": peak_and_time(res.timeseries),
             "peak_outfall_inflow_cms": res.peak_outfall_inflow_cms,
             "subcatchment_peak_cms": {sid: float(st["peak_runoff_rate"]) for sid, st in res.subcatch.items()},
+            # the runoff the ground makes, whatever happens to it after (it may be held at a closed edge)
+            "surface_runoff_m3": float(sum(float(st.get("runoff", 0.0)) for st in res.subcatch.values())),
             "elements": element_summary(spec, res, threshold),
             "timing": overflow_timing(spec, res),
             "flooded_locations": flooded_locations(spec, res, elements),

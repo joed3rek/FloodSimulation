@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 
-from .model import Result2D
+from .model import Result2D, cell_velocity
 
 G = 9.81
 
@@ -182,6 +182,7 @@ def simulate_gpu(inp, frame_every_s: float, edge_drop_fraction: float = 0.01) ->
     t, cum, hm, rain_tot = 0.0, 0.0, 0.0, 0.0
     next_frame = frame_every_s
     frames, times = [np.zeros((nr, nc), np.float32)], [0.0]
+    vel = [np.zeros((2, nr, nc), np.float16)]
     rain, rain_dt, dur = inp.rain_mm_hr, inp.rain_dt_s, inp.duration_s
     while t < dur - 1e-9:
         dt = inp.dt_max if hm < 1e-3 else min(inp.dt_max, inp.alpha * cell / math.sqrt(G * hm))
@@ -194,7 +195,10 @@ def simulate_gpu(inp, frame_every_s: float, edge_drop_fraction: float = 0.01) ->
         rain_tot += rain_m * wet_area
         t += dt
         if t >= next_frame - 1e-9 or t >= dur - 1e-9:
-            frames.append(h.to_numpy().astype(np.float32))
+            depth_now = h.to_numpy()
+            frames.append(depth_now.astype(np.float32))
+            qx_now, qy_now = qx.to_numpy(), qy.to_numpy()
+            vel.append(cell_velocity(qx_now[:, 1:], qy_now[1:, :], depth_now))
             times.append(t)
             next_frame += frame_every_s
     depth = h.to_numpy()
@@ -206,4 +210,5 @@ def simulate_gpu(inp, frame_every_s: float, edge_drop_fraction: float = 0.01) ->
                "outflow_m3": out, "surface_remaining_m3": surface, "element_storage_remaining_m3": stored,
                "continuity_error_m3": err, "continuity_error_pct": 100 * err / rain_tot if rain_tot else 0.0}
     ids = els.ids if els is not None else []
-    return Result2D(np.array(times), np.stack(frames), hmax.to_numpy(), balance, {i: float(s) for i, s in zip(ids, stored_each)})
+    return Result2D(np.array(times), np.stack(frames), hmax.to_numpy(), balance, {i: float(s) for i, s in zip(ids, stored_each)},
+                    np.stack(vel))

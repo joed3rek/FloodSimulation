@@ -180,6 +180,26 @@ namespace SpongePark
             return Grid.Z[r * Grid.Cols + c];
         }
 
+        /// Ground level (survey m) at a survey point, blended between the four cell centres around it (the drawn ground's
+        /// own corners), so a line laid on it follows the surface smoothly; NaN outside.
+        public float GroundSmooth(float x, float y)
+        {
+            if (Grid == null) return float.NaN;
+            float fc = (x - Grid.Origin.x) / Grid.Cell - 0.5f, fr = (Grid.Origin.y - y) / Grid.Cell - 0.5f;
+            int c0 = Mathf.FloorToInt(fc), r0 = Mathf.FloorToInt(fr);
+            float tc = fc - c0, tr = fr - r0, sum = 0, wsum = 0;
+            for (int dr = 0; dr <= 1; dr++)
+                for (int dc = 0; dc <= 1; dc++)
+                {
+                    int r = r0 + dr, c = c0 + dc;
+                    if (r < 0 || c < 0 || r >= Grid.Rows || c >= Grid.Cols || !Grid.Valid(r, c)) continue;
+                    float w = (dr == 1 ? tr : 1 - tr) * (dc == 1 ? tc : 1 - tc) + 1e-4f;
+                    sum += w * Grid.Z[r * Grid.Cols + c];
+                    wsum += w;
+                }
+            return wsum > 0 ? sum / wsum : GroundAt(x, y);
+        }
+
         /// Whether a survey point is on the park's own (surveyed) ground.
         public bool InPark(float x, float y)
         {

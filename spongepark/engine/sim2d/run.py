@@ -125,6 +125,7 @@ class Inputs2D:
     dt_max: float
     inlets: Any = None   # (row, col, area m2) where water from outside the site arrives
     theta: float = 0.9   # sim2d.flow_theta
+    ground: Optional[np.ndarray] = None   # the park's ground before its edge was raised to hold water (closed exits)
 
 
 def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = None) -> Inputs2D:
@@ -142,6 +143,7 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
     g = DEM(z, cell, dem.origin, dem.crs, dem.nodata)
     X, Y = g.cell_centres()
     mask = valid & contains_xy(site.boundary, X, Y)
+    ground = g.z.copy()
     _close_exits(project, g, mask, X, Y, option_id)
 
     # roughness and infiltration per cell
@@ -186,7 +188,8 @@ def prepare2d(project: Project, option_id: str, rp: int, cell_m: Optional[float]
                     storm.dt_min * 60, storm.duration_hr * 3600 + float(P.value("sim2d.extra_time_hr")) * 3600,
                     min(float(P.value("sim2d.courant")), 0.5),   # projects saved with the old default of 0.7 too
                     float(P.value("sim2d.max_time_step_s")),
-                    openings.inlet_cells(project, option_id, X, Y, mask), float(P.value_or("sim2d.flow_theta", 0.9)))
+                    openings.inlet_cells(project, option_id, X, Y, mask), float(P.value_or("sim2d.flow_theta", 0.9)),
+                    ground)
 
 
 def _nbs_zones(project: Project, f, infil_fn, note, params, X, Y, mask):
@@ -223,7 +226,7 @@ def _close_exits(project: Project, g: DEM, mask: np.ndarray, X: np.ndarray, Y: n
     from ..site import openings, outfalls
 
     closed = {e["id"]: float(e["edge_height_m"]) for e in outfalls.status(project, option, with_outlets=False)["exits"]
-              if e["state"] == "closed" and e["confirmed"]}
+              if e["state"] == "closed" and e["edge_height_m"]}   # answered, or held: nobody marked a way out
     outlets = [o for o in openings.active(project, option) if o["kind"] == "outlet"]
     if (not closed and not outlets) or not project.exists("site/subcatchments.geojson"):
         return
@@ -240,7 +243,10 @@ def _close_exits(project: Project, g: DEM, mask: np.ndarray, X: np.ndarray, Y: n
                 g.z[walled] = np.maximum(ground[walled], tops[walled])
     for o in outlets:
         cut = ring & (np.hypot(X - o["x"], Y - o["y"]) <= max(float(o["width_m"]) / 2, g.cell_size))
-        g.z[cut] = ground[cut] + float(o["sill_m"])
+        if o.get("invert_m") is not None:   # its level on the survey's datum, below the ground (a drain) or above it
+            g.z[cut] = float(o["invert_m"])
+        else:
+            g.z[cut] = ground[cut] + float(o["sill_m"])
 
 
 def _engine(P) -> str:
@@ -260,14 +266,25 @@ def _run_itzi(inp: Inputs2D, frame_s: float):
     from ..terrain.extend import extend_dem
     from .itzi_model import simulate_itzi
 
+    from scipy import ndimage
+
     g, mask, cell = inp.dem, inp.mask, inp.dem.cell_size
     R, C = mask.shape
     x0, y1 = g.origin
     bounds = (x0, y1 - R * cell, x0 + C * cell, y1)
-    big, _ = extend_dem(DEM(np.where(mask, g.z, g.nodata), cell, g.origin, g.crs, g.nodata), bounds, margin_m=4 * cell)
+    # an edge raised to hold water (a closed exit) stands just outside the park here, not on its edge cells: rain
+    # falling on a wall of single cells would pour off it fast enough to stall Itzi's time step
+    raised = (g.z - inp.ground > 1e-6) & mask if inp.ground is not None else np.zeros_like(mask)
+    z_park = np.where(raised, inp.ground, g.z) if raised.any() else g.z
+    big, _ = extend_dem(DEM(np.where(mask, z_park, g.nodata), cell, g.origin, g.crs, g.nodata), bounds, margin_m=4 * cell)
     left = int(round((x0 - big.origin[0]) / cell))
     top = int(round((big.origin[1] - y1) / cell))
     pad = ((top, big.z.shape[0] - R - top), (left, big.z.shape[1] - C - left))
+    if raised.any():
+        tops = np.pad(np.where(raised, g.z, -np.inf), pad, constant_values=-np.inf)
+        wall = ndimage.grey_dilation(tops, footprint=np.ones((3, 3), bool))   # each outside cell beside a raised edge
+        outside = ~np.pad(mask, pad) & np.isfinite(wall)
+        big.z[outside] = np.maximum(big.z[outside], wall[outside])
     f = inp.f.copy()
     el = inp.elements
     if el is not None:   # element cells infiltrate (or seep) at the element's own rate
@@ -291,6 +308,8 @@ def _run_itzi(inp: Inputs2D, frame_s: float):
     rs, cs = slice(top, top + R), slice(left, left + C)
     res.frames = res.frames[:, rs, cs]
     res.max_depth = res.max_depth[rs, cs]
+    if res.velocity is not None:
+        res.velocity = res.velocity[:, :, rs, cs]
     flow = {k: v[rs, cs] for k, v in res.extra.items()}
     return res, flow
 
@@ -350,6 +369,7 @@ def run2d(project: Project, option_id: str, rp: int, cell_m: Optional[float] = N
     with open(project.path(f"{out_dir}/rp{rp}.tmp.npz"), "wb") as tmp:
         np.savez_compressed(tmp, times_s=res.times_s, depth_m=res.frames.astype(np.float16),
                             mask=mask, origin=np.array(g.origin), cell_m=cell,
+                            **({"velocity_ms": res.velocity.astype(np.float16)} if res.velocity is not None else {}),
                             **({k: v.astype(np.float32) for k, v in flow.items()} if flow else {}))
     os.replace(project.path(f"{out_dir}/rp{rp}.tmp.npz"), project.path(f"{out_dir}/rp{rp}.npz"))
     write_geotiff(DEM(np.where(mask, res.max_depth, dem.nodata), cell, g.origin, g.crs, dem.nodata),

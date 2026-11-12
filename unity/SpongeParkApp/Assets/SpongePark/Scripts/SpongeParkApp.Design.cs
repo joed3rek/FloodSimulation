@@ -138,8 +138,8 @@ namespace SpongePark
             flowShownRp = rp;
             FillStormReadout(a, rp);
             ShowStormWater();
-            left.Flow.Build(a, frame, layerVisible, rp);
-            right.Flow.Build(a, frame, layerVisible, rp);
+            left.Flow.Build(a, frame, layerVisible, rp, GroundOf(left));
+            right.Flow.Build(a, frame, layerVisible, rp, GroundOf(right));
             PrepareFlowAnim(a, rp);
             var s = a["summary"];
             var ss = rp > 0 ? a["storm_summary"]?[rp.ToString()] : null;   // how full the hollows get in this storm
@@ -200,18 +200,23 @@ namespace SpongePark
                 b.AddToClassList("layer-row");
                 var sw = new VisualElement { pickingMode = PickingMode.Ignore };
                 sw.AddToClassList("layer-swatch");
-                bool held = (string)e["state"] == "closed";
+                bool held = (string)e["state"] != "open", assumed = (bool?)e["assumed"] == true;
                 sw.style.backgroundColor = held ? new Color(0.85f, 0.6f, 0.17f) : new Color(0.76f, 0.29f, 0.23f);
                 b.Add(sw);
                 var w = new VisualElement { pickingMode = PickingMode.Ignore };
                 w.AddToClassList("layer-words");
-                w.Add(Text(held ? $"{e["id"]} · no way out: held by a {(float)e["edge_height_m"]:0.##} m edge"
-                                : $"{e["id"]} · water leaves the park" + (e["state"] == null || e["state"].Type == JTokenType.Null ? " (not confirmed)" : ""), "layer-title"));
+                w.Add(Text(!held ? $"{EdgeName(e)} · water leaves here (you marked it)"
+                           : assumed ? $"{EdgeName(e)} · held at the edge: no outlet marked"
+                           : $"{EdgeName(e)} · held by the {(float)e["edge_height_m"]:0.##} m wall or kerb you gave", "layer-title"));
                 w.Add(Text($"{(float)e["draining_area_m2"]:0} m² of the park drains here" + ExitInStorm(e, rp), "layer-source"));
                 b.Add(w);
                 hotspotList.Add(b);
             }
         }
+
+        /// A point where the ground drains to the park's edge, by what it is: a low point on the edge, not an outlet
+        /// (the engine's id, OUT_k, is SWMM's node there).
+        static string EdgeName(JToken e) => "Edge low point E" + ((string)e["id"] ?? "").Split('_').Last();
 
         /// This storm at an exit, from SWMM: what the edge holds and what gets past it.
         static string ExitInStorm(JToken e, int rp)
@@ -294,7 +299,7 @@ namespace SpongePark
                 row.tooltip = $"Show the {year}-year storm";
                 stormTable.Add(row);
             }
-            var note = Text("From SWMM for the whole park. Peak: runoff at its highest. Out: leaves the park. Wet: ground at 5 cm or deeper at the storm's highest, and Max: the deepest water, from the 2D flood model (indicative).", "layer-source");
+            var note = Text("From SWMM for the whole park. Peak: runoff at its highest. Out: leaves the park, through the outlets you placed or over the edge where the water rises above the wall or kerb height you gave (nothing where neither is given).Wet: ground at 5 cm or deeper at the storm's highest, and Max: the deepest water, from the 2D flood model (indicative).", "layer-source");
             note.style.whiteSpace = WhiteSpace.Normal;
             note.style.marginTop = 6;
             stormTable.Add(note);
@@ -370,10 +375,14 @@ namespace SpongePark
             showProposed = true;   // split view stays as the user left it
             ApplyViewports();
             yield return right.Load(api, frame, CurrentRp, false);
-            right.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
+            right.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundSmooth, left.Terrain.InPark);
             right.Terrain.SetContours(!layerVisible.TryGetValue(ContoursLayer, out var con) || con);
-            if (flowData != null) right.Flow.Build(flowData, frame, layerVisible, CurrentRp);
+            if (flowData != null) right.Flow.Build(flowData, frame, layerVisible, CurrentRp, GroundOf(right));
         }
+
+        /// The ground a view draws, smoothly sampled, for laying lines and arrows on it (NaN where it has none).
+        System.Func<float, float, float> GroundOf(SiteView v) =>
+            (x, y) => v.Terrain.Grid != null ? v.Terrain.GroundSmooth(x, y) : float.NaN;
 
         float GroundZ(float x, float y)
         {

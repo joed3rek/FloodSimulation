@@ -147,6 +147,12 @@ namespace SpongePark
             C("compare", "Before and after", "results", "The selected storm on the existing site and on the design: flooding, runoff and where runoff is not collected",
               () => { if (NeedOpenings) AskOpenings(); else StartCoroutine(Run(RunCompare(), "Running the storm on the existing site and the design")); },
               () => Engine && Analysed && !busy, visible: () => (bool?)info?["has_existing"] == true);
+            C("flow-trace", "Flow trace", "flow-lines", "The flood's water coloured by its speed, with particles carried by the flow (like a wind map). Plays with the storm; keeps moving when paused",
+              ToggleTrace, () => !busy && HasProject, () => traceOn, visible: () => !bundle);
+            C("add-outlet", "Add outlet", "exits", "Place an outlet on the site's edge, here on the Analyse tab. Drag a pin to move it; click it to edit, copy or remove it",
+              () => BeginPlacing("outlet", true), () => Engine && HasGround && openingsData != null, visible: () => !bundle);
+            C("add-inlet", "Add inlet", "plus", "Place an inlet where water from outside comes in. Drag a pin to move it; click it to edit, copy or remove it",
+              () => BeginPlacing("inlet", true), () => Engine && HasGround && openingsData != null, visible: () => !bundle);
             C("baseline", "Analyse existing", "baseline", "SWMM on the existing park for every storm (needed to compare options)",
               () => StartCoroutine(Run(Baseline(), "Analysing")), () => Engine && siteConfirmed && FloodReady, visible: () => !bundle);
             // Design
@@ -229,6 +235,7 @@ namespace SpongePark
 
             var analyse = new RibbonTab(Tab.Analyse, "Analyse");
             analyse.Group("Analyse").Large(commands["analyse"]).Large(commands["to-design"]);
+            analyse.Group("Outlets").Large(commands["add-outlet"]).Large(commands["add-inlet"]);
             analyse.Group("Show").Large(commands["flow-lines"]).Large(commands["flow-arrows"]).Large(commands["flow-ponding"]).Large(commands["flow-exits"]);
             AddImageGroup(analyse);
 
@@ -247,6 +254,7 @@ namespace SpongePark
             var sim = new RibbonTab(Tab.Simulate, "Simulate");
             sim.Group("Flood").Large(commands["flood"]).Small(commands["flood-one"]).Small(commands["run2d"]).Small(commands["load"]);
             sim.Group("Live").Large(commands["live"]).Small(commands["verify-gpu"]);
+            sim.Group("Show").Large(commands["flow-trace"]);
 
             var res = new RibbonTab(Tab.Results, "Results");
             optionField = new DropdownField(new List<string> { "No options yet" }, 0);
@@ -369,6 +377,7 @@ namespace SpongePark
             stormReadout.style.color = new Color(0.9f, 0.92f, 0.95f);
             SpongePark.UI.Kit.Show(stormReadout, false);
             overlay.Add(stormReadout);
+            BuildTraceLegend(overlay);
 
             var tc = Kit.Box("vp-tc");
             tc.Add(drawHint);

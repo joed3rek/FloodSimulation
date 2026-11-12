@@ -59,6 +59,26 @@ def frames_payload(project: Project, option: str, rp: int, start: int = 0, count
             "frames": b64(frames, "<f2")}
 
 
+def velocity_payload(project: Project, option: str, rp: int, max_frames: int = 160) -> Dict[str, Any]:
+    """The water's velocity through the 2D run (indicative): float16 east then north (m/s) for each cell, frame-major,
+    row 0 = north; with the fastest speed and the 95th percentile of moving water, for the colour scale. At most
+    ``max_frames`` frames, evenly spaced, the last always kept (flow changes smoothly; the app blends between them).
+    None for a run saved before velocities were kept (run the storm again)."""
+    d = np.load(project.path(f"scenarios/{option}/sim2d/rp{rp}.npz"))
+    if "velocity_ms" not in d.files:
+        return None
+    v, times = d["velocity_ms"], d["times_s"]
+    every = max(1, int(np.ceil(len(times) / max_frames)))
+    keep = sorted(set(range(0, len(times), every)) | {len(times) - 1})
+    v, times = v[keep], times[keep]
+    speed = np.hypot(v[:, 0].astype(np.float32), v[:, 1].astype(np.float32))
+    return {"label": "indicative", "option": option, "return_period_yr": rp, "times_s": times.tolist(),
+            "rows": int(v.shape[2]), "cols": int(v.shape[3]), "cell_m": float(d["cell_m"]), "origin": d["origin"].tolist(),
+            "max_speed_m_s": round(float(speed.max()) if speed.size else 0.0, 3),
+            "p95_speed_m_s": round(float(np.percentile(speed[speed > 0.005], 95)) if (speed > 0.005).any() else 0.0, 3),
+            "velocity": b64(v, "<f2")}
+
+
 def peak_payload(project: Project, option: str, rp: int) -> Dict[str, Any]:
     """The storm's highest water from the 2D run, as one depth frame: only where it reaches the flood depth, so the
     map shows the area the summary counts."""

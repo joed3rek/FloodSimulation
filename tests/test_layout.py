@@ -22,7 +22,9 @@ def _fc(items):
             "features": [{"type": "Feature", "geometry": g.__geo_interface__, "properties": p} for g, p in items]}
 
 
-def _valley_project(root):
+def _valley_project(root, edges_open=True):
+    """A valley site. edges_open: the designer has said water leaves wherever the ground drains to the edge (the
+    model assumes no way out of its own)."""
     p = Project.create(root / "v.sponge", "valley", crs="LOCAL")
     dem = v_valley(size_m=(60, 80), cell_size=1.0)
     dem.origin = (0.0, 80.0)  # put the site at (0, 0)-(60, 80)
@@ -32,6 +34,10 @@ def _valley_project(root):
     P.set("layout.design_return_period_yr", 5, source=Source.USER)
     p.write_geojson("site/context.geojson", _fc([(BUILDING, {"kind": "buildings", "layer": "B"})]))
     delineate(p)
+    if edges_open:
+        from spongepark.engine.site import outfalls
+
+        outfalls.apply(p, {"all": {"state": "open"}})
     dom = p.read_geojson("site/boundary.geojson")["features"][0]["geometry"]
     p.write_geojson("site/soil_zones.geojson", {"type": "FeatureCollection", "features": [{
         "type": "Feature", "geometry": dom, "properties": dict(

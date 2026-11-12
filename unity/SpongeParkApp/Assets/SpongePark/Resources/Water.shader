@@ -18,6 +18,7 @@ Shader "SpongePark/Water"
             #pragma multi_compile_fog
             #include "LowPoly.cginc"
             float _RainRate;
+            float _MapColours;   // 1: the vertex colours (a speed map) in 3D as well as in the plan
             struct appdata { float4 vertex : POSITION; float3 normal : NORMAL; float4 color : COLOR; float2 uv : TEXCOORD0; };
             struct v2f { float4 pos : SV_POSITION; float4 color : COLOR; float3 wpos : TEXCOORD0; float depth : TEXCOORD1; float3 n : TEXCOORD3; UNITY_FOG_COORDS(2) };
             v2f vert(appdata v)
@@ -48,7 +49,9 @@ Shader "SpongePark/Water"
                 float3 h = normalize(normalize(_WorldSpaceLightPos0.xyz) + v);
                 col += _LightColor0.rgb * pow(saturate(dot(n, h)), 60) * 0.6 * (1 - _Overcast);
                 fixed4 low = fixed4(col, lerp(0.55, 0.9, saturate(d / 0.5)) * saturate(d / 0.03));
-                fixed4 c = lerp(low, plan, _PlanView);
+                fixed4 lit = fixed4(LowPolyLight(plan.rgb, n, 1) * 1.15, plan.a);   // the map, shaded a little in 3D
+                fixed4 mapped = lerp(lit, plan, _PlanView);
+                fixed4 c = lerp(lerp(low, plan, _PlanView), mapped, _MapColours);
                 UNITY_APPLY_FOG(i.fogCoord, c.rgb);
                 return c;
             }

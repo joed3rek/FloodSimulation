@@ -248,6 +248,28 @@ class Result2D:
     max_depth: np.ndarray
     balance: Dict[str, float]
     element_store_m3: Dict[str, float] = field(default_factory=dict)
+    velocity: Optional[np.ndarray] = None   # (n_frames, 2, nr, nc) float16: east and north speed at each cell, m/s
+
+
+DRY_M = 0.0005     # shallower than this a cell has no speed; sheet flow over a lawn is only a few mm deep
+V_CAP = 10.0       # m/s: a speed above this is a numerical spike at a wet-dry edge, not flow
+
+
+def cell_velocity(q_east: np.ndarray, q_south: np.ndarray, h: np.ndarray) -> np.ndarray:
+    """The water's velocity at each cell centre (m/s, east and north, row 0 = north), from the flow per metre width
+    across each cell's east edge (``q_east[r, c]``, + to the east) and south edge (``q_south[r, c]``, + to the south):
+    the mean of a cell's two edges in each direction over its depth. Dry cells are still."""
+    q_west = np.zeros_like(q_east)
+    q_west[:, 1:] = q_east[:, :-1]
+    q_north = np.zeros_like(q_south)
+    q_north[1:, :] = q_south[:-1, :]
+    wet = h > DRY_M
+    d = np.where(wet, h, 1.0)
+    u = np.where(wet, 0.5 * (q_east + q_west) / d, 0.0)
+    v = np.where(wet, -0.5 * (q_south + q_north) / d, 0.0)   # north is up the map: against the rows
+    speed = np.hypot(u, v)
+    k = np.where(speed > V_CAP, V_CAP / np.maximum(speed, 1e-9), 1.0)
+    return np.stack([u * k, v * k]).astype(np.float16)
 
 
 def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarray, rain_dt_s: float,
@@ -279,6 +301,7 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
     t = 0.0
     rain_tot = infil_tot = el_inf_tot = out_tot = inlet_tot = 0.0
     frames, times = [h.astype(np.float32)], [0.0]
+    vel = [np.zeros((2, nr, nc), np.float16)]
     hmax = np.zeros((nr, nc))
     next_frame = frame_every_s
     edge_drop = edge_drop_fraction * cell
@@ -307,6 +330,7 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
         t += dt
         if t >= next_frame - 1e-9 or t >= duration_s - 1e-9:
             frames.append(h.astype(np.float32))
+            vel.append(cell_velocity(qx[:, 1:], qy[1:, :], h))
             times.append(t)
             next_frame += frame_every_s
     surface = float(h[mask].sum() * cell_area)
@@ -318,4 +342,4 @@ def simulate(z: np.ndarray, mask: np.ndarray, cell: float, rain_mm_hr: np.ndarra
         "continuity_error_m3": err, "continuity_error_pct": 100 * err / (rain_tot + inlet_tot) if rain_tot + inlet_tot else 0.0,
     }
     return Result2D(np.array(times), np.stack(frames), hmax, balance,
-                    {i: float(s) for i, s in zip(elements.ids, store)})
+                    {i: float(s) for i, s in zip(elements.ids, store)}, np.stack(vel))

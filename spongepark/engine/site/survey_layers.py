@@ -73,6 +73,8 @@ ROAD_END_GAP_M = 30.0      # loose road ends this close are joined (the break sy
 TOUCH_M = 1e-6             # an end this close to another line already meets it
 BED_WIDTH_JUMP = 2.0       # beds are at least this many times wider than the paths around them (a ratio, not a width)
 BED_MIN_ROUNDNESS = 0.3    # 4 pi area / perimeter^2; a band is well under this, however wide
+OUTER_EDGE_GAP_M = 25.0    # the path's outer edge is open at the entrances: gaps up to this are bridged
+OUTER_EDGE_MIN_PIECE_M = 2.0   # shorter loose path lines are stubs and symbols, not the outer edge
 EDGE_COLOR = {"road": "#8A8A85", "path": "#B9A27A"}   # kerb and path edge lines
 
 
@@ -189,7 +191,9 @@ def _shapes(e, k: float, explode: bool) -> List[Tuple[str, Any, Dict[str, Any]]]
     vs = cad._vertices(e)
     if len(vs) < 2:
         return []
-    xy = np.array([(x * k, y * k) for x, y, _ in vs])
+    # to the millimetre: pieces a draftsman joined end to end can differ by a hair (1e-7 m) in the file, and then their
+    # outline does not close (a lawn inside a path ring was filled as path)
+    xy = np.round(np.array([(x * k, y * k) for x, y, _ in vs]), cad.SNAP_DECIMALS)
     closed = cad._closed(e)
     if closed:
         xy = np.vstack([xy, xy[:1]])
@@ -520,6 +524,10 @@ def _path_surfaces(pieces, boundary=None):
     faces = [f for f in polygonize(unary_union(lines + _end_joins(lines))) if f.area >= MIN_SURFACE_M2]
     beds = _beds(faces)
     out = [f for f in faces if not any(f is b for b in beds)]
+    if beds:   # the track round the beds, out to the path's outer edge (drawn in pieces, open at the entrances)
+        edge = _outer_edge(lines, beds)
+        if edge is not None:
+            out += _polygons(edge.difference(unary_union(beds)))
     if len(beds) >= 2:
         whole = unary_union(beds)
         # no path edge is drawn outside the beds: the park's edge is the polyline that closes the paths there
@@ -535,6 +543,47 @@ def _path_surfaces(pieces, boundary=None):
     if not out:
         return []
     return [g for g in _polygons(unary_union([s.buffer(0) for s in out])) if g.area >= MIN_SURFACE_M2]
+
+
+def _outer_edge(lines, beds) -> Optional[Any]:
+    """The outline of the path network round its beds: the path lines that are not a bed's own edge, chained end to end
+    into one loop (nearest end next, the gaps at the entrances bridged). None when they make no loop holding most of the
+    beds, so a drawing without such an edge is left as it was."""
+    from shapely.geometry import LineString, Polygon
+    from shapely.ops import unary_union
+
+    bed_edges = unary_union([b.exterior for b in beds]).buffer(0.05)
+    pieces = [np.asarray(ln.coords) for ln in lines
+              if not ln.is_ring and ln.length >= OUTER_EDGE_MIN_PIECE_M and not ln.within(bed_edges)
+              and not any(ln.within(b) for b in beds)]
+    if not pieces:
+        return None
+    pieces.sort(key=lambda c: -LineString(c).length)
+    chain, rest = [p for p in pieces[0]], pieces[1:]
+    while rest:
+        tail, head = chain[-1], chain[0]
+        best = None
+        for i, c in enumerate(rest):
+            for d, at_tail, flip in ((np.hypot(*(c[0] - tail)), True, False), (np.hypot(*(c[-1] - tail)), True, True),
+                                     (np.hypot(*(c[-1] - head)), False, False), (np.hypot(*(c[0] - head)), False, True)):
+                if best is None or d < best[0]:
+                    best = (d, i, at_tail, flip)
+        d, i, at_tail, flip = best
+        if d > OUTER_EDGE_GAP_M:
+            break
+        c = rest.pop(i)
+        c = c[::-1] if flip else c
+        chain = chain + list(c) if at_tail else list(c) + chain
+    if len(chain) < 4:
+        return None
+    ring = Polygon(chain).buffer(0)
+    if ring.is_empty:
+        return None
+    ring = max(_polygons(ring), key=lambda g: g.area)
+    inside = sum(b.intersection(ring).area for b in beds)
+    if inside < 0.8 * sum(b.area for b in beds) or ring.area <= 1.05 * unary_union(beds).area:
+        return None
+    return ring
 
 
 def _end_joins(lines) -> List[Any]:

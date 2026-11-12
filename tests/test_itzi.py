@@ -26,3 +26,9 @@ def test_itzi_agrees_with_the_built_in_model_on_a_hollow():
     assert hi > 0.05 and abs(hi - hb) < 0.25 * hb                 # the hollow fills to about the same depth
     assert np.unravel_index(np.argmax(i.max_depth), z.shape) == np.unravel_index(np.argmax(b.max_depth), z.shape)
     assert i.frames.shape[0] >= 12 and "qx_mean" in i.extra
+    # both models give the water's velocity at every frame, and agree on its general direction (west, down the x slope)
+    assert i.velocity is not None and i.velocity.shape == (len(i.times_s), 2) + z.shape
+    k = 4                                                            # during the rain
+    for r in (b, i):
+        u = r.velocity[k, 0].astype(np.float32)[park & (r.frames[k] > 0.0005)]
+        assert u.size and (u < 0).mean() > 0.6

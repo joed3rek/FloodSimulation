@@ -63,7 +63,18 @@ namespace SpongePark
                     if (g == "mesh")
                     {
                         var vs = new List<Vector3>(a.Length / 3);
-                        for (int i = 0; i + 2 < a.Length; i += 3) vs.Add(frame.World(a[i], a[i + 1], a[i + 2]) + Vector3.up * (model ? 0 : lift + 0.02f * frame.Exaggeration));   // clear of the ground's own triangles
+                        for (int i = 0; i + 2 < a.Length; i += 3)
+                        {
+                            // on the ground as drawn now, never under it: the heights stored with the survey layers can
+                            // be from an older ground (rebuilt since) or a coarser sample of it (paths sank into the terrain)
+                            float z = a[i + 2];
+                            if (!model && ground != null)
+                            {
+                                float gz = ground(a[i], a[i + 1]);
+                                if (!float.IsNaN(gz) && gz > z) z = gz;
+                            }
+                            vs.Add(frame.World(a[i], a[i + 1], z) + Vector3.up * (model ? 0 : lift + 0.02f * frame.Exaggeration));   // clear of the ground's own triangles
+                        }
                         var tri = f["tri"].Values<int>().ToArray();
                         if (f["smooth"] != null && (bool)f["smooth"]) mesh.SmoothSurface(vs, tri, fc);
                         else mesh.Surface(vs, tri, fc);
@@ -330,7 +341,8 @@ namespace SpongePark
         }
 
         /// A flat arrow lying on the ground at p, pointing along d (plan), `len` long and `w` wide.
-        public void Arrow(Vector3 p, Vector3 d, float len, float w, Color col)
+        /// A flat arrow; drape (optional) lays each corner on the ground, so it follows a slope instead of cutting into it.
+        public void Arrow(Vector3 p, Vector3 d, float len, float w, Color col, System.Func<Vector3, Vector3> drape = null)
         {
             d.y = 0;
             if (d.sqrMagnitude < 1e-8f) return;
@@ -339,8 +351,9 @@ namespace SpongePark
             var tail = p - d * (len / 2);
             var neck = p + d * (len * 0.1f);
             var tip = p + d * (len / 2);
-            Quad(tail - s * (w * 0.18f), tail + s * (w * 0.18f), neck + s * (w * 0.18f), neck - s * (w * 0.18f), col);
-            Tri(neck - s * (w / 2), neck + s * (w / 2), tip, col);
+            Vector3 On(Vector3 q) => drape != null ? drape(q) : q;
+            Quad(On(tail - s * (w * 0.18f)), On(tail + s * (w * 0.18f)), On(neck + s * (w * 0.18f)), On(neck - s * (w * 0.18f)), col);
+            Tri(On(neck - s * (w / 2)), On(neck + s * (w / 2)), On(tip), col);
         }
 
         static float Rand(int seed, int k) => Mathf.Abs(Mathf.Sin(seed * 12.9898f + k * 78.233f) * 43758.5453f) % 1f;
@@ -517,17 +530,116 @@ namespace SpongePark
         }
 
         /// A flat strip lying on the ground (paths, roads, drains, contours), lifted slightly.
+        /// One joined strip, so bends have no gaps or notches; points at the same spot in plan are dropped.
         public void Ribbon(List<Vector3> pts, float w, float lift, Color col)
         {
-            var up = Vector3.up * lift;
-            for (int i = 0; i + 1 < pts.Count; i++)
+            var kept = new List<Vector3>(pts.Count);
+            foreach (var p in pts)
+                if (kept.Count == 0 || Flat(p - kept[kept.Count - 1]) != Vector3.zero) kept.Add(p);
+            Strip(kept, w, col, lift);
+        }
+
+        /// A line traced cell by cell on the ground grid, made calm: points every `spacing` along it, each moved to the
+        /// Gaussian-weighted mean of its neighbours within `radius`, so the stair-steps (and the waves that rounding
+        /// them leaves) average out. An open line keeps its two ends. Distances are in plan (x and z); w carries a
+        /// value along (a share of the flow) that is averaged with the points.
+        public static List<Vector4> Relax(IList<Vector4> pts, bool closed, float spacing, float radius)
+        {
+            float PlanLen(Vector4 d) => Mathf.Sqrt(d.x * d.x + d.z * d.z);
+            var src = new List<Vector4>(pts);
+            if (closed && src.Count > 1 && PlanLen(src[0] - src[src.Count - 1]) < 1e-4f) src.RemoveAt(src.Count - 1);
+            if (src.Count < 3 || spacing <= 0) return src;
+            if (closed) src.Add(src[0]);
+            var even = new List<Vector4> { src[0] };
+            float carry = 0;   // plan distance since the last point kept
+            for (int i = 0; i + 1 < src.Count; i++)
             {
-                Vector3 a = pts[i] + up, b = pts[i + 1] + up;
-                var dir = b - a;
-                dir.y = 0;
-                if (dir.sqrMagnitude < 1e-8f) continue;
-                var side = Vector3.Cross(Vector3.up, dir.normalized) * (w / 2);
-                Quad(a - side, a + side, b + side, b - side, col);
+                var a = src[i];
+                var b = src[i + 1];
+                float len = PlanLen(b - a);
+                if (len <= 1e-6f) continue;
+                float at = spacing - carry;
+                for (; at < len; at += spacing) even.Add(Vector4.Lerp(a, b, at / len));
+                carry = len - (at - spacing);
+            }
+            if (closed) { if (even.Count > 1 && PlanLen(even[even.Count - 1] - src[0]) < spacing * 0.5f) even.RemoveAt(even.Count - 1); }
+            else if (PlanLen(even[even.Count - 1] - src[src.Count - 1]) > spacing * 0.25f) even.Add(src[src.Count - 1]);
+            else even[even.Count - 1] = src[src.Count - 1];
+            int n = even.Count;
+            if (n < 3) return even;
+            int k = Mathf.Max(1, Mathf.CeilToInt(radius / spacing));
+            float sigma = Mathf.Max(radius * 0.5f, 1e-3f);
+            var w = new float[k + 1];
+            for (int j = 0; j <= k; j++) w[j] = Mathf.Exp(-(j * spacing) * (j * spacing) / (2 * sigma * sigma));
+            var outPts = new List<Vector4>(n);
+            for (int i = 0; i < n; i++)
+            {
+                int reach = closed ? Mathf.Min(k, (n - 1) / 2) : Mathf.Min(k, Mathf.Min(i, n - 1 - i));   // even on both sides: the ends stay put
+                Vector4 sum = even[i] * w[0];
+                float total = w[0];
+                for (int j = 1; j <= reach; j++)
+                {
+                    sum += (even[(i - j + n) % n] + even[(i + j) % n]) * w[j];
+                    total += 2 * w[j];
+                }
+                outPts.Add(sum / total);
+            }
+            return outPts;
+        }
+
+        public static List<Vector3> Relax(IList<Vector3> pts, bool closed, float spacing, float radius) =>
+            Relax(pts.Select(p => (Vector4)p).ToList(), closed, spacing, radius).Select(p => (Vector3)p).ToList();
+
+        /// One continuous flat strip along a line, without gaps or overlaps at the bends, its width and colour
+        /// changing smoothly from point to point.
+        public void Strip(IList<Vector3> pts, IList<float> widths, IList<Color> cols, float lift)
+        {
+            int n = pts.Count;
+            if (n < 2) return;
+            var up = Vector3.up * lift;
+            var left = new Vector3[n];
+            var right = new Vector3[n];
+            for (int i = 0; i < n; i++)
+            {
+                var dPrev = i > 0 ? Flat(pts[i] - pts[i - 1]) : Vector3.zero;
+                var dNext = i + 1 < n ? Flat(pts[i + 1] - pts[i]) : Vector3.zero;
+                var tan = dPrev + dNext;
+                if (tan.sqrMagnitude < 1e-8f) tan = dNext.sqrMagnitude > 0 ? dNext : dPrev;
+                if (tan.sqrMagnitude < 1e-8f) tan = Vector3.forward;
+                tan.Normalize();
+                var side = Vector3.Cross(Vector3.up, tan);
+                float miter = 1f;   // the corner widened so the strip keeps its width through the bend
+                if (dPrev.sqrMagnitude > 0 && dNext.sqrMagnitude > 0)
+                    miter = 1f / Mathf.Max(0.5f, Vector3.Dot(side, Vector3.Cross(Vector3.up, dPrev)));
+                var off = side * (widths[i] * 0.5f * miter);
+                left[i] = pts[i] + up - off;
+                right[i] = pts[i] + up + off;
+            }
+            for (int i = 0; i + 1 < n; i++)
+            {
+                SmoothTri(left[i], right[i], right[i + 1], Vector3.up, Vector3.up, Vector3.up, cols[i], cols[i], cols[i + 1]);
+                SmoothTri(left[i], right[i + 1], left[i + 1], Vector3.up, Vector3.up, Vector3.up, cols[i], cols[i + 1], cols[i + 1]);
+            }
+        }
+
+        public void Strip(IList<Vector3> pts, float w, Color col, float lift) =>
+            Strip(pts, Enumerable.Repeat(w, pts.Count).ToList(), Enumerable.Repeat(col, pts.Count).ToList(), lift);
+
+        static Vector3 Flat(Vector3 d)
+        {
+            d.y = 0;
+            return d.sqrMagnitude > 1e-10f ? d.normalized : Vector3.zero;
+        }
+
+        /// A flat ring lying on the ground around c (a marker), from radius r0 to r1.
+        public void Ring(Vector3 c, float r0, float r1, Color col, int seg = 40)
+        {
+            for (int i = 0; i < seg; i++)
+            {
+                float a0 = 2 * Mathf.PI * i / seg, a1 = 2 * Mathf.PI * (i + 1) / seg;
+                var d0 = new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0));
+                var d1 = new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1));
+                Quad(c + d0 * r0, c + d0 * r1, c + d1 * r1, c + d1 * r0, col);
             }
         }
 
@@ -608,12 +720,13 @@ namespace SpongePark
             for (int i = 0; i < p.Count; i++) { var a = p[i]; var b = p[(i + 1) % p.Count]; area += a.x * b.y - b.x * a.y; }
             if (area < 0) idx.Reverse();
             var tris = new List<(int, int, int)>();
-            int guard = 0;
-            while (idx.Count > 3 && guard++ < 10000)
+            int guard = 0, start = 0;
+            while (idx.Count > 3 && guard++ < 100000)
             {
                 bool clipped = false;
-                for (int i = 0; i < idx.Count; i++)
+                for (int k = 0; k < idx.Count; k++)
                 {
+                    int i = (start + k) % idx.Count;   // carry on from the last ear: long smooth outlines stay quick
                     int a = idx[(i + idx.Count - 1) % idx.Count], b = idx[i], d = idx[(i + 1) % idx.Count];
                     if (Cross(p[a], p[b], p[d]) <= 0) continue;
                     bool inside = false;
@@ -622,6 +735,7 @@ namespace SpongePark
                     if (inside) continue;
                     tris.Add((a, b, d));
                     idx.RemoveAt(i);
+                    start = idx.Count > 0 ? (i + idx.Count - 1) % idx.Count : 0;
                     clipped = true;
                     break;
                 }

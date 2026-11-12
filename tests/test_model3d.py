@@ -386,6 +386,26 @@ def test_an_outlet_lets_water_out_and_an_inlet_brings_it_in(tmp_path):
         assert abs(fed["continuity_error_pct"]) < 1e-6
 
 
+def test_an_outlet_level_is_given_on_the_survey_datum(tmp_path):
+    from spongepark.engine.site import openings
+
+    with _walled_site_with_storm(tmp_path) as p:
+        lo, hi = openings.status(p)["ground_range_m"]
+        base = {"kind": "outlet", "origin": "site", "x": 0.5, "y": 20.0, "width_m": 2}
+        old = openings.save(p, {"openings": [{**base, "sill_m": 0.2}]})["openings"][0]      # an old row: above the ground
+        ground = old["ground_m"]
+        assert old["invert_m"] == pytest.approx(ground + 0.2, abs=1e-3) and old["sill_m"] == pytest.approx(0.2, abs=1e-3)
+        below = openings.save(p, {"openings": [{**base, "invert_m": ground - 0.3}]})["openings"][0]   # a drain below it
+        assert below["sill_m"] == pytest.approx(-0.3, abs=1e-3)
+        if lo > openings.LEVEL_MARGIN_M:
+            with pytest.raises(ValueError, match="not a level on this site's survey"):
+                openings.save(p, {"openings": [{**base, "invert_m": 0}]})
+        copy = {**below}
+        rows = openings.save(p, {"openings": [below, copy]})["openings"]                    # a copy gets its own id
+        assert len({r["id"] for r in rows}) == 2
+        assert openings.outlet_levels(p) and min(openings.outlet_levels(p).values()) == pytest.approx(ground - 0.3, abs=1e-3)
+
+
 def test_design_openings_stay_out_of_an_existing_site_run(tmp_path):
     from spongepark.engine.site import openings
 

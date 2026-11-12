@@ -16,6 +16,11 @@ namespace SpongePark
         public SurveyLayersView Survey;
         public FlowView Flow;
         public DesignOverlay Design;
+        public FlowParticles Particles;
+        public VelocityFrames Velocity;   // the storm's velocities, loaded while the flow trace is on
+        public bool Trace;                // the flow trace: particles and the water coloured by speed
+        public string TraceNote = "";
+        int velocityRp = -1;
         public float[] RetainedTime, RetainedLitres, RainLitres;
         float siteArea;
         public string Status = "";
@@ -31,8 +36,49 @@ namespace SpongePark
             v.Survey = SurveyLayersView.Create("survey layers", go.transform, layer);
             v.Flow = FlowView.Create("flow", go.transform, layer);
             v.Design = DesignOverlay.Create("design", go.transform, layer);
+            v.Particles = FlowParticles.Create("flow trace", go.transform, layer);
             return v;
         }
+
+        /// The flow trace for storm rp: its velocities from the flood run, the particles let go on them, the water
+        /// coloured by speed. Off: the water by depth again.
+        public IEnumerator SetTrace(EngineClient api, SiteFrame frame, int rp, bool on)
+        {
+            Trace = on;
+            if (!on || Frames == null)
+            {
+                Velocity = null;
+                velocityRp = -1;
+                Particles.Clear();
+                Water.ColourBySpeed(null, 1);
+                TraceNote = on ? "no flood run for this storm yet" : "";
+                yield break;
+            }
+            if (Velocity == null || velocityRp != rp)
+            {
+                JToken t = null;
+                yield return api.Get(api.P($"/options/{Option}/sim2d/{rp}/velocity"), r => t = r);
+                if (t == null)
+                {
+                    TraceNote = (api.LastError ?? "").Contains("before velocities") ? "this storm's flood was run before speeds were kept: run it again"
+                                                                                   : "no speeds for this storm";
+                    api.ClearError();
+                    Velocity = null;
+                    Particles.Clear();
+                    Water.ColourBySpeed(null, 1);
+                    yield break;
+                }
+                Velocity = VelocityFrames.FromPayload(t);
+                velocityRp = rp;
+            }
+            if (Velocity.Rows != Frames.Rows || Velocity.Cols != Frames.Cols) { TraceNote = "the speeds do not match the flood's grid"; yield break; }
+            Particles.Build(Velocity, Water, Terrain, frame);
+            Particles.gameObject.SetActive(true);
+            TraceNote = $"fastest {Velocity.MaxSpeed:0.00} m/s; most moving water under {Velocity.P95Speed:0.00} m/s";
+        }
+
+        /// The speed the colour map's top colour stands for.
+        public float TraceTop => Velocity != null ? Mathf.Max(Velocity.P95Speed * 1.3f, 0.1f) : 1f;
 
         public IEnumerator Load(EngineClient api, SiteFrame frame, int rp, bool bundle)
         {
@@ -104,6 +150,10 @@ namespace SpongePark
                 yield return api.Get(api.P($"/options/{Option}/retained/{rp}"), r => retained = r);
             }
             api.ClearError();   // storm frames and results are optional: none yet is not an error
+            Velocity = null;   // a new storm: its own speeds (SetTrace loads them)
+            velocityRp = -1;
+            Particles.Clear();
+            Water.ColourBySpeed(null, 1);
             if (frames != null)
             {
                 Frames = DepthFrames.FromPayload(frames);
@@ -125,6 +175,7 @@ namespace SpongePark
                 siteArea = (float)retained["site_area_m2"];
             }
             else RetainedTime = RetainedLitres = RainLitres = null;
+            if (Trace && !bundle) yield return SetTrace(api, frame, rp, true);   // the trace stays on through a change of storm
         }
 
         /// After a design edit: only the carved ground and the element footprints change. The survey objects
@@ -139,6 +190,10 @@ namespace SpongePark
             api.ClearError();
             Terrain.Build(HeightGrid.FromPayload(terrain), frame, comps);
             if (Frames != null) { Water.Show(new float[Frames.Rows * Frames.Cols]); Frames = null; }
+            Velocity = null;
+            velocityRp = -1;
+            Particles.Clear();
+            Water.ColourBySpeed(null, 1);
             RetainedTime = RetainedLitres = RainLitres = null;
             Status = "no 2D run yet for this design";
         }
@@ -167,6 +222,11 @@ namespace SpongePark
             else if (Frames != null)
             {
                 Frames.Sample(t, depth);
+                if (Trace && Velocity != null)
+                {
+                    Velocity.At(t);
+                    Water.ColourBySpeed(Velocity.Speed, TraceTop);
+                }
                 Water.Show(depth);
             }
         }

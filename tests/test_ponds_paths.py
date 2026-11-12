@@ -114,3 +114,18 @@ def test_a_pond_stores_rain_once_its_depth_is_given(park, tmp_path):
     r2 = c.put(f"/projects/{pid}/site/ponds", json={"answers": [{"id": "POND1", "depth_m": 1.0, "water_m": 0.4}]}).json()
     assert abs(r2["ponds"][0]["storage_m3"] - pond["storage_m3"]) < 1e-6
     c.post(f"/projects/{pid}/close")
+
+
+def test_a_lawn_inside_a_path_ring_stays_a_lawn_when_its_edge_is_drawn_in_pieces():
+    """A walkway drawn as an outer edge and an inner edge, the inner one in two pieces whose ends differ by a hair in
+    the file (as a draftsman's joined polylines do): the walkway is the band between them, the lawn is not path."""
+    from spongepark.engine.site.survey_layers import _path_surfaces, _shapes
+
+    doc = ezdxf.new()
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 0), (40, 0), (40, 20), (0, 20)], close=True)                 # the outer edge
+    msp.add_lwpolyline([(3, 3), (37, 3), (37, 17)])                                     # the lawn's edge, first half
+    msp.add_lwpolyline([(37 + 1e-7, 17 - 1e-7), (3, 17), (3 + 1e-7, 3 - 1e-7)])          # ... and second half
+    pieces = [s for e in msp for s in _shapes(e, 1.0, False)]
+    area = sum(s.area for s in _path_surfaces(pieces))
+    assert area == pytest.approx(40 * 20 - 34 * 14, rel=0.01)                          # the band, not the lawn

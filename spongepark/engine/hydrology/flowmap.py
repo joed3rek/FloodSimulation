@@ -408,7 +408,12 @@ def _held_at_exit(ex: Dict[str, Any], results: Dict[str, Any], dem, subs: List[D
             big = max(getattr(u, "geoms", [u]), key=lambda g: g.area)
             s["outline"] = np.round(np.asarray(big.exterior.coords), 2).ravel().tolist()
         storms[rp] = s
-    return {"needs_analysis": False, "storms": storms}
+    # the ground that drains to this exit, so the app can show where the held water comes from
+    region = unary_union(catch).buffer(cell * 0.5, quad_segs=3).buffer(-cell * 0.5, quad_segs=3).simplify(cell * 0.3)
+    big = max(getattr(region, "geoms", [region]), key=lambda g: g.area)
+    return {"needs_analysis": False, "storms": storms,
+            "catchment": np.round(np.asarray(big.exterior.coords), 2).ravel().tolist(),
+            "draining_area_m2": round(float(region.area), 1)}
 
 
 def _exit_rates(subs: List[Dict[str, Any]], peaks: Dict[str, float]) -> Dict[str, Any]:
@@ -433,8 +438,9 @@ def with_storms(project: Project, out: Dict[str, Any], scenario: Optional[str] =
     answered = {e["id"]: e for e in outfalls.status(project)["exits"]}
     for ex in out.get("exits", []):
         a = answered.get(ex.get("id"), {})
-        ex["state"] = a.get("state") if a.get("confirmed") else None
+        ex["state"] = a.get("state")              # held ("closed") unless the designer marked a way out
         ex["edge_height_m"] = a.get("edge_height_m")
+        ex["assumed"] = bool(a.get("assumed"))    # held because nobody has answered for it
     results = _storm_results(project, scenario)
     per_rp = results.get("return_periods", {})
     subs = project.read_geojson("site/subcatchments.geojson")["features"] if project.exists("site/subcatchments.geojson") else []

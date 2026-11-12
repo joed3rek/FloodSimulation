@@ -45,6 +45,10 @@ ROLES: List[Tuple[str, Tuple[str, ...]]] = [
     ("water", ("water", "lake", "pond")),
     ("walls", ("wall", "fence", "fencing")),
 ]
+# Plan coordinates are read to the millimetre: pieces a draftsman joined end to end can differ by a hair (1e-7 m) in
+# the file, and an outline whose ends differ by that much does not close.
+SNAP_DECIMALS = 3
+
 # Layers that look like levels but whose meaning must be confirmed (e.g. drain bed or plinth levels).
 ASK = ("be-level", "be level", "invert", "plinth")
 
@@ -425,12 +429,13 @@ def extract(doc, layer_map: Dict[str, Any], label_search_m: float = 3.0,
             vs = _vertices(e)
             if len(vs) < 2:
                 continue
-            xy = [(x * k, y * k) for x, y, _ in vs]
+            xy = [(round(x * k, SNAP_DECIMALS), round(y * k, SNAP_DECIMALS)) for x, y, _ in vs]
             key = _key(xy)
             if key in seen_f:
                 continue
             seen_f.add(key)
-            if _closed(e) and len(xy) >= 3:
+            ends_meet = len(xy) >= 4 and xy[0] == xy[-1]   # an outline drawn back to its start without the closed flag
+            if (_closed(e) or ends_meet) and len(xy) >= 3:
                 g = Polygon(xy)
                 geom = {"type": "Polygon", "coordinates": [list(g.exterior.coords)]}
             else:

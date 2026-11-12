@@ -147,3 +147,25 @@ def test_graphics_card_gives_the_same_water():
         assert b.balance[k] == pytest.approx(a.balance[k], abs=1e-6 * a.balance["rainfall_m3"]), k
     assert np.abs(b.max_depth - a.max_depth).max() < 1e-6
     assert abs(b.balance["continuity_error_pct"]) < 1e-6
+
+
+def test_water_on_a_slope_moves_downhill_at_its_flow_over_its_depth():
+    from spongepark.engine.sim2d.model import cell_velocity
+
+    # a plane falling to the south: water runs south (north speed negative), hardly sideways
+    dem = planar(size_m=(30, 20), cell_size=1.0, slope_pct=2.0, aspect="south")
+    mask = np.ones(dem.z.shape, bool)
+    rain, dt = _rain(mm_hr=60.0)
+    r = simulate(dem.z, mask, 1.0, rain, dt, 3600, np.full(dem.z.shape, 0.03), np.zeros(dem.z.shape), frame_every_s=600)
+    assert r.velocity is not None and r.velocity.shape == (len(r.times_s), 2) + dem.z.shape
+    v = r.velocity[-2].astype(np.float32)                          # during the rain
+    wet = r.frames[-2] > 0.0005
+    assert wet.sum() >= 5
+    assert (v[1][wet] < 0).mean() > 0.9                             # southwards
+    assert np.abs(v[0][wet]).mean() < 0.5 * np.abs(v[1][wet]).mean()
+    assert np.abs(r.velocity[0].astype(np.float32)).max() == 0      # dry at the start
+    # one cell between two flows: the mean of its edges over its depth; a dry cell is still
+    h = np.array([[0.1, 0.0]])
+    q_east, q_south = np.array([[0.02, 0.0]]), np.array([[0.01, 0.0]])
+    u, w = cell_velocity(q_east, q_south, h).astype(np.float32)
+    assert u[0, 0] == pytest.approx(0.1, rel=1e-2) and w[0, 0] == pytest.approx(-0.05, rel=1e-2) and u[0, 1] == 0

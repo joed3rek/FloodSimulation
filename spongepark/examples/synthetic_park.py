@@ -110,6 +110,11 @@ def populate(project: Project, with_dem: bool = True) -> None:
     """Write the synthetic site, rainfall and two manual options into ``project``."""
     for rel, fc in site_layers().items():
         project.write_geojson(rel, fc)
+    # the designer's answer for the site outlet: water leaves there, to the storm water drain (the model assumes
+    # no way out of its own)
+    from ..engine.site import outfalls
+
+    project.write_json(outfalls.REL, {"exits": [{"x": X0 + 50, "y": Y0, "state": "open", "edge_height_m": None}], "all": {}})
     RAINFALL_24H.to_csv(project.path("rainfall/return_periods.csv"), index=False)
     project.parameters.set("rainfall.input_kind", "24h_depth", "-", Source.DEFAULT,
                            note=f"Synthetic example rainfall: {ILLUSTRATIVE}", confirmed=False)

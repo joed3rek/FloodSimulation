@@ -74,17 +74,54 @@ namespace SpongePark
             return shown[r * cols + c];
         }
 
+        /// The water surface (survey m) at a survey point, between the four cell centres around it, as last shown: the
+        /// ground where it is dry. NaN outside the grid.
+        public float SurfaceAt(float x, float y)
+        {
+            if (ground == null) return float.NaN;
+            float fc = (x - originX) / cell - 0.5f, fr = (originY - y) / cell - 0.5f;
+            int c0 = Mathf.FloorToInt(fc), r0 = Mathf.FloorToInt(fr);
+            float tc = fc - c0, tr = fr - r0, sum = 0, wsum = 0;
+            for (int dr = 0; dr <= 1; dr++)
+                for (int dc = 0; dc <= 1; dc++)
+                {
+                    int r = r0 + dr, c = c0 + dc;
+                    if (r < 0 || c < 0 || r >= rows || c >= cols) continue;
+                    int k = r * cols + c;
+                    if (float.IsNaN(ground[k])) continue;
+                    float d = shown != null && shown[k] >= showFromDepth ? shown[k] : 0f;
+                    float w = (dr == 1 ? tr : 1 - tr) * (dc == 1 ? tc : 1 - tc) + 1e-4f;
+                    sum += w * (ground[k] + d);
+                    wsum += w;
+                }
+            return wsum > 0 ? sum / wsum : float.NaN;
+        }
+
+        float[] speedShown;
+        float speedTop = 1f;
+
+        /// Colour the water by speed (m/s per cell, the grid of the depths; null: by depth again). top: the speed
+        /// given the top colour.
+        public void ColourBySpeed(float[] speed, float top)
+        {
+            speedShown = speed;
+            speedTop = Mathf.Max(top, 0.05f);
+            var mr = GetComponent<MeshRenderer>();
+            if (mr != null) mr.sharedMaterial.SetFloat("_MapColours", speed != null ? 1f : 0f);
+        }
+
         public void Show(float[] depth)
         {
             if (mesh == null) return;
             shown = depth;
+            bool bySpeed = speedShown != null && speedShown.Length == verts.Length;
             var shallow = new Color(0.55f, 0.78f, 0.95f, 0f);
             var deep = new Color(0.08f, 0.32f, 0.72f, 0.85f);
             for (int k = 0; k < verts.Length; k++)
             {
                 float g = ground[k];
                 float d = depth[k];
-                if (float.IsNaN(g) || d < showFromDepth)
+                if (float.IsNaN(g) || d < (bySpeed ? 0.003f : showFromDepth))   // by speed: sheet flow is shown too
                 {
                     colours[k] = shallow;
                     depths[k] = Vector2.zero;
@@ -93,7 +130,8 @@ namespace SpongePark
                 }
                 verts[k].y = (g + d - frame.ZRef) * frame.Exaggeration + 0.01f;
                 var t = Mathf.Clamp01(d / fullColourDepth);
-                var col = Color.Lerp(new Color(0.55f, 0.78f, 0.95f, 0.45f), deep, t);
+                var col = bySpeed ? FlowParticles.SpeedColour(speedShown[k] / speedTop, Mathf.Lerp(0.7f, 0.92f, t))
+                                  : Color.Lerp(new Color(0.55f, 0.78f, 0.95f, 0.45f), deep, t);
                 colours[k] = col;
                 depths[k] = new Vector2(d, 0);
             }

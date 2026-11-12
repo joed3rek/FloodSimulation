@@ -1,7 +1,7 @@
 // Site setup > Outfalls: where water leaves the park. The drainage finds every point where the ground drains to the
 // edge of the surveyed park; the designer says for each whether water can leave there (a gate, an opening, a drain
 // inlet) or a wall / kerb holds it, and how high that edge is. Closed exits hold water against the edge in the
-// existing site and every design, and spill to the road above the edge height. Nothing is assumed.
+// existing site and every design, and spill to the road above the edge height. No way out is assumed: an exit not answered holds the water.
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,7 +13,7 @@ namespace SpongePark
 {
     public partial class SpongeParkApp
     {
-        static readonly List<string> ExitChoices = new List<string> { "Not answered", "Water leaves here", "No way out (wall or kerb)" };
+        static readonly List<string> ExitChoices = new List<string> { "Not answered: held, no way out", "Water leaves here", "No way out (wall or kerb)" };
         static readonly string[] ExitStates = { null, "open", "closed" };
         VisualElement outfallCard, outfallRows, outfallAll;
         Label outfallText;
@@ -77,7 +77,7 @@ namespace SpongePark
             outfallText.text = $"The ground drains to the park edge at {count} point{(count == 1 ? "" : "s")}. For each, say whether water can leave there " +
                                "(a gate, an opening in the wall, a drain inlet) or a wall or kerb holds it. Held water ponds against the edge, soaks in, " +
                                "and spills to the road only above the edge height, in the existing site and every design." +
-                               (done ? $"\nAll answered: {closed} with no way out." : "\nUnanswered exits are treated as open (water leaves).");
+                               (done ? $"\nAll answered: {closed} with no way out." : "\nWhere you have not answered, the water is held at the edge and does not leave: the model assumes no outlet.");
             var all = st["all"];
             outfallAllState.index = System.Array.IndexOf(ExitStates, (string)all?["state"]) is var ai && ai > 0 ? ai : 0;
             outfallAllHeight.value = Fmt(all?["edge_height_m"]);
@@ -86,15 +86,17 @@ namespace SpongePark
                 var row = new ExitRow
                 {
                     Id = (string)ex["id"],
-                    State = new DropdownField("", ExitChoices, System.Array.IndexOf(ExitStates, (string)ex["state"]) is var i && i > 0 ? i : 0),
-                    Height = Field("Edge height (m)", Fmt(ex["edge_height_m"])),
+                    // a point nobody answered for is held by the engine; it still shows here as not answered
+                    State = new DropdownField("", ExitChoices, (bool?)ex["assumed"] == true ? 0
+                                              : System.Array.IndexOf(ExitStates, (string)ex["state"]) is var i && i > 0 ? i : 0),
+                    Height = Field("Edge height (m)", (bool?)ex["assumed"] == true ? "" : Fmt(ex["edge_height_m"])),
                 };
                 row.State.AddToClassList("input");
                 float x = (float)ex["x"], y = (float)ex["y"], z = ex["ground_m"] != null && ex["ground_m"].Type != JTokenType.Null ? (float)ex["ground_m"] : 0f;
                 var box = new VisualElement();
                 box.AddToClassList("cover-row");
                 var head = Row("field-row");
-                head.Add(Text($"{row.Id} · {(float)ex["draining_area_m2"]:0} m² drains here · ground {z:0.00} m", "field-label"));
+                head.Add(Text($"{EdgeName(ex)} · {(float)ex["draining_area_m2"]:0} m² drains here · ground {z:0.00} m", "field-label"));
                 head.Add(Btn("Show", () => FocusOn(x, y, z, 30), "btn--ghost"));
                 box.Add(head);
                 var line = Row("field-row");

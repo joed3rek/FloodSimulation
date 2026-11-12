@@ -479,8 +479,8 @@ namespace SpongePark
             bool contours = !layerVisible.TryGetValue(ContoursLayer, out var con) || con;
             left.Terrain.SetContours(contours);
             right.Terrain.SetContours(contours);
-            left.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
-            right.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundAt, left.Terrain.InPark);
+            left.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundSmooth, left.Terrain.InPark);
+            right.Survey.Build(surveyLayers, frame, layerVisible, left.Terrain.GroundSmooth, left.Terrain.InPark);
             if (!bundle) yield return LoadOpenings();
             if (siteConfirmed && !bundle && Analysed) yield return LoadFlow();   // shown once Analyse site has run
             else if (!bundle) ClearFlow();
@@ -540,6 +540,7 @@ namespace SpongePark
             if (!OpeningsInput()) DesignInput();
             FlowAnimInput();
             UpdateWeather();
+            StepTrace();
             if (!playing) return;
             float dtSim = Time.deltaTime * speed;
             simT += dtSim;

@@ -638,6 +638,15 @@ def openings_get(pid: str) -> Dict[str, Any]:
     return openings.status(_project(pid))
 
 
+@app.get("/projects/{pid}/site/openings/snap")
+def openings_snap(pid: str, x: float, y: float, kind: str = "outlet", width_m: float = 0.0) -> Dict[str, Any]:
+    """Where a click puts an opening (an outlet onto the edge) and the ground there, with the site's ground range:
+    the app fills in the outlet's level with it."""
+    from spongepark.engine.site import openings
+
+    return openings.snap(_project(pid), x, y, kind, width_m)
+
+
 @app.put("/projects/{pid}/site/openings")
 def openings_put(pid: str, body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     """``openings``: every inlet and outlet ([{kind, origin, x, y, ...}]); ``confirmed``: the list is complete."""
@@ -789,6 +798,20 @@ def sim2d_frames(pid: str, oid: str, rp: int, start: int = 0, count: int = 1000)
     if not p.exists(f"scenarios/{oid}/sim2d/rp{rp}.npz"):
         raise HTTPException(404, "run the 2D simulation first")
     return frames_payload(p, oid, rp, start, count)
+
+
+@app.get("/projects/{pid}/options/{oid}/sim2d/{rp}/velocity")
+def sim2d_velocity(pid: str, oid: str, rp: int) -> Dict[str, Any]:
+    """The water's velocity at every frame (indicative): base64 float16, east then north m/s per cell, frame-major."""
+    from spongepark.engine.io.viewer import velocity_payload
+
+    p = _project(pid)
+    if not p.exists(f"scenarios/{oid}/sim2d/rp{rp}.npz"):
+        raise HTTPException(404, "run the 2D simulation first")
+    out = velocity_payload(p, oid, rp)
+    if out is None:
+        raise HTTPException(404, "this flood was run before velocities were kept: run the storm again")
+    return out
 
 
 @app.get("/projects/{pid}/options/{oid}/sim2d/{rp}/peak")
